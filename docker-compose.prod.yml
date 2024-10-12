@@ -1,0 +1,69 @@
+version: '3.9'
+
+services:
+  backend:
+    build: ./backend
+    container_name: backend_prod
+    ports:
+      - '8001:8001'
+    volumes:
+      - ./backend:/usr/src/app
+    restart: always
+    networks:
+      - queue-net
+    env_file:
+      - ./backend/.env.prod
+    depends_on:
+      - mongo
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8001 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build: ./frontend
+    container_name: frontend_prod
+    ports:
+      - '80:80'
+    restart: always
+    volumes:
+      - ./frontend:/usr/src/app
+    networks:
+      - queue-net
+    depends_on:
+      - backend
+
+  mongo:
+    image: mongo
+    container_name: mongo_prod
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      - '27017:27017'
+    networks:
+      - queue-net
+
+  nginx:
+    build: ./nginx
+    container_name: nginx_prod
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt/live/<domain>/fullchain.pem:/etc/letsencrypt/live/<domain>/fullchain.pem:ro
+      - /etc/letsencrypt/live/<domain>/privkey.pem:/etc/letsencrypt/live/<domain>/privkey.pem:ro
+    restart: always
+    networks:
+      - queue-net
+    depends_on:
+      - backend
+      - frontend
+
+networks:
+  queue-net:
+    driver: bridge
+
+volumes:
+  mongo-data:

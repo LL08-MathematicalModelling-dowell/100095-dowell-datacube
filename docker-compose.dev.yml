@@ -1,0 +1,48 @@
+version: '3.9'
+
+services:
+  backend:
+    build: ./backend
+    container_name: backend_dev
+    ports:
+      - '8001:8001'
+    volumes:
+      - ./backend:/usr/src/app
+    restart: always
+    networks:
+      - queue-net
+    env_file:
+      - ./backend/.env.dev
+    depends_on:
+      - mongo
+    command: python manage.py runserver 0.0.0.0:8001
+
+  frontend:
+    build: ./frontend
+    container_name: frontend_dev
+    ports:
+      - '5173:5173'
+    volumes:
+      - ./frontend:/usr/src/app
+    restart: always
+    networks:
+      - queue-net
+    depends_on:
+      - backend
+
+  mongo:
+    image: mongo
+    container_name: mongo_dev
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      - '27017:27017'
+    networks:
+      - queue-net
+
+networks:
+  queue-net:
+    driver: bridge
+
+volumes:
+  mongo-data:
