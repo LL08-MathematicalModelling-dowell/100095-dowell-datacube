@@ -1,4 +1,4 @@
-name: Deploy to VPS Server
+name: Deploy to VPS
 
 on:
   push:
@@ -7,10 +7,35 @@ on:
 
 jobs:
   deploy:
+    name: Deploy to VPS
     runs-on: ubuntu-latest
+
     steps:
+      # Step 1: Checkout the latest code
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Simulate Deployment
-        run: echo "Deployment successful!"
+      # Step 2: Set up SSH agent and add the private key
+      - name: Set up SSH for deployment
+        uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.VPS_PRIVATE_KEY }}
+
+      # Step 3: Deploy to the VPS
+      - name: Deploy using SSH and Docker Compose
+        run: |
+          ssh -o StrictHostKeyChecking=no your_user@your_vps_ip << EOF
+            cd /path/to/your/project
+
+            # Pull the latest code from GitHub
+            git pull origin main
+
+            # Build and restart the services using Docker Compose
+            docker-compose down
+            docker-compose pull
+            docker-compose up -d --build
+
+            # Run migrations and collect static files
+            docker-compose exec web python manage.py migrate
+            docker-compose exec web python manage.py collectstatic --noinput
+          EOF
