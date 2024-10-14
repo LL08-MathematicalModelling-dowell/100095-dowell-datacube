@@ -104,7 +104,13 @@ DATABASES = {
     }
 }
 
-ALLOWED_HOSTS = ['datacube.uxlivinglab.online', '127.0.0.1', 'localhost']
+ALLOWED_HOSTS = [
+    'datacube.uxlivinglab.online',
+    '127.0.0.1',
+    'localhost',
+    'www.dowelldatacube.uxlivinglab.online',
+    'dowelldatacube.uxlivinglab.online',
+]
 CORS_ORIGIN_ALLOW_ALL = True
 CORS_ALLOW_HEADERS = ['*']
 
