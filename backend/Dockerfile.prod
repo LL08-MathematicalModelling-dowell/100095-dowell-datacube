@@ -16,6 +16,6 @@ WORKDIR /usr/src/app
 COPY --from=builder /root/.local /usr/local
 COPY . /usr/src/app
 
-EXPOSE 8000
+EXPOSE 8001
 
 CMD ["gunicorn", "--workers=3", "--bind=0.0.0.0:8001", "core.wsgi:application"]
