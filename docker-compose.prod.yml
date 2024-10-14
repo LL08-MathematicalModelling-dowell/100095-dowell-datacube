@@ -13,36 +13,36 @@ services:
       - queue-net
     env_file:
       - ./backend/.env.prod
-    depends_on:
-      - mongo
+    # depends_on:
+    #   - mongo
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8001 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  frontend:
-    build: ./frontend
-    container_name: frontend_prod
-    ports:
-      - '80:80'
-    restart: always
-    volumes:
-      - ./frontend:/usr/src/app
-    networks:
-      - queue-net
-    depends_on:
-      - backend
+  # frontend:
+  #   build: ./frontend
+  #   container_name: frontend_prod
+  #   ports:
+  #     - '80:80'
+  #   restart: always
+  #   volumes:
+  #     - ./frontend:/usr/src/app
+  #   networks:
+  #     - queue-net
+  #   depends_on:
+  #     - backend
 
-  mongo:
-    image: mongo
-    container_name: mongo_prod
-    volumes:
-      - mongo-data:/data/db
-    ports:
-      - '27017:27017'
-    networks:
-      - queue-net
+  # mongo:
+  #   image: mongo
+  #   container_name: mongo_prod
+  #   volumes:
+  #     - mongo-data:/data/db
+  #   ports:
+  #     - '27017:27017'
+  #   networks:
+  #     - queue-net
 
   nginx:
     build: ./nginx
