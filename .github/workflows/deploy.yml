@@ -15,33 +15,37 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      # THIS IS THE ACTUAL WORKFLOW FILE CONTENT
+      - name: Cleanup SSH Directory
+        run: rm -rf ~/.ssh
+
       # Step 2: Set up SSH agent and add the private key
       - name: Set up SSH for deployment
         uses: webfactory/ssh-agent@v0.5.3
         with:
-          ssh-private-key: ${{ secrets.VPS_PRIVATE_KEY }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       # Step 3: Deploy to the VPS
       - name: Deploy using SSH and Docker Compose
         run: |
-          ssh -o StrictHostKeyChecking=no your_user@your_vps_ip << EOF
-            cd /path/to/your/project
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << EOF
+            cd ${{ secrets.WORK_DIR }}
 
             # Pull the latest code from GitHub
             git pull origin main
+            mkdir -p ~/it_works
 
             # Build and restart the services using Docker Compose
-            docker-compose down
-            docker-compose pull
-            docker-compose up -d --build
+            # docker-compose down
+            # docker-compose pull
+            # docker-compose up -d --build
 
             # Run migrations and collect static files
-            docker-compose exec web python manage.py migrate
-            docker-compose exec web python manage.py collectstatic --noinput
+            # docker-compose exec web python manage.py migrate
+            # docker-compose exec web python manage.py collectstatic --noinput
           EOF
-
-
-
+      - name: Cleanup SSH Keys
+        run: rm -rf ~/.ssh
 # name: DataCube CI/CD deployment workflow
 # on:
 #   push:
@@ -77,7 +81,7 @@ jobs:
 #           set -e && \
 #           echo 'Current directory: $(pwd)' && \
 #           cd ${{ secrets.WORK_DIR }} && \
-#           git checkout ${{ secrets.MAIN_BRANCH }} && \
+#           git checkout main && \
 #           git pull && \
 #           chmod +x run_docker.sh && \
 #           ./run_docker.sh prod \
