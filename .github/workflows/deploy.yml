@@ -20,11 +20,30 @@ jobs:
       - name: Cleanup SSH Directory
         run: rm -rf ~/.ssh
 
-      # Step 2: Set up SSH agent and add the private key
-      - name: Set up SSH for deployment
-        uses: webfactory/ssh-agent@v0.5.3
+      - name: Install SSH Key
+        uses: shimataro/ssh-key-action@v2.7.0
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          known_hosts: "just-a-placeholder-so-we-dont-get-errors"
+
+      - name: Adding Known Hosts
+        run: ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Connect to Server, Pull Latest Code, and Rebuild Containers with Docker Script
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "\
+          set -e && \
+          echo 'Current directory: $(pwd)' && \
+          cd ${{ secrets.WORK_DIR }} && \
+          git checkout main && \
+          git pull && \
+          mkdir -p ~/it_works && \
+          docker-compose down && docker-compose up -d --build
+
+          # echo "Github action file succesfull!!!"
+          exit"
+      - name: Cleanup SSH Keys
+        run: rm -rf ~/.ssh
 
       # Step 3: Deploy to the VPS
       - name: Deploy using SSH and Docker Compose
@@ -46,46 +65,3 @@ jobs:
           EOF
       - name: Cleanup SSH Keys
         run: rm -rf ~/.ssh
-# name: DataCube CI/CD deployment workflow
-# on:
-#   push:
-#     branches:
-#       - main
-#   workflow_dispatch:
-
-# jobs:
-#   deploy:
-#     name: Deploy and Rebuild Containers
-#     runs-on: ubuntu-latest
-
-#     steps:
-#       - name: Echo New Changes
-#         run: echo 'New changes made to main'
-
-#       # THIS IS THE ACTUAL WORKFLOW FILE CONTENT
-#       - name: Cleanup SSH Directory
-#         run: rm -rf ~/.ssh
-
-#       - name: Install SSH Key
-#         uses: shimataro/ssh-key-action@v2.7.0
-#         with:
-#           key: ${{ secrets.SSH_PRIVATE_KEY }}
-#           known_hosts: 'just-a-placeholder-so-we-dont-get-errors'
-
-#       - name: Adding Known Hosts
-#         run: ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
-
-#       - name: Connect to Server, Pull Latest Code, and Rebuild Containers with Docker Script
-#         run: |
-#           ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "\
-#           set -e && \
-#           echo 'Current directory: $(pwd)' && \
-#           cd ${{ secrets.WORK_DIR }} && \
-#           git checkout main && \
-#           git pull && \
-#           chmod +x run_docker.sh && \
-#           ./run_docker.sh prod \
-#           # echo "Github action file succesfull!!!"
-#           exit"
-#       - name: Cleanup SSH Keys
-#         run: rm -rf ~/.ssh
