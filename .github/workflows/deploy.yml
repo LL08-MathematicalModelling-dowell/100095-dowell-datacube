@@ -26,6 +26,7 @@ jobs:
         with:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           # Remove the placeholder known_hosts entry
+          known_hosts: "just-a-placeholder-so-we-dont-get-errors"
 
       # Adding Known Hosts
       - name: Adding Known Hosts
