@@ -97,7 +97,7 @@ jobs:
         uses: shimataro/ssh-key-action@v2.7.0
         with:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          strict: false
+          known_hosts: ${{ secrets.SSH_HOST }} # Use the actual host
 
       - name: Adding Known Hosts
         run: ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
