@@ -1,5 +1,4 @@
 # name: DataCube CI/CD deployment workflow
-
 # on:
 #   push:
 #     branches:
@@ -8,13 +7,12 @@
 
 # jobs:
 #   deploy:
-#     name: Deploy to VPS
+#     name: Deploy and Rebuild Containers
 #     runs-on: ubuntu-latest
 
 #     steps:
-#       # Step 1: Checkout the latest code
-#       - name: Checkout code
-#         uses: actions/checkout@v2
+#       - name: Echo New Changes
+#         run: echo 'New changes made to main'
 
 #       # THIS IS THE ACTUAL WORKFLOW FILE CONTENT
 #       - name: Cleanup SSH Directory
@@ -24,7 +22,7 @@
 #         uses: shimataro/ssh-key-action@v2.7.0
 #         with:
 #           key: ${{ secrets.SSH_PRIVATE_KEY }}
-#           known_hosts: 'just-a-placeholder-so-we-dont-get-errors'
+#           known_hosts: "just-a-placeholder-so-we-dont-get-errors"
 
 #       - name: Adding Known Hosts
 #         run: ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
@@ -34,79 +32,56 @@
 #           ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "\
 #           set -e && \
 #           echo 'Current directory: $(pwd)' && \
-#           cd ${{ secrets.WORK_DIR }} && \
+#           cd ${{ secrets.WORKING_DIR }} && \
 #           git checkout main && \
 #           git pull && \
-#           mkdir -p ~/it_works && \
 #           docker-compose down && docker-compose up -d --build
-
+#           # docker-compose pull
+#           mkdir -p ~/it_works
 #           # echo "Github action file succesfull!!!"
 #           exit"
 #       - name: Cleanup SSH Keys
 #         run: rm -rf ~/.ssh
 
-#       # Step 3: Deploy to the VPS
-#       - name: Deploy using SSH and Docker Compose
-#         run: |
-#           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << EOF
-#             cd ${{ secrets.WORK_DIR }}
-
-#             # Pull the latest code from GitHub
-#             git pull origin main
-#             mkdir -p ~/it_works
-
-#             # Build and restart the services using Docker Compose
-#             docker-compose down && docker-compose up -d --build
-#             # docker-compose pull
-
-#             # Run migrations and collect static files
-#             # docker-compose exec web python manage.py migrate
-#             # docker-compose exec web python manage.py collectstatic --noinput
-#           EOF
-#       - name: Cleanup SSH Keys
-#         run: rm -rf ~/.ssh
-
 name: DataCube CI/CD deployment workflow
+
 on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 jobs:
   deploy:
-    name: Deploy and Rebuild Containers
+    name: Deploy to VPS
     runs-on: ubuntu-latest
 
     steps:
-      - name: Echo New Changes
-        run: echo 'New changes made to main'
+      # Step 1: Checkout the latest code
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-      # THIS IS THE ACTUAL WORKFLOW FILE CONTENT
-      - name: Cleanup SSH Directory
-        run: rm -rf ~/.ssh
-
-      - name: Install SSH Key
-        uses: shimataro/ssh-key-action@v2.7.0
+      # Step 2: Set up SSH agent and add the private key
+      - name: Set up SSH for deployment
+        uses: webfactory/ssh-agent@v0.5.3
         with:
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          # known_hosts: "just-a-placeholder-so-we-dont-get-errors"
+          ssh-private-key: ${{ secrets.PRIVATE_KEY }}
 
-      - name: Adding Known Hosts
-        run: ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Connect to Server, Pull Latest Code, and Rebuild Containers with Docker Script
+      # Step 3: Deploy to the VPS
+      - name: Deploy using SSH and Docker Compose
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "\
-          set -e && \
-          echo 'Current directory: $(pwd)' && \
-          cd ${{ secrets.WORKING_DIR }} && \
-          git checkout main && \
-          git pull && \
-          docker-compose down && docker-compose up -d --build          
-          # docker-compose pull
-          mkdir -p ~/it_works
-          # echo "Github action file succesfull!!!"
-          exit"
-      - name: Cleanup SSH Keys
-        run: rm -rf ~/.ssh
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << EOF
+            cd ${{ secrets.WORKING_DIR }}
+
+            # Pull the latest code from GitHub
+            # git pull origin main
+
+            # Build and restart the services using Docker Compose
+            # docker-compose down
+            # docker-compose pull
+            # docker-compose up -d --build
+
+            # Run migrations and collect static files
+            # docker-compose exec web python manage.py migrate
+            # docker-compose exec web python manage.py collectstatic --noinput
+            echo "Deployment successful"
+          EOF
