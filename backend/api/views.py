@@ -24,6 +24,41 @@ from api.serializers import (
     InputPostSerializer,
     InputPutSerializer,
 )
+
+from django.shortcuts import render
+from django.urls import reverse
+
+def api_home(request):
+    """
+    View to render the home page listing all available API endpoints and their descriptions.
+    """
+    apis = [
+        {
+            "name": "Data CRUD",
+            "description": "Handles CRUD operations on MongoDB collections.",
+            "url": reverse('crud')
+        },
+        {
+            "name": "List Collections",
+            "description": "Lists all collections for a given database.",
+            "url": reverse('list_collections')
+        },
+        {
+            "name": "Add Collection",
+            "description": "Adds a new collection to an existing database.",
+            "url": reverse('add_collection')
+        },
+        {
+            "name": "Create Database",
+            "description": "Creates a new database and adds collections based on the product name.",
+            "url": reverse('create_database')
+        },
+    ]
+
+    return render(request, 'api_home.html', {'apis': apis})
+
+
+
 @method_decorator(csrf_exempt, name='dispatch')
 class DataCrudView(APIView):
     """

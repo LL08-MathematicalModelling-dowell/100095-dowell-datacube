@@ -123,14 +123,19 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 
 USE_L10N = True
-
 USE_TZ = True
 
+# URL to use when referring to static files
 STATIC_URL = '/static/'
-STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'static')
-]
-STATIC_ROOT = os.path.join(BASE_DIR, 'assets')
+
+# Directory where collectstatic will gather static files in production
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# STATICFILES_DIRS should be removed or commented out in production
+# STATICFILES_DIRS = [
+#     os.path.join(BASE_DIR, 'static')
+# ]
+
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # MY_BASE_URL = 'https://dowelldatacube.uxlivinglab.online'
