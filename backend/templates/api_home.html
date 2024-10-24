@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dowell DataCube APIs</title>
+    <style>
+      /* Global Styles */
+      body {
+        font-family: "Roboto", sans-serif;
+        background-color: #1a1a1a; /* Dark gray background */
+        color: #f5f5f5; /* Off-white text */
+        margin: 0;
+        padding: 0;
+      }
+
+      /* Header Styling */
+      header {
+        background-color: #0f0f0f; /* Almost black */
+        padding: 20px 0;
+        text-align: center;
+        border-bottom: 2px solid #00ff88; /* Green accent border */
+      }
+
+      header h1 {
+        font-size: 42px;
+        color: #00ff88; /* Light green for the title */
+        margin: 0;
+        text-transform: uppercase;
+      }
+
+      /* Main Content Area */
+      main {
+        max-width: 1200px;
+        margin: 40px auto;
+        padding: 20px;
+      }
+
+      h2 {
+        color: #00ff88; /* Green for section headers */
+        font-size: 28px;
+        margin-bottom: 20px;
+        text-transform: uppercase;
+      }
+
+      /* API List Container */
+      .api-list {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+
+      /* Individual API Box */
+      .api-item {
+        background-color: #262626; /* Medium dark gray */
+        padding: 20px;
+        border-left: 6px solid #00ff88; /* Green left border */
+        border-radius: 8px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); /* Professional shadow */
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+      }
+
+      .api-item:hover {
+        transform: translateY(-5px); /* Lift effect */
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5); /* Enhanced shadow */
+      }
+
+      /* API Title and Description */
+      .api-name {
+        font-size: 22px;
+        color: #f5f5f5;
+        margin-bottom: 10px;
+      }
+
+      .api-description {
+        font-size: 16px;
+        color: #cccccc; /* Lighter gray for descriptions */
+        margin-bottom: 15px;
+      }
+
+      /* API Link Styling */
+      .api-url a {
+        font-weight: bold;
+        color: #00ff88; /* Green for links */
+        text-decoration: none;
+      }
+
+      .api-url a:hover {
+        color: #1aff98; /* Lighter green on hover */
+        text-decoration: underline;
+      }
+
+      /* Footer */
+      footer {
+        background-color: #0f0f0f; /* Same as header for consistency */
+        text-align: center;
+        padding: 15px;
+        color: #cccccc;
+        margin-top: 40px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>API Documentation</h1>
+    </header>
+
+    <main>
+      <section>
+        <h2>Available APIs</h2>
+        <ul class="api-list">
+          {% for api in apis %}
+          <li class="api-item">
+            <div class="api-name">{{ api.name }}</div>
+            <div class="api-description">{{ api.description }}</div>
+            <div class="api-url"><a href="{{ api.url }}">{{ api.url }}</a></div>
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+    </main>
+
+    <footer>&copy; Dowell DataCube | API Documentation</footer>
+  </body>
+</html>
