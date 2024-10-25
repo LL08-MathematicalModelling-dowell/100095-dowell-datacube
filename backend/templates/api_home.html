@@ -3,33 +3,31 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dowell DataCube APIs</title>
+    <title>Dowell DataCube API</title>
     <style>
-      /* Global Styles */
+      /* General Styling */
       body {
         font-family: "Roboto", sans-serif;
-        background-color: #1a1a1a; /* Dark gray background */
-        color: #f5f5f5; /* Off-white text */
+        background-color: #1a1a1a;
+        color: #f5f5f5;
         margin: 0;
         padding: 0;
       }
 
-      /* Header Styling */
       header {
-        background-color: #0f0f0f; /* Almost black */
-        padding: 20px 0;
+        background-color: #0f0f0f;
+        padding: 20px;
         text-align: center;
-        border-bottom: 2px solid #00ff88; /* Green accent border */
+        border-bottom: 2px solid #00ff88;
       }
 
       header h1 {
         font-size: 42px;
-        color: #00ff88; /* Light green for the title */
+        color: #00ff88;
         margin: 0;
         text-transform: uppercase;
       }
 
-      /* Main Content Area */
       main {
         max-width: 1200px;
         margin: 40px auto;
@@ -37,7 +35,7 @@
       }
 
       h2 {
-        color: #00ff88; /* Green for section headers */
+        color: #00ff88;
         font-size: 28px;
         margin-bottom: 20px;
         text-transform: uppercase;
@@ -46,26 +44,25 @@
       /* API List Container */
       .api-list {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1fr;
         gap: 20px;
       }
 
-      /* Individual API Box */
+      /* API Item Styling */
       .api-item {
-        background-color: #262626; /* Medium dark gray */
+        background-color: #262626;
         padding: 20px;
-        border-left: 6px solid #00ff88; /* Green left border */
+        border-left: 6px solid #00ff88;
         border-radius: 8px;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); /* Professional shadow */
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
         transition: transform 0.3s ease, box-shadow 0.3s ease;
       }
 
       .api-item:hover {
-        transform: translateY(-5px); /* Lift effect */
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5); /* Enhanced shadow */
+        transform: translateY(-5px);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
       }
 
-      /* API Title and Description */
       .api-name {
         font-size: 22px;
         color: #f5f5f5;
@@ -74,35 +71,52 @@
 
       .api-description {
         font-size: 16px;
-        color: #cccccc; /* Lighter gray for descriptions */
+        color: #cccccc;
         margin-bottom: 15px;
       }
 
-      /* API Link Styling */
-      .api-url a {
+      /* Request Body Section */
+      .request-method {
         font-weight: bold;
-        color: #00ff88; /* Green for links */
-        text-decoration: none;
+        color: #00ff88;
+        margin-top: 10px;
       }
 
-      .api-url a:hover {
-        color: #1aff98; /* Lighter green on hover */
-        text-decoration: underline;
+      .request-body {
+        padding: 15px;
+        background-color: #333333;
+        border-radius: 5px;
+        color: #bfbfbf;
+        font-size: 14px;
+        white-space: pre-wrap;
+        margin-bottom: 15px;
       }
 
       /* Footer */
       footer {
-        background-color: #0f0f0f; /* Same as header for consistency */
+        background-color: #0f0f0f;
         text-align: center;
         padding: 15px;
         color: #cccccc;
         margin-top: 40px;
       }
+
+      /* API URL */
+      .api-url {
+        font-size: 16px;
+        color: #00ff88;
+        margin-bottom: 10px;
+      }
+
+      a {
+        color: #00ff88;
+        text-decoration: none;
+      }
     </style>
   </head>
   <body>
     <header>
-      <h1>API Documentation</h1>
+      <h1>Dowell DataCube API</h1>
     </header>
 
     <main>
@@ -114,12 +128,19 @@
             <div class="api-name">{{ api.name }}</div>
             <div class="api-description">{{ api.description }}</div>
             <div class="api-url"><a href="{{ api.url }}">{{ api.url }}</a></div>
+
+            {% for method, body in api.request_bodies.items %}
+            <div class="request-method">{{ method }} Request Body:</div>
+            <div class="request-body">
+              <pre>{{ body }}</pre>
+            </div>
+            {% endfor %}
           </li>
           {% endfor %}
         </ul>
       </section>
     </main>
 
-    <footer>&copy; Dowell DataCube | API Documentation</footer>
+    <footer>&copy; 2024 Dowell DataCube | API Documentation</footer>
   </body>
 </html>
