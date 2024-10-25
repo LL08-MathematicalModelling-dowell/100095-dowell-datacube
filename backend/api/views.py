@@ -28,35 +28,88 @@ from api.serializers import (
 from django.shortcuts import render
 from django.urls import reverse
 
+
 def api_home(request):
     """
-    View to render the home page listing all available API endpoints and their descriptions.
+    View to render the home page listing all available API endpoints, descriptions, and request bodies.
     """
     apis = [
         {
             "name": "Data CRUD",
             "description": "Handles CRUD operations on MongoDB collections.",
-            "url": reverse('crud')
+            "url": reverse('api:crud'),
+            "request_bodies": {
+                "GET": """{
+                    "db_name": "example_db",
+                    "coll_name": "example_collection",
+                    "operation": "fetch",
+                    "filters": {"field": "value"},
+                    "limit": 50,
+                    "offset": 0
+                }""",
+                "POST": """{
+                    "db_name": "example_db",
+                    "coll_name": "example_collection",
+                    "operation": "insert",
+                    "data": {
+                        "field1": "value1",
+                        "field2": "value2"
+                    }
+                }""",
+                "PUT": """{
+                    "db_name": "example_db",
+                    "coll_name": "example_collection",
+                    "operation": "update",
+                    "query": {"field": "value"},
+                    "update_data": {"field1": "new_value"}
+                }""",
+                "DELETE": """{
+                    "db_name": "example_db",
+                    "coll_name": "example_collection",
+                    "operation": "delete",
+                    "query": {"field": "value"}
+                }"""
+            }
         },
         {
             "name": "List Collections",
             "description": "Lists all collections for a given database.",
-            "url": reverse('list_collections')
+            "url": reverse('api:list_collections'),
+            "request_bodies": {
+                "GET": """{
+                    "db_name": "example_db"
+                }"""
+            }
         },
         {
             "name": "Add Collection",
             "description": "Adds a new collection to an existing database.",
-            "url": reverse('add_collection')
+            "url": reverse('api:add_collection'),
+            "request_bodies": {
+                "POST": """{
+                    "db_name": "example_db",
+                    "coll_names": "new_collection_name"
+                }"""
+            }
         },
         {
             "name": "Create Database",
             "description": "Creates a new database and adds collections based on the product name.",
-            "url": reverse('create_database')
+            "url": reverse('api:create_database'),
+            "request_bodies": {
+                "POST": """{
+                    "db_name": "new_database",
+                    "num_collections": 5,
+                    "coll_names": ["collection1", "collection2"],
+                    "num_documents": 100,
+                    "num_fields": 10,
+                    "field_labels": ["label1", "label2"]
+                }"""
+            }
         },
     ]
 
     return render(request, 'api_home.html', {'apis': apis})
-
 
 
 @method_decorator(csrf_exempt, name='dispatch')
