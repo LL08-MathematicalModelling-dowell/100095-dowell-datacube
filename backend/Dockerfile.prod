@@ -28,7 +28,7 @@ ENV PATH="/usr/local/bin:$PATH"
 COPY --from=builder /root/.local /usr/local
 COPY . /usr/src/app
 
-# Ensure that static files directory exists and is owned by the app user
+# Ensure that static files directory exists and has correct permissions
 RUN mkdir -p /usr/src/app/staticfiles && chown -R appuser:appgroup /usr/src/app/staticfiles
 
 # Change ownership to the non-root user
@@ -43,5 +43,4 @@ USER appuser
 # Expose the port that the Django app will run on
 EXPOSE 8000
 
-# Start Gunicorn for serving the Django application
 CMD ["gunicorn", "--workers=3", "--bind=0.0.0.0:8000", "project.wsgi:application"]
