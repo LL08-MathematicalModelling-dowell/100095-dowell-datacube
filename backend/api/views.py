@@ -264,7 +264,7 @@ class DataCrudView(APIView):
                 f"{key}_operation": {
                     "insert_date_time": [insert_date_time],
                     "is_deleted": False,
-                    "data_type": data.get('data_type')
+                    # "data_type": data.get('data_type')
                 } for key in data_to_insert.keys()
             })
             inserted_data = new_collection.insert_one(data_to_insert)
@@ -288,7 +288,7 @@ class DataCrudView(APIView):
             database = data.get('db_name')
             coll = data.get('coll_name')
             operation = data.get('operation')
-            data_type = data.get('data_type')
+            # data_type = data.get('data_type')
             query = self.convert_object_id(data.get('query', {}))
             update_data = data.get('update_data', {})
 
@@ -298,8 +298,8 @@ class DataCrudView(APIView):
             if operation != "update":
                 return self.method_not_allowed_response()
 
-            if data_type not in serializer.choose_data_type:
-                return self.method_not_allowed_response()
+            # if data_type not in serializer.choose_data_type:
+            #     return self.method_not_allowed_response()
 
             # THIS CODE IS COMMENTED OUT FOR NOW BECAUSE API KEI SYSTEM IS NOT IMPLEMENTED YET AND THE APP IS USED IN-HOUSE
             # API key validation
@@ -314,7 +314,8 @@ class DataCrudView(APIView):
                 return Response({"success": False, "message": "No document found matching the query", "data": []}, status=status.HTTP_404_NOT_FOUND)
 
             # Validate update data and apply updates
-            modified_count = self.update_document(existing_document, update_data, data_type)
+            # modified_count = self.update_document(existing_document, update_data, data_type)
+            modified_count = self.update_document(existing_document, update_data)
             new_collection.replace_one({"_id": existing_document["_id"]}, existing_document)
 
             return Response({"success": True, "message": f"{modified_count} documents updated successfully!", "data": []}, status=status.HTTP_200_OK)
@@ -323,7 +324,8 @@ class DataCrudView(APIView):
             traceback.print_exc()
             return Response({"success": False, "message": str(e), "data": []}, status=status.HTTP_400_BAD_REQUEST)
 
-    def update_document(self, existing_document, update_data, data_type):
+    # def update_document(self, existing_document, update_data, data_type):
+    def update_document(self, existing_document, update_data):
         """
         Applies updates to the existing document and returns the count of modified fields.
         """
@@ -349,7 +351,7 @@ class DataCrudView(APIView):
             database = data.get('db_name')
             coll = data.get('coll_name')
             operation = data.get('operation')
-            data_type = data.get('data_type')
+            # data_type = data.get('data_type')
             query = self.convert_object_id(data.get('query', {}))
 
             # Validate database and collection
@@ -358,8 +360,8 @@ class DataCrudView(APIView):
             if operation != "delete":
                 return self.method_not_allowed_response()
 
-            if data_type not in serializer.choose_data_type:
-                return self.method_not_allowed_response()
+            # if data_type not in serializer.choose_data_type:
+            #     return self.method_not_allowed_response()
 
             # THIS CODE IS COMMENTED OUT FOR NOW BECAUSE API KEI SYSTEM IS NOT IMPLEMENTED YET AND THE APP IS USED IN-HOUSE
             # API key validation
