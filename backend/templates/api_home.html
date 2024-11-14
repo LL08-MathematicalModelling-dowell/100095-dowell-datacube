@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dowell DataCube API</title>
+    <title>Dowell DataCube API Documentation</title>
     <style>
       /* General Styling */
       body {
@@ -67,6 +67,7 @@
         font-size: 22px;
         color: #f5f5f5;
         margin-bottom: 10px;
+        font-weight: bold;
       }
 
       .api-description {
@@ -75,37 +76,54 @@
         margin-bottom: 15px;
       }
 
-      /* Request Body Section */
-      .request-method {
-        font-weight: bold;
+      .api-url {
+        font-size: 16px;
         color: #00ff88;
-        margin-top: 10px;
+        margin-bottom: 10px;
       }
 
-      .request-body {
-        padding: 15px;
+      .collapsible {
         background-color: #333333;
+        color: #00ff88;
+        cursor: pointer;
+        padding: 10px;
+        width: 100%;
+        border: none;
+        text-align: left;
+        outline: none;
+        font-size: 16px;
+        font-weight: bold;
+        border-radius: 4px;
+        margin-bottom: 10px;
+      }
+
+      .content {
+        padding: 0 18px;
+        display: none;
+        overflow: hidden;
+        background-color: #333333;
+        border-radius: 4px;
+        margin-bottom: 15px;
+      }
+
+      .request-body,
+      .response-body {
+        background-color: #2e2e2e;
+        padding: 15px;
         border-radius: 5px;
         color: #bfbfbf;
         font-size: 14px;
         white-space: pre-wrap;
-        margin-bottom: 15px;
+        margin-top: 10px;
       }
 
-      /* Footer */
       footer {
         background-color: #0f0f0f;
         text-align: center;
         padding: 15px;
         color: #cccccc;
         margin-top: 40px;
-      }
-
-      /* API URL */
-      .api-url {
-        font-size: 16px;
-        color: #00ff88;
-        margin-bottom: 10px;
+        font-size: 14px;
       }
 
       a {
@@ -130,11 +148,23 @@
             <div class="api-url"><a href="{{ api.url }}">{{ api.url }}</a></div>
 
             {% for method, body in api.request_bodies.items %}
-            <div class="request-method">{{ method }} Request Body:</div>
-            <div class="request-body">
-              <pre>{{ body }}</pre>
+            <button class="collapsible">{{ method }} Request Body</button>
+            <div class="content">
+              <div class="request-body">
+                <pre>{{ body }}</pre>
+              </div>
             </div>
-            {% endfor %}
+            {% endfor %} {% if api.responses %}
+            <button class="collapsible">Example Responses</button>
+            <div class="content">
+              {% for response_title, response_body in api.responses.items %}
+              <div class="response-body">
+                <strong>{{ response_title }}:</strong>
+                <pre>{{ response_body }}</pre>
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
           </li>
           {% endfor %}
         </ul>
@@ -142,5 +172,21 @@
     </main>
 
     <footer>&copy; 2024 Dowell DataCube | API Documentation</footer>
+
+    <script>
+      // JavaScript for collapsible sections
+      const collapsibles = document.querySelectorAll(".collapsible");
+      collapsibles.forEach((collapsible) => {
+        collapsible.addEventListener("click", function () {
+          this.classList.toggle("active");
+          const content = this.nextElementSibling;
+          if (content.style.display === "block") {
+            content.style.display = "none";
+          } else {
+            content.style.display = "block";
+          }
+        });
+      });
+    </script>
   </body>
 </html>

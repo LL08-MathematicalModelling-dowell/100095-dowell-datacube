@@ -4,64 +4,58 @@ from django.core.validators import MaxValueValidator
 
 
 class InputGetSerializer(serializers.Serializer):
-    operations = [
-        ('insert', 'insert'),
-        ('update', 'update'),
-        ('delete', 'delete'),
-        ('fetch', 'fetch'),
-    ]
-    # choose_data_type = ['real_data', 'testing_data', 'learning_data', 'deleted_data']
-
-    coll_name = serializers.CharField(max_length=255, required=True)
     db_name = serializers.CharField(max_length=255, required=True)
-    operation = serializers.ChoiceField(choices=operations, required=True)
+    coll_name = serializers.CharField(max_length=255, required=True)
     filters = serializers.JSONField(required=False)
-    # api_key = serializers.CharField(max_length=510, required=True)
     limit = serializers.IntegerField(required=False)
     offset = serializers.IntegerField(required=False)
-    # payment = serializers.BooleanField(default=True, allow_null=True, required=False)
-    # data_type = serializers.ChoiceField(choices=choose_data_type, required=True)
 
 
 class InputPostSerializer(serializers.Serializer):
-    operations = [
-        ('insert', 'insert'),
-        ('update', 'update'),
-        ('delete', 'delete'),
-        ('fetch', 'fetch'),
-    ]
-    # choose_data_type = ['real_data', 'testing_data', 'learning_data', 'deleted_data']
-    
-    # api_key = serializers.CharField(max_length=510, required=True)
     coll_name = serializers.CharField(max_length=255, required=True)
     db_name = serializers.CharField(max_length=255, required=True)
-    operation = serializers.ChoiceField(choices=operations, required=True)
     data = serializers.JSONField(required=True)
-    # payment = serializers.BooleanField(default=True, allow_null=True, required=False)
-    # is_deleted = serializers.BooleanField(default=False)
-    # data_type = serializers.ChoiceField(choices=choose_data_type, required=True)
+
+    def validate_data(self, value):
+        """
+        Ensures `data` is either a dictionary (single document) or a list of dictionaries (multiple documents).
+        """
+        if isinstance(value, dict):
+            # Single document case
+            return [value]  # Wrap in a list for uniform handling in the view
+        elif isinstance(value, list) and all(isinstance(item, dict) for item in value):
+            # Multiple documents case
+            return value
+        else:
+            raise serializers.ValidationError("The `data` field must be a dictionary or a list of dictionaries representing documents to insert.")
+
 
 
 class InputPutSerializer(serializers.Serializer):
-    # choose_data_type = ['real_data', 'testing_data', 'learning_data', 'deleted_data']
-    # api_key = serializers.CharField(max_length=510, required=True)
     db_name = serializers.CharField(max_length=100)
     coll_name = serializers.CharField(max_length=100)
-    operation = serializers.CharField(max_length=10)
-    query = serializers.JSONField(required=False)
-    update_data = serializers.JSONField(required=False)
-    # payment = serializers.BooleanField(default=True, allow_null=True, required=False)
-    # data_type = serializers.ChoiceField(choices=choose_data_type, required=True)
+    operation = serializers.ChoiceField(choices=['update', 'replace'])
+    query = serializers.JSONField(required=True)
+    update_data = serializers.JSONField(required=True)
+
+    def validate(self, data):
+        # Ensure `update_data` is present if `operation` is 'update'
+        if data['operation'] == 'update' and not data.get('update_data'):
+            raise serializers.ValidationError("`update_data` is required for update operations.")
+        return data
 
 
 class InputDeleteSerializer(serializers.Serializer):
-    # choose_data_type = ['real_data', 'testing_data', 'learning_data', 'deleted_data']
-    # api_key = serializers.CharField(max_length=510)
     db_name = serializers.CharField(max_length=100)
     coll_name = serializers.CharField(max_length=100)
-    operation = serializers.CharField(max_length=10)
-    query = serializers.JSONField(required=False)
-    # data_type = serializers.ChoiceField(choices=choose_data_type, required=True)
+    operation = serializers.ChoiceField(choices=['delete', 'soft_delete'])
+    query = serializers.JSONField(required=True)
+
+    def validate(self, data):
+        # Ensure that `query` is provided
+        if not data.get('query'):
+            raise serializers.ValidationError("A `query` is required to specify the document(s) to delete.")
+        return data
 
 
 class NotEmptyStringValidator:
@@ -175,59 +169,6 @@ class AddCollectionPOSTSerializer(serializers.Serializer):
         return value
 
 
-# =================== Create Database ===================
-
-# class CollectionFieldSerializer(serializers.Serializer):
-#     name = serializers.CharField(
-#         max_length=100,
-#         required=True,
-#         help_text="Name of the collection to be created"
-#     )
-#     fields = serializers.ListField(
-#         child=serializers.CharField(max_length=100),
-#         required=True,
-#         help_text="List of field names for documents in the collection"
-#     )
-
-#     def validate_name(self, value):
-#         """Validate collection name contains only allowed characters."""
-#         if not re.match(r'^[\w-]+$', value):
-#             raise serializers.ValidationError("Collection name can only contain alphanumeric characters, underscores, or hyphens.")
-#         return value
-
-#     def validate_fields(self, value):
-#         """Validate each field name in the list."""
-#         invalid_fields = [field for field in value if not re.match(r'^[\w-]+$', field)]
-#         if invalid_fields:
-#             raise serializers.ValidationError(f"Invalid field names: {', '.join(invalid_fields)}. Only alphanumeric characters, underscores, and hyphens are allowed.")
-#         return value
-
-
-# class AddDatabasePOSTSerializer(serializers.Serializer):
-#     db_name = serializers.CharField(
-#         max_length=100,
-#         required=True,
-#         help_text="Name of the new database"
-#     )
-#     product_name = serializers.CharField(
-#         max_length=100,
-#         required=False,
-#         allow_blank=True,
-#         help_text="Optional product name to configure specific database setup"
-#     )
-#     collections = serializers.ListField(
-#         child=CollectionFieldSerializer(),
-#         required=True,
-#         help_text="List of collections with names and document fields"
-#     )
-
-#     def validate_db_name(self, value):
-#         """Validate that db_name contains only allowed characters."""
-#         if not re.match(r'^[\w-]+$', value):
-#             raise serializers.ValidationError("Database name can only contain alphanumeric characters, underscores, or hyphens.")
-#         return value
-
-
 class CollectionFieldSerializer(serializers.Serializer):
     name = serializers.CharField(
         max_length=100,
@@ -288,5 +229,3 @@ class AddDatabasePOSTSerializer(serializers.Serializer):
         if not re.match(r'^[\w-]+$', value):
             raise serializers.ValidationError("Database name can only contain alphanumeric characters, underscores, or hyphens.")
         return value
-
-

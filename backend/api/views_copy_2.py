@@ -9,7 +9,6 @@ from django.conf import settings
 from django.shortcuts import render
 from django.urls import reverse
 from django.http import JsonResponse
-from datetime import datetime
 
 from rest_framework import status
 from rest_framework.views import APIView
@@ -28,7 +27,6 @@ from api.serializers import (
     DropDatabaseSerializer,
     ListDatabaseSerializer,
 )
-from asgiref.sync import async_to_sync
 # from .script import dowell_time
 
 # Use the custom logger
@@ -52,9 +50,10 @@ def api_key_required(func):
         return func(view_instance, request, *args, **kwargs)
     return wrapper
 
+
 def api_home(request):
     """
-    View to render the home page listing all available API endpoints, descriptions, request bodies, and example responses.
+    View to render the home page listing all available API endpoints, descriptions, and request bodies.
     """
     apis = [
         {
@@ -65,14 +64,15 @@ def api_home(request):
                 "GET": """{
                     "db_name": "example_db",
                     "coll_name": "example_collection",
+                    "operation": "fetch",
                     "filters": {"field": "value"},
                     "limit": 50,
-                    "offset": 0,
-                    "is_deleted": false  // Optional: defaults to False to exclude soft-deleted documents
+                    "offset": 0
                 }""",
                 "POST": """{
                     "db_name": "example_db",
                     "coll_name": "example_collection",
+                    "operation": "insert",
                     "data": {
                         "field1": "value1",
                         "field2": "value2"
@@ -81,53 +81,15 @@ def api_home(request):
                 "PUT": """{
                     "db_name": "example_db",
                     "coll_name": "example_collection",
-                    "operation": "update",  // Use "update" or "replace"
+                    "operation": "update",
                     "query": {"field": "value"},
                     "update_data": {"field1": "new_value"}
                 }""",
                 "DELETE": """{
                     "db_name": "example_db",
                     "coll_name": "example_collection",
-                    "operation": "soft_delete",  // Use "delete" for hard delete or "soft_delete" to set is_deleted=True
+                    "operation": "delete",
                     "query": {"field": "value"}
-                }"""
-            },
-            "responses": {
-                "GET": """{
-                    "success": true,
-                    "message": "Data found!",
-                    "data": [
-                        {
-                            "_id": "605dcdbaef8e2e1a45e6a58c",
-                            "field1": "value1",
-                            "field2": "value2",
-                            "is_deleted": false,
-                            "field1_operation": {
-                                "insert_date_time": ["2024-11-14T15:47:22.318000"],
-                                "is_deleted": false
-                            }
-                        },
-                        ...
-                    ]
-                }""",
-                "POST": """{
-                    "success": true,
-                    "message": "Documents inserted successfully!",
-                    "data": {
-                        "inserted_ids": ["605dcdbaef8e2e1a45e6a58c", ...]
-                    }
-                }""",
-                "PUT": """{
-                    "success": true,
-                    "message": "Document updated successfully"
-                }""",
-                "DELETE (soft_delete)": """{
-                    "success": true,
-                    "message": "Document soft-deleted successfully"
-                }""",
-                "DELETE (hard delete)": """{
-                    "success": true,
-                    "message": "Document deleted successfully"
                 }"""
             }
         },
@@ -138,13 +100,6 @@ def api_home(request):
             "request_bodies": {
                 "GET": """{
                     "db_name": "example_db"
-                }"""
-            },
-            "responses": {
-                "GET": """{
-                    "success": true,
-                    "message": "Collections retrieved successfully",
-                    "data": ["collection1", "collection2", ...]
                 }"""
             }
         },
@@ -166,25 +121,16 @@ def api_home(request):
                         }
                     ]
                 }"""
-            },
-            "responses": {
-                "POST": """{
-                    "success": true,
-                    "message": "Collections added successfully",
-                    "data": {
-                        "new_collections": ["new_collection1", "new_collection2"]
-                    }
-                }"""
             }
         },
         {
             "name": "Create Database",
-            "description": "Creates a new database with specified collections and fields ('product_name' can be omitted), or predefined structure for 'living lab admin' ('collections' can be omitted).",
+            "description": "Creates a new database with specified collections and fields ('product_name' can be omited), or predefined structure for 'living lab admin' ('collections' can be omited).",
             "url": reverse('api:create_database'),
             "request_bodies": {
                 "POST": """{
                     "db_name": "new_database",
-                    "product_name (optional - Used only for 'living lab admin', omit for other database creation)": "living lab admin",
+                    "product_name (optinal - Used only for 'living lab admin, omit for other database creation')": "living lab admin",
                     "collections (Required - except for 'living lab admin, omit it')": [
                         {
                             "name": "collection1",
@@ -195,16 +141,6 @@ def api_home(request):
                             "fields": ["fieldA", "fieldB"]
                         }
                     ]
-                }"""
-            },
-            "responses": {
-                "POST": """{
-                    "success": true,
-                    "message": "Database created successfully",
-                    "data": {
-                        "db_name": "new_database",
-                        "collections": ["collection1", "collection2"]
-                    }
                 }"""
             }
         },
@@ -218,13 +154,6 @@ def api_home(request):
                     "page_size": 10,
                     "filter": "example"
                 }"""
-            },
-            "responses": {
-                "GET": """{
-                    "success": true,
-                    "message": "Databases retrieved successfully",
-                    "data": ["database1", "database2", ...]
-                }"""
             }
         },
         # {
@@ -235,12 +164,6 @@ def api_home(request):
         #         "DELETE": """{
         #             "db_name": "database_to_delete",
         #             "confirmation": "database_to_delete"
-        #         }"""
-        #     },
-        #     "responses": {
-        #         "DELETE": """{
-        #             "success": true,
-        #             "message": "Database dropped successfully"
         #         }"""
         #     }
         # }
@@ -265,12 +188,9 @@ class DataCrudView(APIView):
         elif self.request.method == 'DELETE':
             return InputDeleteSerializer
 
-    def get(self, request, *args, **kwargs):
+    @swagger_auto_schema(query_serializer=InputGetSerializer, responses={200: InputGetSerializer(many=True)})
+    async def get(self, request, *args, **kwargs):
         """Handles GET requests to fetch data from a specified MongoDB collection."""
-        return async_to_sync(self.async_get)(request, *args, **kwargs)
-
-    async def async_get(self, request, *args, **kwargs):
-        """Asynchronous method to handle the logic for GET requests."""
         try:
             serializer = InputGetSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
@@ -282,9 +202,6 @@ class DataCrudView(APIView):
             limit = data.get('limit', 50)
             offset = data.get('offset', 0)
 
-            # Exclude soft-deleted documents by default
-            filters['is_deleted'] = filters.get('is_deleted', False)
-
             await self.validate_database_and_collection(database, coll)
             result = await self.fetch_data_from_collection(database, coll, filters, limit, offset)
 
@@ -295,175 +212,15 @@ class DataCrudView(APIView):
             logger.error(f"Error in GET request: {e}")
             return Response({"success": False, "message": str(e), "data": []}, status=status.HTTP_400_BAD_REQUEST)
 
-    def post(self, request, *args, **kwargs):
-        """Handles POST requests to insert new data into a specified MongoDB collection."""
-        return async_to_sync(self.async_post)(request, *args, **kwargs)
-    
-    async def async_post(self, request, *args, **kwargs):
-        """Asynchronous method to handle the logic for POST."""
-        try:
-            serializer = InputPostSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            data = serializer.validated_data
-
-            database = data.get('db_name')
-            coll = data.get('coll_name')
-            documents_to_insert = data.get('data')
-
-            # Ensure documents_to_insert is a list, even if a single document is provided
-            if isinstance(documents_to_insert, dict):
-                documents_to_insert = [documents_to_insert]
-
-            # Validate fields in each document and set `is_deleted` to False by default
-            valid_fields = await self.validate_database_and_collection(database, coll)
-            for document in documents_to_insert:
-                await self.check_fields_exist(document, valid_fields)
-                document['is_deleted'] = False
-
-                # Add insert timestamp and operation log for each document
-                insert_date_time = datetime.utcnow()
-                document.update({
-                    f"{key}_operation": {
-                        "insert_date_time": [insert_date_time],
-                        "is_deleted": False,
-                    } for key in document.keys()
-                })
-
-            # Insert documents into the collection
-            collection = settings.MONGODB_CLIENT[database][coll]
-            if len(documents_to_insert) > 1:
-                result = await asyncio.to_thread(collection.insert_many, documents_to_insert)
-                inserted_ids = [str(id) for id in result.inserted_ids]
-            else:
-                result = await asyncio.to_thread(collection.insert_one, documents_to_insert[0])
-                inserted_ids = [str(result.inserted_id)]
-
-            return Response(
-                {"success": True, "message": "Documents inserted successfully!", "data": {"inserted_ids": inserted_ids}},
-                status=status.HTTP_201_CREATED
-            )
-
-        except Exception as e:
-            logger.error(f"Error in POST request: {e}")
-            return Response({"success": False, "message": str(e), "data": []}, status=status.HTTP_400_BAD_REQUEST)
-
-    def put(self, request, *args, **kwargs):
-        """Handles PUT requests to update or replace data in a MongoDB collection."""
-        return async_to_sync(self.async_put)(request, *args, **kwargs)
-
-    async def async_put(self, request, *args, **kwargs):
-        """Asynchronous method to handle the logic for PUT requests."""
-        try:
-            serializer = InputPutSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            data = serializer.validated_data
-
-            database = data.get('db_name')
-            coll = data.get('coll_name')
-            operation = data.get('operation')
-            filter_data = self.convert_object_id(data.get('query'))
-            update_data = data.get('update_data', {})
-
-            # Validate database and collection, check fields
-            valid_fields = await self.validate_database_and_collection(database, coll)
-            await self.check_fields_exist(update_data, valid_fields)
-
-            # Insert update timestamp and log operation for each updated field
-            update_date_time = datetime.utcnow()
-            update_data_with_log = {
-                key: value for key, value in update_data.items()
-            }
-            update_data_with_log.update({
-                f"{key}_operation": {
-                    "update_date_time": [update_date_time],
-                    "is_deleted": False
-                } for key in update_data.keys()
-            })
-
-            # Perform update or replace based on the operation
-            collection = settings.MONGODB_CLIENT[database][coll]
-            if operation == 'update':
-                result = await asyncio.to_thread(
-                    collection.update_one, filter_data, {'$set': update_data_with_log}
-                )
-            elif operation == 'replace':
-                result = await asyncio.to_thread(
-                    collection.replace_one, filter_data, update_data_with_log
-                )
-
-            # Check if the document was modified
-            if result.modified_count == 0:
-                return Response(
-                    {"success": False, "message": "No document found or updated"},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-
-            return Response({"success": True, "message": "Document updated successfully"}, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            logger.error(f"Error in PUT request: {e}")
-            return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-    def delete(self, request, *args, **kwargs):
-        """Handles DELETE requests to remove or soft-delete documents from a MongoDB collection."""
-        return async_to_sync(self.async_delete)(request, *args, **kwargs)
-
-    async def async_delete(self, request, *args, **kwargs):
-        """Asynchronous method to handle the logic for DELETE requests."""
-        try:
-            serializer = InputDeleteSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            data = serializer.validated_data
-
-            database = data.get('db_name')
-            coll = data.get('coll_name')
-            operation = data.get('operation')
-            filter_data = self.convert_object_id(data.get('query'))
-
-            # Validate database and collection
-            await self.validate_database_and_collection(database, coll)
-
-            # Perform soft delete (mark as deleted) or hard delete
-            collection = settings.MONGODB_CLIENT[database][coll]
-            if operation == 'soft_delete':
-                # Set `is_deleted` to True and add deletion timestamp
-                delete_date_time = datetime.utcnow()
-                update_result = await asyncio.to_thread(
-                    collection.update_one, filter_data, {'$set': {'is_deleted': True, 'deleted_at': delete_date_time}}
-                )
-                if update_result.modified_count == 0:
-                    return Response(
-                        {"success": False, "message": "No document found to soft delete"},
-                        status=status.HTTP_404_NOT_FOUND
-                    )
-                message = "Document soft-deleted successfully"
-            elif operation == 'delete':
-                delete_result = await asyncio.to_thread(collection.delete_one, filter_data)
-                if delete_result.deleted_count == 0:
-                    return Response(
-                        {"success": False, "message": "No document found to delete"},
-                        status=status.HTTP_404_NOT_FOUND
-                    )
-                message = "Document deleted successfully"
-
-            return Response({"success": True, "message": message}, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            logger.error(f"Error in DELETE request: {e}")
-            return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-    async def fetch_data_from_collection(self, database, coll, filters, limit=50, offset=0):
-        """Fetches data from the specified collection with filters, limit, and offset."""
-        cluster = settings.MONGODB_CLIENT
-        collection = cluster[database][coll]
-        
-
-        query = collection.find(filters).skip(offset).limit(limit)
-        result = await asyncio.to_thread(lambda: list(query))
-
-        for doc in result:
-            doc['_id'] = str(doc['_id'])
-        return result
+    def convert_object_id(self, filters):
+        """Converts 'id' and '_id' keys in filters to ObjectId."""
+        for key, value in filters.items():
+            if key in ["id", "_id"]:
+                try:
+                    filters[key] = ObjectId(value)
+                except Exception as ex:
+                    logger.warning(f"ObjectId conversion error: {ex}")
+        return filters
 
     async def validate_database_and_collection(self, database, coll):
         """Validates if the specified database and collection exist with defined fields."""
@@ -480,21 +237,70 @@ class DataCrudView(APIView):
         
         return collections_metadata[coll]
 
-    def convert_object_id(self, filters):
-        """Converts 'id' and '_id' keys in filters to ObjectId."""
-        for key, value in filters.items():
-            if key in ["id", "_id"]:
-                try:
-                    filters[key] = ObjectId(value)
-                except Exception as ex:
-                    logger.warning(f"ObjectId conversion error: {ex}")
-        return filters
+    async def fetch_data_from_collection(self, database, coll, filters, limit=50, offset=0):
+        """Fetches data from the specified collection with filters, limit, and offset."""
+        cluster = settings.MONGODB_CLIENT
+        collection = cluster[database][coll]
 
-    async def check_fields_exist(self, data, valid_fields):
-        """Ensures only defined fields are present in the request data."""
-        for field in data.keys():
-            if field not in valid_fields:
-                raise ValueError(f"Invalid field '{field}' for this collection")
+        query = collection.find(filters).skip(offset).limit(limit)
+        result = await asyncio.to_thread(lambda: list(query))
+
+        for doc in result:
+            doc['_id'] = str(doc['_id'])
+        return result
+
+    @swagger_auto_schema(request_body=InputPostSerializer, responses={201: 'Created'})
+    async def post(self, request, *args, **kwargs):
+        """Handles POST requests to insert new data into a specified MongoDB collection."""
+        try:
+            serializer = InputPostSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            data = serializer.validated_data
+
+            database = data.get('db_name')
+            coll = data.get('coll_name')
+            data_to_insert = data.get('data', {})
+
+            valid_fields = await self.validate_database_and_collection(database, coll)
+            
+            # Validate that only defined fields are being inserted
+            for field in data_to_insert.keys():
+                if field not in valid_fields:
+                    return Response(
+                        {"success": False, "message": f"Invalid field '{field}' for collection '{coll}'"},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # Insert data and log
+            insert_date_time = datetime.datetime.utcnow()
+            data_to_insert.update({
+                f"{key}_operation": {
+                    "insert_date_time": [insert_date_time],
+                    "is_deleted": False,
+                } for key in data_to_insert.keys()
+            })
+            collection = settings.MONGODB_CLIENT[database][coll]
+            result = await asyncio.to_thread(collection.insert_one, data_to_insert)
+
+            return Response(
+                {"success": True, "message": "Data inserted successfully!", "data": {"inserted_id": str(result.inserted_id)}},
+                status=status.HTTP_201_CREATED
+            )
+
+        except Exception as e:
+            logger.error(f"Error in POST request: {e}")
+            return Response({"success": False, "message": str(e), "data": []}, status=status.HTTP_400_BAD_REQUEST)
+
+    async def update_document(self, existing_document, update_data, valid_fields):
+        """Applies updates to the existing document, checking against valid fields."""
+        modified_count = 0
+        for key, value in update_data.items():
+            if key not in valid_fields:
+                raise ValueError(f"Field '{key}' is not defined in metadata for this collection")
+            if existing_document.get(key) != value:
+                existing_document[key] = value
+                modified_count += 1
+        return modified_count
 
 
 class ListCollectionsView(APIView):
