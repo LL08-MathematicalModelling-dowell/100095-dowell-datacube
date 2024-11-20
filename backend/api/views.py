@@ -1,6 +1,6 @@
 import datetime
 import asyncio
-import logging
+# import logging
 
 from bson import ObjectId
 from datetime import datetime
@@ -30,8 +30,8 @@ from api.serializers import (
 from asgiref.sync import async_to_sync
 # from .script import dowell_time
 
-# Use the custom logger
-logger = logging.getLogger('database_operations')
+# Use the custom # logger
+# logger = logging.getLogger('database_operations')
 
 # Cache for database and collection validation
 db_cache = {}
@@ -272,7 +272,7 @@ class DataCrudView(APIView):
             return Response({"success": True, "message": msg, "data": result}, status=status.HTTP_200_OK)
 
         except Exception as e:
-            logger.error(f"Error in GET request: {e}")
+            # logger.error(f"Error in GET request: {e}")
             return Response({"success": False, "message": str(e), "data": []}, status=status.HTTP_400_BAD_REQUEST)
 
     def post(self, request, *args, **kwargs):
@@ -324,7 +324,7 @@ class DataCrudView(APIView):
             )
 
         except Exception as e:
-            logger.error(f"Error in POST request: {e}")
+            # logger.error(f"Error in POST request: {e}")
             return Response({"success": False, "message": str(e), "data": []}, status=status.HTTP_400_BAD_REQUEST)
 
     def put(self, request, *args, **kwargs):
@@ -381,7 +381,7 @@ class DataCrudView(APIView):
             return Response({"success": True, "message": "Document updated successfully"}, status=status.HTTP_200_OK)
 
         except Exception as e:
-            logger.error(f"Error in PUT request: {e}")
+            # logger.error(f"Error in PUT request: {e}")
             return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, *args, **kwargs):
@@ -429,7 +429,7 @@ class DataCrudView(APIView):
             return Response({"success": True, "message": message}, status=status.HTTP_200_OK)
 
         except Exception as e:
-            logger.error(f"Error in DELETE request: {e}")
+            # logger.error(f"Error in DELETE request: {e}")
             return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     async def fetch_data_from_collection(self, database, coll, filters, limit=50, offset=0):
@@ -467,7 +467,8 @@ class DataCrudView(APIView):
                 try:
                     filters[key] = ObjectId(value)
                 except Exception as ex:
-                    logger.warning(f"ObjectId conversion error: {ex}")
+                    pass
+                    # logger.warning(f"ObjectId conversion error: {ex}")
         return filters
 
     async def check_fields_exist(self, data, valid_fields):
@@ -529,7 +530,8 @@ class ListCollectionsView(APIView):
 
             # Log any discrepancies
             if missing_in_db:
-                logger.warning(f"Collections in metadata but missing in MongoDB: {', '.join(missing_in_db)}")
+                pass
+                # logger.warning(f"Collections in metadata but missing in MongoDB: {', '.join(missing_in_db)}")
 
             return Response(
                 {"success": True, "message": "Collections found!", "data": collections},
@@ -537,7 +539,7 @@ class ListCollectionsView(APIView):
             )
 
         except Exception as e:
-            logger.error(f"Error listing collections for database '{data.get('db_name', 'unknown')}': {e}")
+            # logger.error(f"Error listing collections for database '{data.get('db_name', 'unknown')}': {e}")
             return Response(
                 {"success": False, "message": str(e), "data": []},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -596,7 +598,7 @@ class AddCollectionView(APIView):
             )
 
         except Exception as e:
-            logger.error(f"Error adding collections: {e}", exc_info=True)
+            # logger.error(f"Error adding collections: {e}", exc_info=True)
             return Response(
                 {"success": False, "message": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -655,7 +657,7 @@ class AddCollectionView(APIView):
         for coll in new_collections:
             collection_name = coll["name"]
             await asyncio.to_thread(db.create_collection, collection_name)
-            logger.info(f"Created collection '{collection_name}' in database '{db_name}'.")
+            # logger.info(f"Created collection '{collection_name}' in database '{db_name}'.")
 
 
 class DropDatabaseView(APIView):
@@ -704,7 +706,7 @@ class DropDatabaseView(APIView):
             )
 
         except Exception as e:
-            logger.error(f"Error dropping database '{db_name}': {e}")
+            # logger.error(f"Error dropping database '{db_name}': {e}")
             return Response(
                 {"success": False, "message": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -782,7 +784,7 @@ class ListDatabasesView(APIView):
             )
 
         except Exception as e:
-            logger.error(f"Error listing databases: {e}")
+            # logger.error(f"Error listing databases: {e}")
             print(f"Error listing databases: {e}")
             return Response(
                 {"success": False, "message": str(e)},
@@ -858,7 +860,7 @@ class CreateDatabaseView(APIView):
             )
 
         except Exception as e:
-            logger.error(f"Error creating database: {e}", exc_info=True)
+            # logger.error(f"Error creating database: {e}", exc_info=True)
             return Response(
                 {"success": False, "message": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -898,12 +900,12 @@ class CreateDatabaseView(APIView):
         for coll in collections:
             collection_name = coll["name"]
             await asyncio.to_thread(db.create_collection, collection_name)
-            logger.info(f"Created collection '{collection_name}' in database '{db_name}'.")
+            # logger.info(f"Created collection '{collection_name}' in database '{db_name}'.")
 
             # Initialize each collection with an empty document containing the specified fields
             sample_doc = {field: None for field in coll["fields"]}
             await asyncio.to_thread(db[collection_name].insert_one, sample_doc)
-            logger.info(f"Inserted sample document with fields {coll['fields']} into collection '{collection_name}'.")
+            # logger.info(f"Inserted sample document with fields {coll['fields']} into collection '{collection_name}'.")
 
     async def create_collections_for_living_lab(self, db_name):
         """
@@ -919,7 +921,7 @@ class CreateDatabaseView(APIView):
             collection_name = f"collection_{i}"
             await asyncio.to_thread(db.create_collection, collection_name)
             await asyncio.to_thread(db[collection_name].insert_one, {"data": f"document_{i}"})
-            logger.info(f"Created collection '{collection_name}' with 1 document in database '{db_name}'.")
+            # logger.info(f"Created collection '{collection_name}' with 1 document in database '{db_name}'.")
 
         # Create collections 1001 to 10000, each with 1000 documents
         for i in range(1001, 10001):
@@ -929,7 +931,7 @@ class CreateDatabaseView(APIView):
             # Create a batch of 1000 documents for efficiency
             documents = [{"data": f"document_{j}"} for j in range(1, 1001)]
             await asyncio.to_thread(db[collection_name].insert_many, documents)
-            logger.info(f"Created collection '{collection_name}' with 1000 documents in database '{db_name}'.")
+            # logger.info(f"Created collection '{collection_name}' with 1000 documents in database '{db_name}'.")
 
         # Update metadata for Living Lab Admin collections
         metadata_coll = settings.METADATA_COLLECTION
@@ -996,7 +998,7 @@ class GetMetadataView(APIView):
             )
 
         except Exception as e:
-            logger.error(f"Error fetching metadata for database '{db_name}': {e}", exc_info=True)
+            # logger.error(f"Error fetching metadata for database '{db_name}': {e}", exc_info=True)
             return Response(
                 {"success": False, "message": "An error occurred while fetching metadata."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
