@@ -1,9 +1,8 @@
 import os
-import sys
 import json
 import configparser as config
-
 from pathlib import Path
+
 from pymongo import MongoClient
 
 
@@ -152,14 +151,12 @@ REST_FRAMEWORK = {
     ],
 }
 
-
-# settings.py
-
-import os
-from pathlib import Path
-
 # Get BASE_DIR for file logging path
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Ensure the logs directory exists
+LOGS_DIR = os.path.join(BASE_DIR, 'logs')
+os.makedirs(LOGS_DIR, exist_ok=True)
 
 LOGGING = {
     'version': 1,
@@ -183,7 +180,7 @@ LOGGING = {
         'file': {
             'level': 'INFO',
             'class': 'logging.FileHandler',
-            'filename': os.path.join(BASE_DIR, 'logs', 'database_operations.log'),
+            'filename': os.path.join(LOGS_DIR, 'database_operations.log'),
             'formatter': 'verbose',
         },
     },
