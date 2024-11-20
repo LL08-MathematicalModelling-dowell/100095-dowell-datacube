@@ -1,4 +1,3 @@
-import re
 import datetime
 import asyncio
 import logging
@@ -9,9 +8,6 @@ from datetime import datetime
 from django.conf import settings
 from django.shortcuts import render
 from django.urls import reverse
-from django.http import JsonResponse
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt
 
 from rest_framework import status
 from rest_framework.views import APIView
@@ -23,6 +19,7 @@ from api.serializers import (
     AddCollectionPOSTSerializer,
     GetCollectionsSerializer,
     AddDatabasePOSTSerializer,
+    GetMetadataSerializer,
     InputDeleteSerializer,
     InputGetSerializer,
     InputPostSerializer,
@@ -958,15 +955,21 @@ class HealthCheck(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+
 class GetMetadataView(APIView):
     """
     API View to fetch metadata of a specific database.
     """
+    serialiser_class = GetMetadataSerializer
 
     def get(self, request, *args, **kwargs):
         try:
+            print(f"Request data >>>>>>>>>>>>>>>>>>>>>>>>>  \n: {request.data}")
+            serializer = GetMetadataSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+
             # Extract database name from query parameters
-            db_name = request.query_params.get('db_name', '').lower()
+            db_name = serializer.validated_data.get('db_name', '').lower()
 
             if not db_name:
                 return Response(
