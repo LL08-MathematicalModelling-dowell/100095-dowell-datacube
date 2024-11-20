@@ -5,7 +5,9 @@ from .views import (
     ListCollectionsView,
     AddCollectionView,
     ListDatabasesView,
-    DropDatabaseView,
+    # DropDatabaseView,
+    HealthCheck,
+    GetMetadataView,
     api_home,
 )
 
@@ -18,5 +20,7 @@ urlpatterns = [
     path('api/list_collections/', ListCollectionsView.as_view(), name='list_collections'),
     path('api/add_collection/', AddCollectionView.as_view(), name='add_collection'),
     path('api/list_databases/', ListDatabasesView.as_view(), name='list_databases'),
+    path('health_check/', HealthCheck.as_view(), name='health_check'),
+    path('api/get_metadata/', GetMetadataView.as_view(), name='get_metadata'),
     # path('api/drop_database/', DropDatabaseView.as_view(), name='drop_database'),
 ]
