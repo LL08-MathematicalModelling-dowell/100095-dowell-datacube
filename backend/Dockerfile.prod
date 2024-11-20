@@ -28,10 +28,13 @@ ENV PATH="/usr/local/bin:$PATH"
 COPY --from=builder /root/.local /usr/local
 COPY . /usr/src/app
 
-# Ensure that static files directory exists and has correct permissions
-RUN mkdir -p /usr/src/app/staticfiles && chown -R appuser:appgroup /usr/src/app/staticfiles
+# Ensure that necessary directories exist and have correct permissions
+RUN mkdir -p /usr/src/app/logs && \
+    chown -R appuser:appgroup /usr/src/app/logs && \
+    mkdir -p /usr/src/app/staticfiles && \
+    chown -R appuser:appgroup /usr/src/app/staticfiles
 
-# Change ownership to the non-root user
+# Change ownership of the entire app directory to the non-root user
 RUN chown -R appuser:appgroup /usr/src/app
 
 # Run collectstatic to gather all static files
