@@ -154,9 +154,10 @@ REST_FRAMEWORK = {
 # Get BASE_DIR for file logging path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Ensure the logs directory exists
+# Ensure logs directory exists
 LOGS_DIR = os.path.join(BASE_DIR, 'logs')
-# os.makedirs(LOGS_DIR, exist_ok=True)
+if not os.path.exists(LOGS_DIR):
+    os.makedirs(LOGS_DIR, exist_ok=True)
 
 LOGGING = {
     'version': 1,
