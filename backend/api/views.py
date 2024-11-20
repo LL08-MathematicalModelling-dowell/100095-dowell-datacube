@@ -4,12 +4,14 @@ import asyncio
 import logging
 
 from bson import ObjectId
+from datetime import datetime
 
 from django.conf import settings
 from django.shortcuts import render
 from django.urls import reverse
 from django.http import JsonResponse
-from datetime import datetime
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
 
 from rest_framework import status
 from rest_framework.views import APIView
@@ -68,7 +70,7 @@ def api_home(request):
                     "filters": {"field": "value"},
                     "limit": 50,
                     "offset": 0,
-                    "is_deleted": false  // Optional: defaults to False to exclude soft-deleted documents
+                    "is_deleted": false
                 }""",
                 "POST": """{
                     "db_name": "example_db",
@@ -81,14 +83,14 @@ def api_home(request):
                 "PUT": """{
                     "db_name": "example_db",
                     "coll_name": "example_collection",
-                    "operation": "update",  // Use "update" or "replace"
+                    "operation": "update",
                     "query": {"field": "value"},
                     "update_data": {"field1": "new_value"}
                 }""",
                 "DELETE": """{
                     "db_name": "example_db",
                     "coll_name": "example_collection",
-                    "operation": "soft_delete",  // Use "delete" for hard delete or "soft_delete" to set is_deleted=True
+                    "operation": "soft_delete",
                     "query": {"field": "value"}
                 }"""
             },
@@ -96,26 +98,11 @@ def api_home(request):
                 "GET": """{
                     "success": true,
                     "message": "Data found!",
-                    "data": [
-                        {
-                            "_id": "605dcdbaef8e2e1a45e6a58c",
-                            "field1": "value1",
-                            "field2": "value2",
-                            "is_deleted": false,
-                            "field1_operation": {
-                                "insert_date_time": ["2024-11-14T15:47:22.318000"],
-                                "is_deleted": false
-                            }
-                        },
-                        ...
-                    ]
+                    "data": [...]
                 }""",
                 "POST": """{
                     "success": true,
-                    "message": "Documents inserted successfully!",
-                    "data": {
-                        "inserted_ids": ["605dcdbaef8e2e1a45e6a58c", ...]
-                    }
+                    "message": "Documents inserted successfully!"
                 }""",
                 "PUT": """{
                     "success": true,
@@ -155,56 +142,30 @@ def api_home(request):
             "request_bodies": {
                 "POST": """{
                     "db_name": "example_db",
-                    "collections": [
-                        {
-                            "name": "new_collection1",
-                            "fields": ["field1", "field2"]
-                        },
-                        {
-                            "name": "new_collection2",
-                            "fields": ["fieldA", "fieldB"]
-                        }
-                    ]
+                    "collections": [...]
                 }"""
             },
             "responses": {
                 "POST": """{
                     "success": true,
-                    "message": "Collections added successfully",
-                    "data": {
-                        "new_collections": ["new_collection1", "new_collection2"]
-                    }
+                    "message": "Collections added successfully"
                 }"""
             }
         },
         {
             "name": "Create Database",
-            "description": "Creates a new database with specified collections and fields ('product_name' can be omitted), or predefined structure for 'living lab admin' ('collections' can be omitted).",
+            "description": "Creates a new database with specified collections and fields.",
             "url": reverse('api:create_database'),
             "request_bodies": {
                 "POST": """{
                     "db_name": "new_database",
-                    "product_name (optional - Used only for 'living lab admin', omit for other database creation)": "living lab admin",
-                    "collections (Required - except for 'living lab admin, omit it')": [
-                        {
-                            "name": "collection1",
-                            "fields": ["field1", "field2"]
-                        },
-                        {
-                            "name": "collection2",
-                            "fields": ["fieldA", "fieldB"]
-                        }
-                    ]
+                    "collections": [...]
                 }"""
             },
             "responses": {
                 "POST": """{
                     "success": true,
-                    "message": "Database created successfully",
-                    "data": {
-                        "db_name": "new_database",
-                        "collections": ["collection1", "collection2"]
-                    }
+                    "message": "Database created successfully"
                 }"""
             }
         },
@@ -222,19 +183,40 @@ def api_home(request):
             "responses": {
                 "GET": """{
                     "success": true,
-                    "message": "Databases retrieved successfully",
-                    "data": ["database1", "database2", ...]
+                    "message": "Databases retrieved successfully"
+                }"""
+            }
+        },
+        {
+            "name": "Get Metadata",
+            "description": "Fetches metadata for a specific database, including collections, fields, and additional metadata.",
+            "url": reverse('api:get_metadata'),
+            "request_bodies": {
+                "GET": """{
+                    "db_name": "example_db"
+                }"""
+            },
+            "responses": {
+                "GET": """{
+                    "success": true,
+                    "message": "Metadata retrieved successfully",
+                    "data": {
+                        "database_name": "example_db",
+                        "number_of_collections": 3,
+                        "number_of_fields": 12,
+                        "collections_metadata": [...]
+                    }
                 }"""
             }
         },
         # {
         #     "name": "Drop Database",
-        #     "description": "Safely deletes a specified database, including its collections and documents, with confirmation.",
+        #     "description": "Deletes a database and all its collections and metadata with confirmation.",
         #     "url": reverse('api:drop_database'),
         #     "request_bodies": {
         #         "DELETE": """{
-        #             "db_name": "database_to_delete",
-        #             "confirmation": "database_to_delete"
+        #             "db_name": "example_db",
+        #             "confirmation": "example_db"
         #         }"""
         #     },
         #     "responses": {
@@ -247,6 +229,7 @@ def api_home(request):
     ]
 
     return render(request, 'api_home.html', {'apis': apis})
+
 
 
 class DataCrudView(APIView):
@@ -635,20 +618,38 @@ class AddCollectionView(APIView):
         metadata = settings.METADATA_COLLECTION.find_one({"database_name": db_name})
         existing_collections = set(metadata.get("collection_names", []))
         duplicates = [coll["name"] for coll in collections if coll["name"] in existing_collections]
+
+        # Optionally, calculate total fields for reporting
+        total_fields = sum(len(coll["fields"]) for coll in collections if coll["name"] not in existing_collections)
+
         return existing_collections, duplicates
+
 
     async def update_metadata(self, db_name, new_collections):
         """Update metadata with the new collections and their fields."""
         metadata_coll = settings.METADATA_COLLECTION
+        total_fields = 0
+
         for coll in new_collections:
             collection_name = coll["name"]
             fields = coll["fields"]
+            total_fields += len(fields)
+
+            # Add new collection metadata
             await asyncio.to_thread(metadata_coll.update_one,
                                     {"database_name": db_name},
                                     {"$addToSet": {
                                         "collection_names": collection_name,
                                         "collections_metadata": {"name": collection_name, "fields": fields}
                                     }})
+
+        # Update number_of_collections and number_of_fields
+        await asyncio.to_thread(metadata_coll.update_one,
+                                {"database_name": db_name},
+                                {
+                                    "$inc": {"number_of_collections": len(new_collections), "number_of_fields": total_fields}
+                                })
+
 
     async def create_collections_in_db(self, db_name, new_collections):
         """Create new collections in the MongoDB database."""
@@ -724,7 +725,7 @@ class DropDatabaseView(APIView):
         metadata_coll = metadata_db["metadata_collection"]
 
         # Delete metadata
-        await asyncio.to_thread(lambda: metadata_coll.delete_one({"database_name": db_name}))
+        await asyncio.to_thread(metadata_coll.delete_one, {"database_name": db_name})
 
         # Drop collections and the database
         database = cluster[db_name]
@@ -880,11 +881,15 @@ class CreateDatabaseView(APIView):
     def insert_metadata(self, db_name, collections):
         """Insert metadata for the new database, including collections and fields."""
         metadata_coll = settings.METADATA_COLLECTION
+
+        total_fields = sum(len(coll["fields"]) for coll in collections)
         metadata = {
             "database_name": db_name,
             "collections_metadata": [
                 {"name": coll["name"], "fields": coll["fields"]} for coll in collections
-            ]
+            ],
+            "number_of_collections": len(collections),
+            "number_of_fields": total_fields
         }
         metadata_coll.insert_one(metadata)
         metadata_cache[db_name] = True
@@ -937,4 +942,73 @@ class CreateDatabaseView(APIView):
         await asyncio.to_thread(metadata_coll.update_one,
                                 {"database_name": db_name},
                                 {"$set": {"collections_metadata": living_lab_metadata}})
+
+
+class HealthCheck(APIView):
+    def get(self, request):
+        try:
+            return Response({
+                "success": True,
+                "message": "Server is running fine"
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                "success": False,
+                "message": f"Server is down for {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class GetMetadataView(APIView):
+    """
+    API View to fetch metadata of a specific database.
+    """
+
+    def get(self, request, *args, **kwargs):
+        try:
+            # Extract database name from query parameters
+            db_name = request.query_params.get('db_name', '').lower()
+
+            if not db_name:
+                return Response(
+                    {"success": False, "message": "Database name is required."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Fetch metadata from the metadata collection
+            metadata_coll = settings.METADATA_COLLECTION
+            metadata = metadata_coll.find_one({"database_name": db_name})
+
+            if not metadata:
+                return Response(
+                    {"success": False, "message": f"No metadata found for database '{db_name}'."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Convert ObjectId to string in the metadata
+            metadata = self.convert_objectid_to_str(metadata)
+
+            return Response(
+                {"success": True, "data": metadata},
+                status=status.HTTP_200_OK
+            )
+
+        except Exception as e:
+            logger.error(f"Error fetching metadata for database '{db_name}': {e}", exc_info=True)
+            return Response(
+                {"success": False, "message": "An error occurred while fetching metadata."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def convert_objectid_to_str(self, data):
+        """
+        Recursively convert ObjectId instances to strings in the given data.
+        """
+        if isinstance(data, dict):
+            return {k: self.convert_objectid_to_str(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [self.convert_objectid_to_str(item) for item in data]
+        elif isinstance(data, ObjectId):
+            return str(data)
+        else:
+            return data
 
