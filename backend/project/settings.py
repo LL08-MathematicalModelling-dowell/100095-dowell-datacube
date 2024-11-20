@@ -141,8 +141,8 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # MY_BASE_URL = 'https://dowelldatacube.uxlivinglab.online'
-# MY_BASE_URL = 'https://datacube.uxlivinglab.online'
-MY_BASE_URL = 'http://127.0.0.1:8000'
+MY_BASE_URL = 'https://datacube.uxlivinglab.online'
+# MY_BASE_URL = 'http://127.0.0.1:8000'
 
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
