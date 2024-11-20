@@ -229,3 +229,8 @@ class AddDatabasePOSTSerializer(serializers.Serializer):
         if not re.match(r'^[\w-]+$', value):
             raise serializers.ValidationError("Database name can only contain alphanumeric characters, underscores, or hyphens.")
         return value
+
+
+class GetMetadataSerializer(serializers.Serializer):
+    db_name = serializers.CharField(required=True)
+
