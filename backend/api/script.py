@@ -11,7 +11,7 @@ from django.conf import settings
 from django.http import HttpResponse
 from rest_framework.status import (HTTP_200_OK, HTTP_400_BAD_REQUEST)
 
-from .helper import run_backup, run_restore
+from .database_backup_script import run_backup, run_restore
 import traceback
 import requests
 from rest_framework.response import Response

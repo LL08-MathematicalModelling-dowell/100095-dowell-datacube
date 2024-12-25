@@ -1,20 +1,21 @@
 import datetime
 import asyncio
-# import logging
+import logging
 
-from bson import ObjectId
+from api.helpers import get_metadata_record
+from bson.objectid import ObjectId, InvalidId
+from rest_framework import serializers
+
 from datetime import datetime
+from rest_framework.serializers import ValidationError
 
 from django.conf import settings
 from django.shortcuts import render
-from django.urls import reverse
 
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from drf_yasg.utils import swagger_auto_schema
 
-# from api.helpers import check_api_key
 from api.serializers import (
     AddCollectionPOSTSerializer,
     GetCollectionsSerializer,
@@ -28,10 +29,12 @@ from api.serializers import (
     ListDatabaseSerializer,
 )
 from asgiref.sync import async_to_sync
-# from .script import dowell_time
+from tenacity import retry, stop_after_attempt, wait_exponential
 
-# Use the custom # logger
-# logger = logging.getLogger('database_operations')
+
+
+# Use the custom logger
+logger = logging.getLogger('database_operations')
 
 # Cache for database and collection validation
 db_cache = {}
@@ -39,528 +42,157 @@ db_cache = {}
 metadata_cache = {}
 
 
-def api_key_required(func):
-    """Decorator to validate API key"""
-    def wrapper(view_instance, request, *args, **kwargs):
-        api_key = request.data.get("api_key")
-        if not api_key or api_key != settings.EXPECTED_API_KEY:
-            return Response(
-                {"success": False, "message": "Invalid or missing API key"},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        return func(view_instance, request, *args, **kwargs)
-    return wrapper
-
 def api_home(request):
     """
     View to render the home page listing all available API endpoints, descriptions, request bodies, and example responses.
     """
-    apis = [
-        {
-            "name": "Data CRUD",
-            "description": "Handles CRUD operations on MongoDB collections.",
-            "url": reverse('api:crud'),
-            "request_bodies": {
-                "GET": """{
-                    "db_name": "example_db",
-                    "coll_name": "example_collection",
-                    "filters": {"field": "value"},
-                    "limit": 50,
-                    "offset": 0,
-                    "is_deleted": false
-                }""",
-                "POST": """{
-                    "db_name": "example_db",
-                    "coll_name": "example_collection",
-                    "data": {
-                        "field1": "value1",
-                        "field2": "value2"
-                    }
-                }""",
-                "PUT": """{
-                    "db_name": "example_db",
-                    "coll_name": "example_collection",
-                    "operation": "update",
-                    "query": {"field": "value"},
-                    "update_data": {"field1": "new_value"}
-                }""",
-                "DELETE": """{
-                    "db_name": "example_db",
-                    "coll_name": "example_collection",
-                    "operation": "soft_delete",
-                    "query": {"field": "value"}
-                }"""
-            },
-            "responses": {
-                "GET": """{
-                    "success": true,
-                    "message": "Data found!",
-                    "data": [...]
-                }""",
-                "POST": """{
-                    "success": true,
-                    "message": "Documents inserted successfully!"
-                }""",
-                "PUT": """{
-                    "success": true,
-                    "message": "Document updated successfully"
-                }""",
-                "DELETE (soft_delete)": """{
-                    "success": true,
-                    "message": "Document soft-deleted successfully"
-                }""",
-                "DELETE (hard delete)": """{
-                    "success": true,
-                    "message": "Document deleted successfully"
-                }"""
-            }
-        },
-        {
-            "name": "List Collections",
-            "description": "Lists all collections for a specified database.",
-            "url": reverse('api:list_collections'),
-            "request_bodies": {
-                "GET": """{
-                    "db_name": "example_db"
-                }"""
-            },
-            "responses": {
-                "GET": """{
-                    "success": true,
-                    "message": "Collections retrieved successfully",
-                    "data": ["collection1", "collection2", ...]
-                }"""
-            }
-        },
-        {
-            "name": "Add Collection",
-            "description": "Adds new collections to an existing database, specifying document fields for each collection.",
-            "url": reverse('api:add_collection'),
-            "request_bodies": {
-                "POST": """{
-                    "db_name": "example_db",
-                    "collections": [...]
-                }"""
-            },
-            "responses": {
-                "POST": """{
-                    "success": true,
-                    "message": "Collections added successfully"
-                }"""
-            }
-        },
-        {
-            "name": "Create Database",
-            "description": "Creates a new database with specified collections and fields.",
-            "url": reverse('api:create_database'),
-            "request_bodies": {
-                "POST": """{
-                    "db_name": "new_database",
-                    "collections": [...]
-                }"""
-            },
-            "responses": {
-                "POST": """{
-                    "success": true,
-                    "message": "Database created successfully"
-                }"""
-            }
-        },
-        {
-            "name": "List Databases",
-            "description": "Lists all databases in the MongoDB cluster with pagination and optional filtering.",
-            "url": reverse('api:list_databases'),
-            "request_bodies": {
-                "GET": """{
-                    "page": 1,
-                    "page_size": 10,
-                    "filter": "example"
-                }"""
-            },
-            "responses": {
-                "GET": """{
-                    "success": true,
-                    "message": "Databases retrieved successfully"
-                }"""
-            }
-        },
-        {
-            "name": "Get Metadata",
-            "description": "Fetches metadata for a specific database, including collections, fields, and additional metadata.",
-            "url": reverse('api:get_metadata'),
-            "request_bodies": {
-                "GET": """{
-                    "db_name": "example_db"
-                }"""
-            },
-            "responses": {
-                "GET": """{
-                    "success": true,
-                    "message": "Metadata retrieved successfully",
-                    "data": {
-                        "database_name": "example_db",
-                        "number_of_collections": 3,
-                        "number_of_fields": 12,
-                        "collections_metadata": [...]
-                    }
-                }"""
-            }
-        },
-        # {
-        #     "name": "Drop Database",
-        #     "description": "Deletes a database and all its collections and metadata with confirmation.",
-        #     "url": reverse('api:drop_database'),
-        #     "request_bodies": {
-        #         "DELETE": """{
-        #             "db_name": "example_db",
-        #             "confirmation": "example_db"
-        #         }"""
-        #     },
-        #     "responses": {
-        #         "DELETE": """{
-        #             "success": true,
-        #             "message": "Database dropped successfully"
-        #         }"""
-        #     }
-        # }
-    ]
+    from .api_home_data import apis
 
     return render(request, 'api_home.html', {'apis': apis})
 
 
 
-class DataCrudView(APIView):
+class CreateDatabaseView(APIView):
     """
-    A view for handling CRUD operations on MongoDB collections with metadata validation.
+    API view to create a new database with specified collections and fields.
+    Ensures atomicity and handles all-or-nothing transactions.
     """
-
-    def get_serializer_class(self):
-        """Returns the serializer class based on the request method."""
-        if self.request.method == 'GET':
-            return InputGetSerializer
-        elif self.request.method == 'POST':
-            return InputPostSerializer
-        elif self.request.method == 'PUT':
-            return InputPutSerializer
-        elif self.request.method == 'DELETE':
-            return InputDeleteSerializer
-
-    def get(self, request, *args, **kwargs):
-        """Handles GET requests to fetch data from a specified MongoDB collection."""
-        return async_to_sync(self.async_get)(request, *args, **kwargs)
-
-    async def async_get(self, request, *args, **kwargs):
-        """Asynchronous method to handle the logic for GET requests."""
-        try:
-            serializer = InputGetSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            data = serializer.validated_data
-
-            database = data.get('db_name')
-            coll = data.get('coll_name')
-            filters = self.convert_object_id(data.get('filters', {}))
-            limit = data.get('limit', 50)
-            offset = data.get('offset', 0)
-
-            # Exclude soft-deleted documents by default
-            filters['is_deleted'] = filters.get('is_deleted', False)
-
-            await self.validate_database_and_collection(database, coll)
-            result = await self.fetch_data_from_collection(database, coll, filters, limit, offset)
-
-            msg = "Data found!" if result else "No data exists for this query/collection"
-            return Response({"success": True, "message": msg, "data": result}, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            # logger.error(f"Error in GET request: {e}")
-            return Response({"success": False, "message": str(e), "data": []}, status=status.HTTP_400_BAD_REQUEST)
+    serializer_class = AddDatabasePOSTSerializer
 
     def post(self, request, *args, **kwargs):
-        """Handles POST requests to insert new data into a specified MongoDB collection."""
-        return async_to_sync(self.async_post)(request, *args, **kwargs)
-    
-    async def async_post(self, request, *args, **kwargs):
-        """Asynchronous method to handle the logic for POST."""
         try:
-            serializer = InputPostSerializer(data=request.data)
+            # Validate request data
+            serializer = AddDatabasePOSTSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
-            data = serializer.validated_data
+            validated_data = serializer.validated_data
 
-            database = data.get('db_name')
-            coll = data.get('coll_name')
-            documents_to_insert = data.get('data')
+            # Extract database name and collections
+            db_name = validated_data.get('db_name', '').lower()
+            collections = validated_data.get('collections', [])
 
-            # Ensure documents_to_insert is a list, even if a single document is provided
-            if isinstance(documents_to_insert, dict):
-                documents_to_insert = [documents_to_insert]
-
-            # Validate fields in each document and set `is_deleted` to False by default
-            valid_fields = await self.validate_database_and_collection(database, coll)
-            for document in documents_to_insert:
-                await self.check_fields_exist(document, valid_fields)
-                document['is_deleted'] = False
-
-                # Add insert timestamp and operation log for each document
-                insert_date_time = datetime.utcnow()
-                document.update({
-                    f"{key}_operation": {
-                        "insert_date_time": [insert_date_time],
-                        "is_deleted": False,
-                    } for key in document.keys()
-                })
-
-            # Insert documents into the collection
-            collection = settings.MONGODB_CLIENT[database][coll]
-            if len(documents_to_insert) > 1:
-                result = await asyncio.to_thread(collection.insert_many, documents_to_insert)
-                inserted_ids = [str(id) for id in result.inserted_ids]
-            else:
-                result = await asyncio.to_thread(collection.insert_one, documents_to_insert[0])
-                inserted_ids = [str(result.inserted_id)]
-
-            return Response(
-                {"success": True, "message": "Documents inserted successfully!", "data": {"inserted_ids": inserted_ids}},
-                status=status.HTTP_201_CREATED
-            )
-
-        except Exception as e:
-            # logger.error(f"Error in POST request: {e}")
-            return Response({"success": False, "message": str(e), "data": []}, status=status.HTTP_400_BAD_REQUEST)
-
-    def put(self, request, *args, **kwargs):
-        """Handles PUT requests to update or replace data in a MongoDB collection."""
-        return async_to_sync(self.async_put)(request, *args, **kwargs)
-
-    async def async_put(self, request, *args, **kwargs):
-        """Asynchronous method to handle the logic for PUT requests."""
-        try:
-            serializer = InputPutSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            data = serializer.validated_data
-
-            database = data.get('db_name')
-            coll = data.get('coll_name')
-            operation = data.get('operation')
-            filter_data = self.convert_object_id(data.get('query'))
-            update_data = data.get('update_data', {})
-
-            # Validate database and collection, check fields
-            valid_fields = await self.validate_database_and_collection(database, coll)
-            await self.check_fields_exist(update_data, valid_fields)
-
-            # Insert update timestamp and log operation for each updated field
-            update_date_time = datetime.utcnow()
-            update_data_with_log = {
-                key: value for key, value in update_data.items()
-            }
-            update_data_with_log.update({
-                f"{key}_operation": {
-                    "update_date_time": [update_date_time],
-                    "is_deleted": False
-                } for key in update_data.keys()
-            })
-
-            # Perform update or replace based on the operation
-            collection = settings.MONGODB_CLIENT[database][coll]
-            if operation == 'update':
-                result = await asyncio.to_thread(
-                    collection.update_one, filter_data, {'$set': update_data_with_log}
-                )
-            elif operation == 'replace':
-                result = await asyncio.to_thread(
-                    collection.replace_one, filter_data, update_data_with_log
-                )
-
-            # Check if the document was modified
-            if result.modified_count == 0:
-                return Response(
-                    {"success": False, "message": "No document found or updated"},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-
-            return Response({"success": True, "message": "Document updated successfully"}, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            # logger.error(f"Error in PUT request: {e}")
-            return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-    def delete(self, request, *args, **kwargs):
-        """Handles DELETE requests to remove or soft-delete documents from a MongoDB collection."""
-        return async_to_sync(self.async_delete)(request, *args, **kwargs)
-
-    async def async_delete(self, request, *args, **kwargs):
-        """Asynchronous method to handle the logic for DELETE requests."""
-        try:
-            serializer = InputDeleteSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            data = serializer.validated_data
-
-            database = data.get('db_name')
-            coll = data.get('coll_name')
-            operation = data.get('operation')
-            filter_data = self.convert_object_id(data.get('query'))
-
-            # Validate database and collection
-            await self.validate_database_and_collection(database, coll)
-
-            # Perform soft delete (mark as deleted) or hard delete
-            collection = settings.MONGODB_CLIENT[database][coll]
-            if operation == 'soft_delete':
-                # Set `is_deleted` to True and add deletion timestamp
-                delete_date_time = datetime.utcnow()
-                update_result = await asyncio.to_thread(
-                    collection.update_one, filter_data, {'$set': {'is_deleted': True, 'deleted_at': delete_date_time}}
-                )
-                if update_result.modified_count == 0:
-                    return Response(
-                        {"success": False, "message": "No document found to soft delete"},
-                        status=status.HTTP_404_NOT_FOUND
-                    )
-                message = "Document soft-deleted successfully"
-            elif operation == 'delete':
-                delete_result = await asyncio.to_thread(collection.delete_one, filter_data)
-                if delete_result.deleted_count == 0:
-                    return Response(
-                        {"success": False, "message": "No document found to delete"},
-                        status=status.HTTP_404_NOT_FOUND
-                    )
-                message = "Document deleted successfully"
-
-            return Response({"success": True, "message": message}, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            # logger.error(f"Error in DELETE request: {e}")
-            return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-    async def fetch_data_from_collection(self, database, coll, filters, limit=50, offset=0):
-        """Fetches data from the specified collection with filters, limit, and offset."""
-        cluster = settings.MONGODB_CLIENT
-        collection = cluster[database][coll]
-        
-
-        query = collection.find(filters).skip(offset).limit(limit)
-        result = await asyncio.to_thread(lambda: list(query))
-
-        for doc in result:
-            doc['_id'] = str(doc['_id'])
-        return result
-
-    async def validate_database_and_collection(self, database, coll):
-        """Validates if the specified database and collection exist with defined fields."""
-        metadata_coll = settings.METADATA_COLLECTION
-        mongo_db = await asyncio.to_thread(metadata_coll.find_one, {"database_name": database})
-        
-        if not mongo_db:
-            raise ValueError(f"Database '{database}' does not exist in Datacube")
-        
-        collections_metadata = {coll["name"]: coll["fields"] for coll in mongo_db.get("collections_metadata", [])}
-        
-        if coll not in collections_metadata:
-            raise ValueError(f"Collection '{coll}' does not exist in Datacube database")
-        
-        return collections_metadata[coll]
-
-    def convert_object_id(self, filters):
-        """Converts 'id' and '_id' keys in filters to ObjectId."""
-        for key, value in filters.items():
-            if key in ["id", "_id"]:
-                try:
-                    filters[key] = ObjectId(value)
-                except Exception as ex:
-                    pass
-                    # logger.warning(f"ObjectId conversion error: {ex}")
-        return filters
-
-    async def check_fields_exist(self, data, valid_fields):
-        """Ensures only defined fields are present in the request data."""
-        for field in data.keys():
-            if field not in valid_fields:
-                raise ValueError(f"Invalid field '{field}' for this collection")
-
-
-class ListCollectionsView(APIView):
-    """
-    API view to list all collections for a given database in Datacube.
-    """
-
-    @swagger_auto_schema(query_serializer=GetCollectionsSerializer, responses={200: 'Success'})
-    def get(self, request, *args, **kwargs):
-        try:
-            if not request.data:
-                return Response(
-                    {"success": False, "message": "Request data is required", "data": []},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # Validate request data using serializer
-            serializer = GetCollectionsSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            data = serializer.validated_data
-
-            # Extract database name
-            database = data.get('db_name', "").lower()
-
-            if not database:
-                return Response(
-                    {"success": False, "message": "Database name is required", "data": []},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            metadata_record = asyncio.run(self.get_metadata_record(database))
-            if not metadata_record:
-                return Response(
-                    {"success": False, "message": f"Database '{database}' does not exist in Datacube", "data": []},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-            
-            collections = metadata_record.get('collection_names', []) or metadata_record.get('collections_metadata', [])
-
-            if type(collections[0]) == dict:
-                collections = [coll["name"] for coll in collections]
-
+            # Ensure at least one collection with fields is specified
             if not collections:
                 return Response(
-                    {"success": False, "message": f"No collections found for database '{database}'", "data": []},
-                    status=status.HTTP_404_NOT_FOUND
+                    {"success": False, "message": "At least one collection with fields must be specified"},
+                    status=status.HTTP_400_BAD_REQUEST
                 )
-            
-            actual_collections = asyncio.run(self.get_actual_collections(database))
-            
-            missing_in_db = set(collections) - set(actual_collections)
 
-            # Log any discrepancies
-            if missing_in_db:
-                pass
-                # logger.warning(f"Collections in metadata but missing in MongoDB: {', '.join(missing_in_db)}")
+            # Check if the database already exists
+            if self.check_database_exists(db_name):
+                return Response(
+                    {"success": False, "message": f"Database '{db_name}' already exists!"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
-            return Response(
-                {"success": True, "message": "Collections found!", "data": collections},
-                status=status.HTTP_200_OK
-            )
+            # Start an atomic transaction
+            cluster = settings.MONGODB_CLIENT
+            session = cluster.start_session()
+            session.start_transaction()
+
+            try:
+                # Insert metadata and initialize the database
+                db_metadata = self.insert_metadata(db_name, collections, session)
+                collection_metadata = asyncio.run(self.create_collections_in_db(db_metadata, collections, session))
+
+                # Commit the transaction
+                session.commit_transaction()
+
+                response_data = {
+                    "success": True,
+                    "message": f"Database '{db_name}' and collections created successfully.",
+                    "database": {
+                        "name": db_metadata.get("database_name"),
+                        "id": str(db_metadata.get("_id"))
+                    },
+                    "collections": collection_metadata
+                }
+
+                return Response(response_data, status=status.HTTP_201_CREATED)
+
+            except Exception as inner_exception:
+                # Abort transaction on failure
+                session.abort_transaction()
+                logger.error(f"Transaction aborted due to error: {inner_exception}", exc_info=True)
+                self.rollback_collections(cluster[db_name], [coll['name'] for coll in collections])
+                raise inner_exception
+
+            finally:
+                session.end_session()
 
         except Exception as e:
-            # logger.error(f"Error listing collections for database '{data.get('db_name', 'unknown')}': {e}")
+            logger.error(f"Error creating database: {e}", exc_info=True)
             return Response(
-                {"success": False, "message": str(e), "data": []},
+                {"success": False, "message": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    async def get_metadata_record(self, database):
-        return await asyncio.to_thread(settings.METADATA_COLLECTION.find_one, {"database_name": database})
+    def check_database_exists(self, db_name):
+        """Check if the database already exists in metadata."""
+        metadata_coll = settings.METADATA_COLLECTION
+        return bool(metadata_coll.find_one({"database_name": db_name}))
 
-    async def get_actual_collections(self, database):
+    def insert_metadata(self, db_name, collections, session):
+        """Insert metadata for the new database, including collections and fields."""
+        metadata_coll = settings.METADATA_COLLECTION
+
+        metadata = {
+            "database_name": db_name,
+            "collections": [
+                {
+                    "name": coll["name"],
+                    "fields": [
+                        {"name": field["name"], "type": field.get("type", "string")} for field in coll["fields"]
+                    ]
+                } for coll in collections
+            ],
+            "number_of_collections": len(collections),
+        }
+        result = metadata_coll.insert_one(metadata, session=session)
+        metadata["_id"] = result.inserted_id
+        return metadata
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=5))
+    async def create_collections_in_db(self, db_metadata, collections, session):
+        """Create specified collections with fields in the MongoDB database."""
         cluster = settings.MONGODB_CLIENT
-        db = cluster[database]
-        return await asyncio.to_thread(db.list_collection_names)
+        db = cluster[db_metadata["database_name"]]
+        collection_metadata = []
+
+        for coll in collections:
+            collection_name = coll["name"]
+            await asyncio.to_thread(db.create_collection, collection_name, session=session)
+            logger.info(f"Created collection '{collection_name}' in database '{db_metadata['database_name']}'.")
+
+            # Initialize each collection with an empty document containing the specified fields
+            sample_doc = {field["name"]: None for field in coll["fields"]}
+            result = await asyncio.to_thread(db[collection_name].insert_one, sample_doc, session=session)
+
+            collection_metadata.append({
+                "name": collection_name,
+                "id": str(result.inserted_id),
+                "fields": [
+                    {"name": field["name"], "type": field.get("type", "string")} for field in coll["fields"]
+                ]
+            })
+
+            logger.info(f"Inserted sample document with fields {[field['name'] for field in coll['fields']]} into collection '{collection_name}'.")
+
+        return collection_metadata
+
+    def rollback_collections(self, db, created_collections):
+        """Rollback partially created collections."""
+        for coll_name in created_collections:
+            db.drop_collection(coll_name)
+            logger.info(f"Rolled back collection '{coll_name}'")
 
 
 class AddCollectionView(APIView):
     """
     API view to handle adding new collections with defined document fields to an existing database.
+    Ensures atomicity: all-or-nothing behavior for collection addition.
     """
     serializer_class = AddCollectionPOSTSerializer
 
-    @swagger_auto_schema(request_body=AddCollectionPOSTSerializer, responses={201: 'Created'})
     def post(self, request, *args, **kwargs):
         try:
             # Validate the request data
@@ -568,196 +200,367 @@ class AddCollectionView(APIView):
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
 
-            # Extract database name and collections
-            db_name = data.get('db_name').lower()
+            # Extract database ID and collections
+            database_id = data.get('database_id')
             collections = data.get('collections', [])
 
             # Check if the database exists
-            if not self.check_database_exists(db_name):
+            db_metadata = self.check_database_exists(database_id)
+            if not db_metadata:
                 return Response(
-                    {"success": False, "message": f"Database '{db_name}' does not exist in Datacube"},
+                    {"success": False, "message": f"Database with ID '{database_id}' does not exist in Datacube"},
                     status=status.HTTP_404_NOT_FOUND
                 )
 
-            # Validate and filter collections
-            existing_collections, duplicates = self.validate_collections(db_name, collections)
-            if duplicates:
-                return Response(
-                    {"success": False, "message": f"Collections '{', '.join(duplicates)}' already exist"},
-                    status=status.HTTP_409_CONFLICT
-                )
+            # Start an atomic transaction
+            cluster = settings.MONGODB_CLIENT
+            session = cluster.start_session()
+            session.start_transaction()
 
-            # Update metadata with new collections and fields
-            new_collections = [coll for coll in collections if coll["name"] not in existing_collections]
-            asyncio.run(self.update_metadata(db_name, new_collections))
-            asyncio.run(self.create_collections_in_db(db_name, new_collections))
+            try:
+                # Validate and filter collections
+                existing_collections, duplicates = self.validate_collections(db_metadata, collections)
+                if duplicates:
+                    session.abort_transaction()
+                    return Response(
+                        {"success": False, "message": f"Collections '{', '.join(duplicates)}' already exist"},
+                        status=status.HTTP_409_CONFLICT
+                    )
 
-            return Response(
-                {"success": True, "message": f"Collections '{', '.join([coll['name'] for coll in new_collections])}' created successfully"},
-                status=status.HTTP_201_CREATED
-            )
+                # Add new collections to metadata and database
+                new_collections = [coll for coll in collections if coll["name"] not in existing_collections]
+                self.update_metadata(db_metadata, new_collections, session)
+                collection_metadata = asyncio.run(self.create_collections_in_db(db_metadata, new_collections, session))
+
+                # Commit the transaction
+                session.commit_transaction()
+
+                response_data = {
+                    "success": True,
+                    "message": f"Collections '{', '.join([coll['name'] for coll in new_collections])}' created successfully",
+                    "collections": collection_metadata,
+                    "database": {
+                        "total_collections": len(db_metadata.get("collections", [])) + len(new_collections),
+                        "total_fields": sum(len(coll["fields"]) for coll in db_metadata.get("collections", [])) + sum(len(coll["fields"]) for coll in new_collections)
+                    }
+                }
+
+                return Response(response_data, status=status.HTTP_201_CREATED)
+
+            except Exception as inner_exception:
+                # Abort transaction on failure
+                session.abort_transaction()
+                logger.error(f"Transaction aborted due to error: {inner_exception}", exc_info=True)
+                self.rollback_collections(cluster[db_metadata['database_name']], [coll['name'] for coll in new_collections])
+                raise inner_exception
+
+            finally:
+                session.end_session()
 
         except Exception as e:
-            # logger.error(f"Error adding collections: {e}", exc_info=True)
+            logger.error(f"Error adding collections: {e}", exc_info=True)
             return Response(
                 {"success": False, "message": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    def check_database_exists(self, db_name):
+    def check_database_exists(self, database_id):
         """Check if the database exists in the metadata collection."""
         metadata_coll = settings.METADATA_COLLECTION
-        return bool(metadata_coll.find_one({"database_name": db_name}))
+        return metadata_coll.find_one({"_id": ObjectId(database_id)})
 
-    def validate_collections(self, db_name, collections):
+    def validate_collections(self, db_metadata, collections):
         """
         Validate and filter collections for the specified database.
         Returns existing collections and duplicates.
         """
-        metadata = settings.METADATA_COLLECTION.find_one({"database_name": db_name})
-        existing_collections = set(metadata.get("collection_names", []))
+        existing_collections = set(coll["name"] for coll in db_metadata.get("collections", []))
         duplicates = [coll["name"] for coll in collections if coll["name"] in existing_collections]
 
-        # Optionally, calculate total fields for reporting
-        total_fields = sum(len(coll["fields"]) for coll in collections if coll["name"] not in existing_collections)
+        for coll in collections:
+            if len(coll["name"]) > 100:
+                raise ValidationError(f"Collection name '{coll['name']}' exceeds maximum allowed length of 100 characters.")
+            field_names = [field["name"] for field in coll["fields"]]
+            if len(field_names) != len(set(field_names)):
+                raise ValidationError(f"Duplicate field names detected in collection '{coll['name']}'. Fields must be unique.")
 
         return existing_collections, duplicates
 
-
-    async def update_metadata(self, db_name, new_collections):
+    def update_metadata(self, db_metadata, new_collections, session):
         """Update metadata with the new collections and their fields."""
         metadata_coll = settings.METADATA_COLLECTION
-        total_fields = 0
 
         for coll in new_collections:
             collection_name = coll["name"]
-            fields = coll["fields"]
-            total_fields += len(fields)
+            fields = [
+                {"name": field["name"], "type": field.get("type", "string")} for field in coll["fields"]
+            ]
 
             # Add new collection metadata
-            await asyncio.to_thread(metadata_coll.update_one,
-                                    {"database_name": db_name},
-                                    {"$addToSet": {
-                                        "collection_names": collection_name,
-                                        "collections_metadata": {"name": collection_name, "fields": fields}
-                                    }})
+            metadata_coll.update_one(
+                {"_id": db_metadata["_id"]},
+                {
+                    "$addToSet": {
+                        "collections": {"name": collection_name, "fields": fields}
+                    },
+                    "$inc": {"number_of_collections": 1, "number_of_fields": len(fields)}
+                },
+                session=session
+            )
 
-        # Update number_of_collections and number_of_fields
-        await asyncio.to_thread(metadata_coll.update_one,
-                                {"database_name": db_name},
-                                {
-                                    "$inc": {"number_of_collections": len(new_collections), "number_of_fields": total_fields}
-                                })
-
-
-    async def create_collections_in_db(self, db_name, new_collections):
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=5))
+    async def create_collections_in_db(self, db_metadata, new_collections, session):
         """Create new collections in the MongoDB database."""
         cluster = settings.MONGODB_CLIENT
-        db = cluster[db_name]
+        db = cluster[db_metadata["database_name"]]
+        collection_metadata = []
+
         for coll in new_collections:
             collection_name = coll["name"]
-            await asyncio.to_thread(db.create_collection, collection_name)
-            # logger.info(f"Created collection '{collection_name}' in database '{db_name}'.")
+            await asyncio.to_thread(db.create_collection, collection_name, session=session)
+            logger.info(f"Created collection '{collection_name}' in database '{db_metadata['database_name']}'.")
+
+            # Initialize each collection with an empty document containing the specified fields
+            sample_doc = {field["name"]: None for field in coll["fields"]}
+            result = await asyncio.to_thread(db[collection_name].insert_one, sample_doc, session=session)
+
+            collection_metadata.append({
+                "name": collection_name,
+                "id": str(result.inserted_id),
+                "fields": [
+                    {"name": field["name"], "type": field.get("type", "string")} for field in coll["fields"]
+                ]
+            })
+
+            logger.info(f"Inserted sample document with fields {[field['name'] for field in coll['fields']]} into collection '{collection_name}'.")
+
+        return collection_metadata
+
+    def rollback_collections(self, db, created_collections):
+        """Rollback partially created collections."""
+        for coll_name in created_collections:
+            db.drop_collection(coll_name)
+            logger.info(f"Rolled back collection '{coll_name}'")
 
 
-class DropDatabaseView(APIView):
+class DataCrudView(APIView):
     """
-    API view to safely drop a specified database with confirmation.
+    A streamlined view for CRUD operations on MongoDB collections using names with metadata validation.
     """
-    serializer_class = DropDatabaseSerializer
 
-    @swagger_auto_schema(
-        request_body=DropDatabaseSerializer,
-        responses={200: 'Database dropped successfully'}
-    )
+    def post(self, request, *args, **kwargs):
+        return asyncio.run(self.async_post(request))
+
+    def get(self, request, *args, **kwargs):
+        return asyncio.run(self.async_get(request))
+
+    def put(self, request, *args, **kwargs):
+        return asyncio.run(self.async_put(request))
+
     def delete(self, request, *args, **kwargs):
-        """
-        Deletes a database only if the confirmation matches the database name.
-        Removes all collections, documents, and metadata associated with the database.
-        """
-        serializer = DropDatabaseSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        validated_data = serializer.validated_data
+        return asyncio.run(self.async_delete(request))
 
-        db_name = validated_data.get('db_name', '').lower()
-        confirmation = validated_data.get('confirmation', '').lower()
-
-        if db_name != confirmation:
-            return Response(
-                {"success": False, "message": "Confirmation does not match database name"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+    async def async_post(self, request):
         try:
-            # Check if the database exists
-            db_exists = asyncio.run(self.check_database_exists(db_name))
-            if not db_exists:
-                return Response(
-                    {"success": False, "message": f"Database '{db_name}' does not exist"},
-                    status=status.HTTP_404_NOT_FOUND
-                )
+            data = request.data
+            database_id = data.get("database_id")
+            collection_name = data.get("collection_name")
+            documents = data.get("data")
 
-            # Clean up metadata and drop collections
-            asyncio.run(self.delete_database_and_metadata(db_name))
+            if isinstance(documents, dict):
+                documents = [documents]
 
-            return Response(
-                {"success": True, "message": f"Database '{db_name}' and associated metadata dropped successfully"},
-                status=status.HTTP_200_OK
-            )
+            valid_fields = await self.validate_collection(database_id, collection_name)
+
+            for doc in documents:
+                invalid_fields = [key for key in doc if key not in valid_fields]
+                if invalid_fields:
+                    raise ValueError(f"Invalid fields: {', '.join(invalid_fields)}")
+
+                doc["is_deleted"] = False
+
+            collection = await self.get_collection_by_name(database_id, collection_name)
+            session = await asyncio.to_thread(settings.MONGODB_CLIENT.start_session)
+            with session:
+                session.start_transaction()
+                try:
+                    result = await asyncio.to_thread(collection.insert_many, documents, session=session)
+                    session.commit_transaction()
+                except Exception as e:
+                    session.abort_transaction()
+                    raise e
+
+            return Response({
+                "success": True,
+                "message": "Documents inserted successfully",
+                "inserted_ids": [str(id) for id in result.inserted_ids]
+            }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
-            # logger.error(f"Error dropping database '{db_name}': {e}")
-            return Response(
-                {"success": False, "message": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            logger.error(f"Error in POST operation: {e}")
+            return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+    async def async_get(self, request):
+        try:
+            data = request.query_params
+            database_id = data.get("database_id")
+            collection_name = data.get("collection_name")
+            
+            import json
+            filters = data.get("filters", "{}")
+            if isinstance(filters, str):
+                try:
+                    filters = json.loads(filters)
+                except json.JSONDecodeError:
+                    filters = {}
+            filters = self.convert_object_id(filters)
 
-    async def check_database_exists(self, db_name):
-        """Check if the database exists in MongoDB."""
-        cluster = settings.MONGODB_CLIENT
-        return await asyncio.to_thread(lambda: db_name in cluster.list_database_names())
+            limit = int(data.get("limit", 50))
+            offset = int(data.get("offset", 0))
 
-    async def delete_database_and_metadata(self, db_name):
-        """Remove metadata and drop all collections within the database."""
-        cluster = settings.MONGODB_CLIENT
-        metadata_db = cluster["datacube_metadata"]
-        metadata_coll = metadata_db["metadata_collection"]
+            valid_fields = await self.validate_collection(database_id, collection_name)
+            filters = {key: value for key, value in filters.items() if key in valid_fields or key == "is_deleted"}
 
-        # Delete metadata
-        await asyncio.to_thread(metadata_coll.delete_one, {"database_name": db_name})
+            filters["is_deleted"] = filters.get("is_deleted", False)
+            collection = await self.get_collection_by_name(database_id, collection_name)
+            total_count = await asyncio.to_thread(collection.count_documents, filters)
 
-        # Drop collections and the database
-        database = cluster[db_name]
-        for coll_name in await asyncio.to_thread(database.list_collection_names):
-            await asyncio.to_thread(database[coll_name].drop)
+            cursor = collection.find(filters).skip(offset).limit(limit)
+            results = await asyncio.to_thread(list, cursor)
+            for doc in results:
+                doc["_id"] = str(doc["_id"])
 
-        # Drop the database itself
-        await asyncio.to_thread(lambda: cluster.drop_database(db_name))
+            return Response({
+                "success": True,
+                "message": "Data fetched successfully" if results else "No data found",
+                "data": results,
+                "pagination": {
+                    "total_records": total_count,
+                    "current_page": (offset // limit) + 1,
+                    "page_size": limit
+                }
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error in GET operation: {e}")
+            return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    async def async_put(self, request):
+        try:
+            data = request.data
+            database_id = data.get("database_id")
+            collection_name = data.get("collection_name")
+            filters = self.convert_object_id(data.get("filters", {}))
+            updates = data.get("update_data", {})
+
+            valid_fields = await self.validate_collection(database_id, collection_name)
+            invalid_fields = [key for key in updates if key not in valid_fields]
+            if invalid_fields:
+                raise ValueError(f"Invalid fields: {', '.join(invalid_fields)}")
+
+            collection = await self.get_collection_by_name(database_id, collection_name)
+            session = await asyncio.to_thread(settings.MONGODB_CLIENT.start_session)
+            with session:
+                session.start_transaction()
+                try:
+                    result = await asyncio.to_thread(collection.update_many, filters, {"$set": updates}, session=session)
+                    session.commit_transaction()
+                except Exception as e:
+                    session.abort_transaction()
+                    raise e
+
+            return Response({
+                "success": True,
+                "message": f"{result.modified_count} documents updated successfully"
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error in PUT operation: {e}")
+            return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    async def async_delete(self, request):
+        try:
+            data = request.data
+            database_id = data.get("database_id")
+            collection_name = data.get("collection_name")
+            filters = self.convert_object_id(data.get("filters", {}))
+            soft_delete = data.get("soft_delete", True)
+
+            collection = await self.get_collection_by_name(database_id, collection_name)
+            session = await asyncio.to_thread(settings.MONGODB_CLIENT.start_session)
+            with session:
+                session.start_transaction()
+                try:
+                    if soft_delete:
+                        result = await asyncio.to_thread(collection.update_many, filters, {"$set": {"is_deleted": True}}, session=session)
+                        message = f"{result.modified_count} documents soft-deleted successfully"
+                    else:
+                        result = await asyncio.to_thread(collection.delete_many, filters, session=session)
+                        message = f"{result.deleted_count} documents hard-deleted successfully"
+                    session.commit_transaction()
+                except Exception as e:
+                    session.abort_transaction()
+                    raise e
+
+            return Response({
+                "success": True,
+                "message": message
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error in DELETE operation: {e}")
+            return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    async def validate_collection(self, database_id, collection_name):
+        metadata_coll = settings.METADATA_COLLECTION
+        db_metadata = await asyncio.to_thread(metadata_coll.find_one, {"_id": ObjectId(database_id)})
+
+        if not db_metadata:
+            raise ValueError(f"Database with ID '{database_id}' does not exist.")
+
+        coll_metadata = next((coll for coll in db_metadata["collections"] if coll["name"] == collection_name), None)
+
+        if not coll_metadata:
+            raise ValueError(f"Collection '{collection_name}' does not exist in the specified database.")
+
+        return [field["name"] for field in coll_metadata["fields"]]
+
+    async def get_collection_by_name(self, database_id, collection_name):
+        metadata_coll = settings.METADATA_COLLECTION
+        db_metadata = await asyncio.to_thread(metadata_coll.find_one, {"_id": ObjectId(database_id)})
+
+        if not db_metadata:
+            raise ValueError(f"Database with ID '{database_id}' does not exist.")
+
+        if not any(coll["name"] == collection_name for coll in db_metadata["collections"]):
+            raise ValueError(f"Collection '{collection_name}' does not exist in the specified database.")
+
+        return settings.MONGODB_CLIENT[db_metadata["database_name"]][collection_name]
+
+    def convert_object_id(self, filters):
+        """Convert string ObjectIds in filters to actual ObjectId instances."""
+        for key, value in filters.items():
+            if key in ["_id", "id"] and isinstance(value, str):
+                try:
+                    filters[key] = ObjectId(value)
+                except Exception as e:
+                    logger.warning(f"Invalid ObjectId format for key '{key}': {value}. Error: {e}")
+        return filters
 
 
 class ListDatabasesView(APIView):
     """
     API view to list all databases in the MongoDB cluster, with optional pagination, filtering, and metadata.
     """
-    serializer_class = ListDatabaseSerializer
 
-    @swagger_auto_schema(
-        query_serializer=ListDatabaseSerializer,
-        responses={200: 'List of databases with metadata'}
-    )
     def get(self, request, *args, **kwargs):
         try:
-            # Validate request data using serializer
-            serializer = ListDatabaseSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            validated_data = serializer.validated_data
+            # Extract pagination and filtering parameters from query params
+            page = int(request.query_params.get("page", 1))
+            page_size = int(request.query_params.get("page_size", 10))
+            filter_term = request.query_params.get("filter", "")
 
-            # Pagination and filtering parameters
-            page = validated_data.get('page', 1)
-            page_size = validated_data.get('page_size', 10)
-            filter_term = validated_data.get('filter', '')
-
-            # Run async functions within asyncio.run()
+            # Run async functions to fetch database names and metadata
             db_names = asyncio.run(self.list_database_names(filter_term))
 
             # Pagination logic
@@ -767,7 +570,7 @@ class ListDatabasesView(APIView):
 
             # Fetch metadata for each paginated database
             db_info = asyncio.run(self.get_database_metadata(paginated_dbs))
-            
+
             # Prepare paginated response with metadata
             return Response(
                 {
@@ -784,163 +587,337 @@ class ListDatabasesView(APIView):
             )
 
         except Exception as e:
-            # logger.error(f"Error listing databases: {e}")
-            print(f"Error listing databases: {e}")
+            logger.error(f"Error listing databases: {e}")
             return Response(
                 {"success": False, "message": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
     async def list_database_names(self, filter_term):
+        """Fetch all database names, optionally filtered by a term."""
         cluster = settings.MONGODB_CLIENT
+
+        # Fetch all database names
         db_names = await asyncio.to_thread(cluster.list_database_names)
         if filter_term:
             db_names = [db for db in db_names if filter_term.lower() in db.lower()]
         return db_names
 
     async def get_database_metadata(self, db_names):
+        """Fetch metadata for each database, including collection counts."""
         cluster = settings.MONGODB_CLIENT
-        # metadata_coll = cluster["datacube_metadata"]["metadata_collection"]
         db_info = []
+
+        # Fetch metadata for each database
         for db_name in db_names:
-            num_collections = await asyncio.to_thread(lambda: len(cluster[db_name].list_collection_names()))
-            # metadata = await asyncio.to_thread(lambda: metadata_coll.find_one({"database_name": db_name}))
-            db_info.append({
-                "name": db_name,
-                "num_collections": num_collections,
-                # "metadata": metadata or "No metadata available"
-            })
+            try:
+                num_collections = await asyncio.to_thread(lambda: len(cluster[db_name].list_collection_names()))
+                db_info.append({
+                    "name": db_name,
+                    "num_collections": num_collections
+                })
+            except Exception as e:
+                logger.warning(f"Error fetching metadata for database '{db_name}': {e}")
+                db_info.append({
+                    "name": db_name,
+                    "num_collections": "Error fetching metadata"
+                })
         return db_info
 
 
-class CreateDatabaseView(APIView):
+class ListCollectionsView(APIView):
     """
-    API view to create a new database with specified collections and fields.
-    Provides modular, flexible, and efficient handling of collection creation.
+    API view to list all collections for a given database in Datacube using database ID.
     """
-    serializer_class = AddDatabasePOSTSerializer
 
-    @swagger_auto_schema(request_body=AddDatabasePOSTSerializer, responses={200: 'Created'})
-    def post(self, request, *args, **kwargs):
+    def get(self, request, *args, **kwargs):
         try:
-            # Validate request data
-            serializer = AddDatabasePOSTSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            validated_data = serializer.validated_data
+            # Extract database ID from query parameters
+            database_id = request.query_params.get("database_id", "").strip()
 
-            # Extract database and collections information
-            db_name = validated_data.get('db_name', '').lower()
-            product_name = validated_data.get('product_name', '').lower() if validated_data.get('product_name') else None
-            collections = validated_data.get('collections', [])
-
-            # Ensure at least one collection with fields is specified
-            if not collections and product_name != "living lab admin":
+            if not database_id:
                 return Response(
-                    {"success": False, "message": "At least one collection with fields must be specified"},
+                    {"success": False, "message": "Database ID is required", "data": []},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Check if the database already exists
-            if self.check_database_exists(db_name):
+            # Fetch metadata record for the specified database ID
+            metadata_record = asyncio.run(get_metadata_record(database_id))
+            if not metadata_record:
                 return Response(
-                    {"success": False, "message": f"Database '{db_name}' already exists!"},
-                    status=status.HTTP_400_BAD_REQUEST
+                    {"success": False, "message": f"Database with ID '{database_id}' does not exist in Datacube", "data": []},
+                    status=status.HTTP_404_NOT_FOUND
                 )
 
-            # Insert metadata and initialize the database
-            self.insert_metadata(db_name, collections)
-            if product_name == "living lab admin":
-                asyncio.run(self.create_collections_for_living_lab(db_name))
-            else:
-                asyncio.run(self.create_collections_in_db(db_name, collections))
+            # Retrieve collection names from metadata
+            collections = metadata_record.get('collections', [])
+            collections = [coll["name"] for coll in collections] if collections else []
+
+            if not collections:
+                return Response(
+                    {"success": False, "message": f"No collections found for database with ID '{database_id}'", "data": []},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Fetch actual collections in the database
+            actual_collections = asyncio.run(self.get_actual_collections(metadata_record["database_name"]))
+            missing_in_db = set(collections) - set(actual_collections)
+
+            # Log any discrepancies
+            if missing_in_db:
+                logger.warning(f"Collections in metadata but missing in MongoDB: {', '.join(missing_in_db)}")
 
             return Response(
-                {"success": True, "message": f"Database '{db_name}' and collections created successfully."},
-                status=status.HTTP_201_CREATED
+                {
+                    "success": True,
+                    "message": "Collections found!",
+                    "data": collections
+                },
+                status=status.HTTP_200_OK
             )
 
         except Exception as e:
-            # logger.error(f"Error creating database: {e}", exc_info=True)
+            logger.error(f"Error listing collections for database with ID '{request.query_params.get('database_id', 'unknown')}': {e}")
+            return Response(
+                {"success": False, "message": str(e), "data": []},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    async def get_metadata_record(self, database_id):
+        """Fetch metadata record for the specified database ID."""
+        try:
+            return await asyncio.to_thread(settings.METADATA_COLLECTION.find_one, {"_id": ObjectId(database_id)})
+        except Exception as e:
+            logger.error(f"Error fetching metadata record for database ID '{database_id}': {e}")
+            return None
+
+    async def get_actual_collections(self, database_name):
+        """Fetch the actual list of collections from the database."""
+        try:
+            cluster = settings.MONGODB_CLIENT
+            db = cluster[database_name]
+            return await asyncio.to_thread(db.list_collection_names)
+        except Exception as e:
+            logger.error(f"Error fetching actual collections for database '{database_name}': {e}")
+            return []
+
+
+class DropDatabaseView(APIView):
+    """
+    API view to safely drop a specified database with confirmation.
+    Uses database ID for identification and ensures atomic operations.
+    """
+
+    def delete(self, request, *args, **kwargs):
+        """
+        Deletes a database only if the confirmation matches the database ID.
+        Removes all collections, documents, and metadata associated with the database.
+        """
+        try:
+            # Validate the request data
+            database_id = request.data.get("database_id", "").strip()
+            confirmation = request.data.get("confirmation", "").strip()
+
+            if not database_id or not confirmation:
+                return Response(
+                    {"success": False, "message": "Database ID and confirmation are required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Ensure database_id is a valid ObjectId
+            try:
+                database_id = ObjectId(database_id)
+            except InvalidId:
+                return Response(
+                    {"success": False, "message": "Invalid Database ID format"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Check if the database exists
+            metadata_record = asyncio.run(self.get_metadata_record(database_id))
+            if not metadata_record:
+                return Response(
+                    {"success": False, "message": f"Database with ID '{database_id}' does not exist"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            db_name = metadata_record.get("database_name")
+
+            # Ensure confirmation matches the database name
+            if db_name.lower() != confirmation.lower():
+                return Response(
+                    {"success": False, "message": "Confirmation does not match database name"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Drop database and metadata in an atomic transaction
+            dropped_collections_count = asyncio.run(self.drop_database_and_metadata(database_id, db_name))
+
+            return Response(
+                {
+                    "success": True,
+                    "message": f"Database '{db_name}' and associated metadata dropped successfully",
+                    "details": {
+                        "dropped_collections": dropped_collections_count
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+
+        except Exception as e:
+            logger.error(f"Error dropping database with ID '{request.data.get('database_id', 'unknown')}': {e}")
             return Response(
                 {"success": False, "message": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    def check_database_exists(self, db_name):
-        """Check if the database already exists in metadata or cache."""
-        if db_name in metadata_cache:
-            return True
+    async def get_metadata_record(self, database_id):
+        """Fetch metadata record for the specified database ID."""
+        try:
+            return await asyncio.to_thread(settings.METADATA_COLLECTION.find_one, {"_id": database_id})
+        except Exception as e:
+            logger.error(f"Error fetching metadata record for database ID '{database_id}': {e}")
+            return None
 
-        metadata_coll = settings.METADATA_COLLECTION
-        if metadata_coll.find_one({"database_name": db_name}):
-            metadata_cache[db_name] = True
-            return True
-        return False
-
-    def insert_metadata(self, db_name, collections):
-        """Insert metadata for the new database, including collections and fields."""
-        metadata_coll = settings.METADATA_COLLECTION
-
-        total_fields = sum(len(coll["fields"]) for coll in collections)
-        metadata = {
-            "database_name": db_name,
-            "collections_metadata": [
-                {"name": coll["name"], "fields": coll["fields"]} for coll in collections
-            ],
-            "number_of_collections": len(collections),
-            "number_of_fields": total_fields
-        }
-        metadata_coll.insert_one(metadata)
-        metadata_cache[db_name] = True
-
-    async def create_collections_in_db(self, db_name, collections):
-        """Create specified collections with fields in the MongoDB database."""
+    async def drop_database_and_metadata(self, database_id, db_name):
+        """Remove metadata and drop the database and all its collections."""
         cluster = settings.MONGODB_CLIENT
-        db = cluster[db_name]
-        for coll in collections:
-            collection_name = coll["name"]
-            await asyncio.to_thread(db.create_collection, collection_name)
-            # logger.info(f"Created collection '{collection_name}' in database '{db_name}'.")
-
-            # Initialize each collection with an empty document containing the specified fields
-            sample_doc = {field: None for field in coll["fields"]}
-            await asyncio.to_thread(db[collection_name].insert_one, sample_doc)
-            # logger.info(f"Inserted sample document with fields {coll['fields']} into collection '{collection_name}'.")
-
-    async def create_collections_for_living_lab(self, db_name):
-        """
-        Creates collections and inserts documents for the "living lab admin" product.
-        - Collections 1 to 1000 will each have 1 document.
-        - Collections 1001 to 10000 will each have 1000 documents.
-        """
-        cluster = settings.MONGODB_CLIENT
-        db = cluster[db_name]
-
-        # Create collections 1 to 1000, each with 1 document
-        for i in range(1, 1001):
-            collection_name = f"collection_{i}"
-            await asyncio.to_thread(db.create_collection, collection_name)
-            await asyncio.to_thread(db[collection_name].insert_one, {"data": f"document_{i}"})
-            # logger.info(f"Created collection '{collection_name}' with 1 document in database '{db_name}'.")
-
-        # Create collections 1001 to 10000, each with 1000 documents
-        for i in range(1001, 10001):
-            collection_name = f"collection_{i}"
-            await asyncio.to_thread(db.create_collection, collection_name)
-            
-            # Create a batch of 1000 documents for efficiency
-            documents = [{"data": f"document_{j}"} for j in range(1, 1001)]
-            await asyncio.to_thread(db[collection_name].insert_many, documents)
-            # logger.info(f"Created collection '{collection_name}' with 1000 documents in database '{db_name}'.")
-
-        # Update metadata for Living Lab Admin collections
         metadata_coll = settings.METADATA_COLLECTION
-        living_lab_metadata = [
-            {"name": f"collection_{i}", "fields": ["data"]} for i in range(1, 10001)
-        ]
-        await asyncio.to_thread(metadata_coll.update_one,
-                                {"database_name": db_name},
-                                {"$set": {"collections_metadata": living_lab_metadata}})
+        dropped_collections_count = 0
+
+        # Start an atomic transaction
+        session = await asyncio.to_thread(cluster.start_session)
+        with session:
+            session.start_transaction()
+            try:
+                # Delete metadata
+                await asyncio.to_thread(metadata_coll.delete_one, {"_id": database_id})
+
+                # Drop collections and the database
+                database = cluster[db_name]
+                collections = await asyncio.to_thread(database.list_collection_names)
+                for coll_name in collections:
+                    await asyncio.to_thread(database[coll_name].drop)
+                    dropped_collections_count += 1
+
+                # Drop the database itself
+                await asyncio.to_thread(lambda: cluster.drop_database(db_name))
+
+                session.commit_transaction()
+                logger.info(f"Database '{db_name}' dropped successfully with {dropped_collections_count} collections.")
+                return dropped_collections_count
+
+            except Exception as e:
+                session.abort_transaction()
+                logger.error(f"Error during transaction for dropping database '{db_name}': {e}")
+                raise e
+
+
+
+class DropCollectionsView(APIView):
+    """
+    API view to safely drop specified collections from a database.
+    Uses database ID and collection names for identification and ensures atomic operations.
+    """
+
+    def delete(self, request, *args, **kwargs):
+        """
+        Deletes specified collections from a database.
+        Requires database ID and a list of collection names.
+        """
+        try:
+            # Validate the request data
+            database_id = request.data.get("database_id", "").strip()
+            collection_names = request.data.get("collection_names", [])
+
+            if not database_id or not collection_names:
+                return Response(
+                    {"success": False, "message": "Database ID and collection names are required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Ensure database_id is a valid ObjectId
+            try:
+                database_id = ObjectId(database_id)
+            except InvalidId:
+                return Response(
+                    {"success": False, "message": "Invalid Database ID format"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Check if the database exists
+            metadata_record = asyncio.run(self.get_metadata_record(database_id))
+            if not metadata_record:
+                return Response(
+                    {"success": False, "message": f"Database with ID '{database_id}' does not exist"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            db_name = metadata_record.get("database_name")
+
+            # Drop specified collections in an atomic transaction
+            dropped_collections_count = asyncio.run(self.drop_collections(database_id, db_name, collection_names))
+
+            return Response(
+                {
+                    "success": True,
+                    "message": f"Specified collections dropped successfully from database '{db_name}'",
+                    "details": {
+                        "dropped_collections": dropped_collections_count
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+
+        except Exception as e:
+            logger.error(f"Error dropping collections for database with ID '{request.data.get('database_id', 'unknown')}': {e}")
+            return Response(
+                {"success": False, "message": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    async def get_metadata_record(self, database_id):
+        """Fetch metadata record for the specified database ID."""
+        try:
+            return await asyncio.to_thread(settings.METADATA_COLLECTION.find_one, {"_id": database_id})
+        except Exception as e:
+            logger.error(f"Error fetching metadata record for database ID '{database_id}': {e}")
+            return None
+
+    async def drop_collections(self, database_id, db_name, collection_names):
+        """Remove specified collections from the database and update metadata."""
+        cluster = settings.MONGODB_CLIENT
+        metadata_coll = settings.METADATA_COLLECTION
+        dropped_collections_count = 0
+
+        # Start an atomic transaction
+        session = await asyncio.to_thread(cluster.start_session)
+        with session:
+            session.start_transaction()
+            try:
+                # Drop collections from the database
+                database = cluster[db_name]
+                for coll_name in collection_names:
+                    if coll_name in await asyncio.to_thread(database.list_collection_names):
+                        await asyncio.to_thread(database[coll_name].drop)
+                        dropped_collections_count += 1
+
+                # Update metadata to remove dropped collections
+                await asyncio.to_thread(
+                    metadata_coll.update_one,
+                    {"_id": database_id},
+                    {"$pull": {"collections": {"name": {"$in": collection_names}}}}
+                )
+
+                session.commit_transaction()
+                logger.info(f"Collections '{', '.join(collection_names)}' dropped successfully from database '{db_name}'.")
+                return dropped_collections_count
+
+            except Exception as e:
+                session.abort_transaction()
+                logger.error(f"Error during transaction for dropping collections from database '{db_name}': {e}")
+                raise e
+
 
 
 class HealthCheck(APIView):
@@ -957,7 +934,6 @@ class HealthCheck(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
 class GetMetadataView(APIView):
     """
     API View to fetch metadata of a specific database.
@@ -966,7 +942,6 @@ class GetMetadataView(APIView):
 
     def get(self, request, *args, **kwargs):
         try:
-            print(f"Request data >>>>>>>>>>>>>>>>>>>>>>>>>  \n: {request.data}")
             serializer = GetMetadataSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
 
@@ -998,7 +973,7 @@ class GetMetadataView(APIView):
             )
 
         except Exception as e:
-            # logger.error(f"Error fetching metadata for database '{db_name}': {e}", exc_info=True)
+            logger.error(f"Error fetching metadata for database '{db_name}': {e}", exc_info=True)
             return Response(
                 {"success": False, "message": "An error occurred while fetching metadata."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
