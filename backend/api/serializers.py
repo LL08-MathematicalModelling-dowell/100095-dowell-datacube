@@ -1,6 +1,6 @@
 import re
+from django.conf import settings
 from rest_framework import serializers
-from django.core.validators import MaxValueValidator
 
 
 class InputGetSerializer(serializers.Serializer):
@@ -124,74 +124,57 @@ class AddDatabasePOSTSerializer(serializers.Serializer):
 
 # =================== Add Collection ===================
 
-class CollectionFieldSerializer(serializers.Serializer):
+
+class FieldSerializer(serializers.Serializer):
+    MONGODB_FIELD_TYPES = [
+    "string",       # Textual data
+    "number",       # Numeric data
+    "object",       # Embedded document
+    "array",        # List of values
+    "boolean",      # True/False
+    "date",         # ISO 8601 date
+    "null",         # Null value
+    "binary",       # Binary data
+    "objectid",     # ObjectId
+    "decimal128",   # High-precision decimal
+    "regex",        # Regular expression
+    "timestamp"     # Timestamp
+    ]
+
     name = serializers.CharField(
         max_length=100,
         required=True,
-        help_text="Name of the collection to be created"
+        help_text="Name of the field. Use only letters, numbers, underscores (_), or hyphens (-)."
+    )
+    type = serializers.ChoiceField(
+        choices=MONGODB_FIELD_TYPES,
+        required=False,
+        help_text="Type of the field. Optional, defaults to 'string'."
+    )
+
+    def validate_name(self, value):
+        """Validate field name contains only allowed characters."""
+        if not re.match(r'^[\w-]+$', value):
+            raise serializers.ValidationError("Field name can only contain alphanumeric characters, underscores, or hyphens.")
+        return value
+
+
+class CollectionSerializer(serializers.Serializer):
+    name = serializers.CharField(
+        max_length=100,
+        required=True,
+        help_text="Name of the collection to be created. Use only letters, numbers, underscores (_), or hyphens (-)."
     )
     fields = serializers.ListField(
-        child=serializers.CharField(max_length=100),
+        child=FieldSerializer(),
         required=True,
-        help_text="List of field names for documents in the collection"
+        help_text="List of fields with names and optional types for the collection."
     )
 
     def validate_name(self, value):
         """Validate collection name contains only allowed characters."""
         if not re.match(r'^[\w-]+$', value):
             raise serializers.ValidationError("Collection name can only contain alphanumeric characters, underscores, or hyphens.")
-        return value
-
-    def validate_fields(self, value):
-        """Validate each field name in the list."""
-        invalid_fields = [field for field in value if not re.match(r'^[\w-]+$', field)]
-        if invalid_fields:
-            raise serializers.ValidationError(f"Invalid field names: {', '.join(invalid_fields)}. Only alphanumeric characters, underscores, and hyphens are allowed.")
-        return value
-
-
-class AddCollectionPOSTSerializer(serializers.Serializer):
-    db_name = serializers.CharField(
-        max_length=100,
-        required=True,
-        help_text="Name of the existing database where collections will be added"
-    )
-    collections = serializers.ListField(
-        child=CollectionFieldSerializer(),
-        required=True,
-        help_text="List of collections with names and document fields"
-    )
-
-    def validate_db_name(self, value):
-        """Validate that db_name contains only allowed characters."""
-        if not re.match(r'^[\w-]+$', value):
-            raise serializers.ValidationError("Database name can only contain alphanumeric characters, underscores, or hyphens.")
-        return value
-
-
-class CollectionFieldSerializer(serializers.Serializer):
-    name = serializers.CharField(
-        max_length=100,
-        required=True,
-        help_text="Name of the collection to be created"
-    )
-    fields = serializers.ListField(
-        child=serializers.CharField(max_length=100),
-        required=True,
-        help_text="List of field names for documents in the collection"
-    )
-
-    def validate_name(self, value):
-        """Validate collection name contains only allowed characters."""
-        if not re.match(r'^[\w-]+$', value):
-            raise serializers.ValidationError("Collection name can only contain alphanumeric characters, underscores, or hyphens.")
-        return value
-
-    def validate_fields(self, value):
-        """Validate each field name in the list."""
-        invalid_fields = [field for field in value if not re.match(r'^[\w-]+$', field)]
-        if invalid_fields:
-            raise serializers.ValidationError(f"Invalid field names: {', '.join(invalid_fields)}. Only alphanumeric characters, underscores, and hyphens are allowed.")
         return value
 
 
@@ -199,28 +182,20 @@ class AddDatabasePOSTSerializer(serializers.Serializer):
     db_name = serializers.CharField(
         max_length=100,
         required=True,
-        help_text="Name of the new database"
-    )
-    product_name = serializers.CharField(
-        max_length=100,
-        required=False,
-        allow_blank=True,
-        help_text="Optional product name to configure specific database setup"
+        help_text="Name of the new database. Must be unique and only contain alphanumeric characters, underscores, or hyphens."
     )
     collections = serializers.ListField(
-        child=CollectionFieldSerializer(),
+        child=CollectionSerializer(),
         required=False,
-        help_text="List of collections with names and document fields"
+        help_text="List of collections with names and fields for the new database."
     )
 
     def validate(self, data):
         """Custom validation to make collections optional for 'living lab admin'."""
-        product_name = data.get("product_name", "").lower()
         collections = data.get("collections")
 
-        # Ensure collections are specified for non-living lab products
-        if product_name != "living lab admin" and not collections:
-            raise serializers.ValidationError("At least one collection with fields must be specified if not using 'living lab admin'.")
+        if not collections:
+            raise serializers.ValidationError("At least one collection with fields must be specified.")
         
         return data
 
@@ -228,6 +203,28 @@ class AddDatabasePOSTSerializer(serializers.Serializer):
         """Validate that db_name contains only allowed characters."""
         if not re.match(r'^[\w-]+$', value):
             raise serializers.ValidationError("Database name can only contain alphanumeric characters, underscores, or hyphens.")
+        if value.lower() == "admin":
+            raise serializers.ValidationError("The database name 'admin' is reserved and cannot be used.")
+        return value
+
+
+
+class AddCollectionPOSTSerializer(serializers.Serializer):
+    database_id = serializers.CharField(
+        max_length=24,
+        required=True,
+        help_text="ID of the existing database where collections will be added"
+    )
+    collections = serializers.ListField(
+        child=CollectionSerializer(),
+        required=True,
+        help_text="List of collections with names and document fields"
+    )
+
+    def validate_database_id(self, value):
+        """Validate that database_id is a valid MongoDB ObjectId."""
+        if not re.match(r'^[a-fA-F0-9]{24}$', value):
+            raise serializers.ValidationError("Invalid database ID format. Must be a 24-character hexadecimal string.")
         return value
 
 
