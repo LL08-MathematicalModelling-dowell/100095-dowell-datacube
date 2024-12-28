@@ -1,36 +1,22 @@
-import datetime
 import asyncio
 import logging
 
-from api.helpers import get_metadata_record
-from bson.objectid import ObjectId, InvalidId
-from rest_framework import serializers
-
-from datetime import datetime
-from rest_framework.serializers import ValidationError
+from rest_framework import status
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from django.conf import settings
 from django.shortcuts import render
-
-from rest_framework import status
 from rest_framework.views import APIView
+from api.helpers import get_metadata_record
 from rest_framework.response import Response
+from bson.objectid import ObjectId, InvalidId
+from rest_framework.serializers import ValidationError
 
 from api.serializers import (
     AddCollectionPOSTSerializer,
-    GetCollectionsSerializer,
     AddDatabasePOSTSerializer,
     GetMetadataSerializer,
-    InputDeleteSerializer,
-    InputGetSerializer,
-    InputPostSerializer,
-    InputPutSerializer,
-    DropDatabaseSerializer,
-    ListDatabaseSerializer,
 )
-from asgiref.sync import async_to_sync
-from tenacity import retry, stop_after_attempt, wait_exponential
-
 
 
 # Use the custom logger
@@ -49,7 +35,6 @@ def api_home(request):
     from .api_home_data import apis
 
     return render(request, 'api_home.html', {'apis': apis})
-
 
 
 class CreateDatabaseView(APIView):
@@ -683,14 +668,6 @@ class ListCollectionsView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    async def get_metadata_record(self, database_id):
-        """Fetch metadata record for the specified database ID."""
-        try:
-            return await asyncio.to_thread(settings.METADATA_COLLECTION.find_one, {"_id": ObjectId(database_id)})
-        except Exception as e:
-            logger.error(f"Error fetching metadata record for database ID '{database_id}': {e}")
-            return None
-
     async def get_actual_collections(self, database_name):
         """Fetch the actual list of collections from the database."""
         try:
@@ -734,7 +711,7 @@ class DropDatabaseView(APIView):
                 )
 
             # Check if the database exists
-            metadata_record = asyncio.run(self.get_metadata_record(database_id))
+            metadata_record = asyncio.run(get_metadata_record(database_id))
             if not metadata_record:
                 return Response(
                     {"success": False, "message": f"Database with ID '{database_id}' does not exist"},
@@ -771,14 +748,6 @@ class DropDatabaseView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    async def get_metadata_record(self, database_id):
-        """Fetch metadata record for the specified database ID."""
-        try:
-            return await asyncio.to_thread(settings.METADATA_COLLECTION.find_one, {"_id": database_id})
-        except Exception as e:
-            logger.error(f"Error fetching metadata record for database ID '{database_id}': {e}")
-            return None
-
     async def drop_database_and_metadata(self, database_id, db_name):
         """Remove metadata and drop the database and all its collections."""
         cluster = settings.MONGODB_CLIENT
@@ -812,8 +781,6 @@ class DropDatabaseView(APIView):
                 logger.error(f"Error during transaction for dropping database '{db_name}': {e}")
                 raise e
 
-
-
 class DropCollectionsView(APIView):
     """
     API view to safely drop specified collections from a database.
@@ -846,7 +813,7 @@ class DropCollectionsView(APIView):
                 )
 
             # Check if the database exists
-            metadata_record = asyncio.run(self.get_metadata_record(database_id))
+            metadata_record = asyncio.run(get_metadata_record(database_id))
             if not metadata_record:
                 return Response(
                     {"success": False, "message": f"Database with ID '{database_id}' does not exist"},
@@ -855,34 +822,81 @@ class DropCollectionsView(APIView):
 
             db_name = metadata_record.get("database_name")
 
+            # Validate collection names
+            existing_collections = [coll["name"] for coll in metadata_record.get("collections", [])]
+            invalid_collections = set(collection_names) - set(existing_collections)
+            if invalid_collections:
+                return Response(
+                    {
+                        "success": False,
+                        "message": f"The following collections do not exist in the database: {', '.join(invalid_collections)}",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             # Drop specified collections in an atomic transaction
-            dropped_collections_count = asyncio.run(self.drop_collections(database_id, db_name, collection_names))
+            response_details = asyncio.run(self.drop_collections(database_id, db_name, collection_names))
 
             return Response(
                 {
                     "success": True,
                     "message": f"Specified collections dropped successfully from database '{db_name}'",
-                    "details": {
-                        "dropped_collections": dropped_collections_count
-                    }
+                    "details": response_details,
                 },
-                status=status.HTTP_200_OK
+                status=status.HTTP_200_OK,
             )
 
         except Exception as e:
             logger.error(f"Error dropping collections for database with ID '{request.data.get('database_id', 'unknown')}': {e}")
             return Response(
                 {"success": False, "message": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    async def get_metadata_record(self, database_id):
-        """Fetch metadata record for the specified database ID."""
-        try:
-            return await asyncio.to_thread(settings.METADATA_COLLECTION.find_one, {"_id": database_id})
-        except Exception as e:
-            logger.error(f"Error fetching metadata record for database ID '{database_id}': {e}")
-            return None
+    async def drop_collections(self, database_id, db_name, collection_names):
+        """Remove specified collections from the database and update metadata."""
+        cluster = settings.MONGODB_CLIENT
+        metadata_coll = settings.METADATA_COLLECTION
+        dropped_collections = []
+        failed_collections = []
+
+        # Start an atomic transaction
+        session = await asyncio.to_thread(cluster.start_session)
+        with session:
+            session.start_transaction()
+            try:
+                # Drop collections from the database
+                database = cluster[db_name]
+                for coll_name in collection_names:
+                    try:
+                        if coll_name in await asyncio.to_thread(database.list_collection_names):
+                            await asyncio.to_thread(database[coll_name].drop)
+                            dropped_collections.append(coll_name)
+                        else:
+                            failed_collections.append(coll_name)
+                    except Exception as e:
+                        logger.error(f"Error dropping collection '{coll_name}': {e}")
+                        failed_collections.append(coll_name)
+
+                # Update metadata to remove dropped collections
+                await asyncio.to_thread(
+                    metadata_coll.update_one,
+                    {"_id": database_id},
+                    {"$pull": {"collections": {"name": {"$in": dropped_collections}}}},
+                )
+
+                session.commit_transaction()
+                logger.info(f"Collections dropped successfully from database '{db_name}': {dropped_collections}")
+                return {
+                    "dropped_collections": dropped_collections,
+                    "failed_collections": failed_collections,
+                }
+
+            except Exception as e:
+                session.abort_transaction()
+                logger.error(f"Error during transaction for dropping collections from database '{db_name}': {e}")
+                raise e
+
 
     async def drop_collections(self, database_id, db_name, collection_names):
         """Remove specified collections from the database and update metadata."""
@@ -917,21 +931,6 @@ class DropCollectionsView(APIView):
                 session.abort_transaction()
                 logger.error(f"Error during transaction for dropping collections from database '{db_name}': {e}")
                 raise e
-
-
-
-class HealthCheck(APIView):
-    def get(self, request):
-        try:
-            return Response({
-                "success": True,
-                "message": "Server is running fine"
-            }, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({
-                "success": False,
-                "message": f"Server is down for {str(e)}"
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class GetMetadataView(APIView):
@@ -991,4 +990,18 @@ class GetMetadataView(APIView):
             return str(data)
         else:
             return data
+
+
+class HealthCheck(APIView):
+    def get(self, request):
+        try:
+            return Response({
+                "success": True,
+                "message": "Server is running fine"
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                "success": False,
+                "message": f"Server is down for {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
