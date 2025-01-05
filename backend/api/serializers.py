@@ -1,6 +1,9 @@
 import re
 from django.conf import settings
 from rest_framework import serializers
+from typing import List, Union
+from bson import ObjectId
+from rest_framework import serializers
 
 
 class InputGetSerializer(serializers.Serializer):
@@ -97,31 +100,6 @@ class ListDatabaseSerializer(serializers.Serializer):
     filter = serializers.CharField(default='')
 
 
-class AddDatabasePOSTSerializer(serializers.Serializer):
-    db_name = serializers.CharField(
-        max_length=100,
-        required=True,
-        help_text="Name of the new database"
-    )
-    product_name = serializers.CharField(
-        max_length=100,
-        required=False,
-        help_text="Product name to configure database setup"
-    )
-    coll_names = serializers.ListField(
-        child=serializers.CharField(max_length=100),
-        required=True,
-        # default=[],
-        help_text="List of collection names to be created in the database"
-    )
-
-    def validate_db_name(self, value):
-        """Ensure db_name only contains alphanumeric characters, underscores, or hyphens."""
-        if not re.match(r'^[\w-]+$', value):
-            raise serializers.ValidationError("Database name can only contain alphanumeric characters, underscores, or hyphens.")
-        return value
-
-
 # =================== Add Collection ===================
 
 
@@ -179,6 +157,7 @@ class CollectionSerializer(serializers.Serializer):
 
 
 class AddDatabasePOSTSerializer(serializers.Serializer):
+    """ Serializer class to validate the request body for creating a new database. """
     db_name = serializers.CharField(
         max_length=100,
         required=True,
@@ -231,3 +210,84 @@ class AddCollectionPOSTSerializer(serializers.Serializer):
 class GetMetadataSerializer(serializers.Serializer):
     db_name = serializers.CharField(required=True)
 
+
+
+# ====================================== CRUD POST Serializer ==============================
+
+
+class ObjectIdField(serializers.Field):
+    """
+    Custom field to validate MongoDB ObjectId.
+    """
+    def to_internal_value(self, data):
+        try:
+            return ObjectId(data)
+        except Exception:
+            raise serializers.ValidationError(
+                "Invalid ObjectId. Must be a 24-character hexadecimal string."
+            )
+
+    def to_representation(self, value):
+        return str(value)
+
+
+class AsyncPostDocumentSerializer(serializers.Serializer):
+    database_id = ObjectIdField(required=True, help_text="ID of the database.")
+    collection_name = serializers.CharField(
+        required=True,
+        max_length=100,
+        help_text="Name of the collection.",
+    )
+    data = serializers.ListField(
+        child=serializers.DictField(),
+        required=True,
+        help_text="List of documents to be inserted.",
+    )
+
+    def validate_data(self, value: Union[List[dict], dict]) -> List[dict]:
+        """
+        Ensure data is a list of dictionaries.
+
+        Args:
+            value (Union[List[dict], dict]): The data input.
+
+        Returns:
+            List[dict]: Validated list of dictionaries.
+
+        Raises:
+            serializers.ValidationError: If data is invalid.
+        """
+        if isinstance(value, dict):
+            value = [value]
+
+        if not all(isinstance(doc, dict) for doc in value):
+            raise serializers.ValidationError(
+                "Each item in data must be a dictionary."
+            )
+
+        return value
+
+    def validate(self, attrs):
+        """
+        Custom validation for MongoDB documents.
+
+        Args:
+            attrs (dict): Serializer attributes.
+
+        Returns:
+            dict: Validated attributes.
+
+        Raises:
+            serializers.ValidationError: If any validation fails.
+        """
+        documents = attrs.get("data")
+
+        # Add any additional validations if needed, such as mandatory fields or data structure checks.
+        for document in documents:
+            if "is_deleted" in document and not isinstance(document["is_deleted"], bool):
+                raise serializers.ValidationError(
+                    "'is_deleted' must be a boolean if provided."
+                )
+            document.setdefault("is_deleted", False)  # Default to False if not provided
+
+        return attrs

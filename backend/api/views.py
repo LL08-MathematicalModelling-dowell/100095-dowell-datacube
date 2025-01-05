@@ -1,22 +1,24 @@
+"""
+This module contains views for handling database and collection operations in the Datacube API.
+"""
+
 import asyncio
 import logging
 
-from rest_framework import status
-from tenacity import retry, stop_after_attempt, wait_exponential
-
+from bson.objectid import InvalidId, ObjectId
 from django.conf import settings
 from django.shortcuts import render
-from rest_framework.views import APIView
-from api.helpers import get_metadata_record
+from rest_framework import status
 from rest_framework.response import Response
-from bson.objectid import ObjectId, InvalidId
 from rest_framework.serializers import ValidationError
+from rest_framework.views import APIView
+from tenacity import retry, stop_after_attempt, wait_exponential
 
-from api.serializers import (
-    AddCollectionPOSTSerializer,
-    AddDatabasePOSTSerializer,
-    GetMetadataSerializer,
-)
+from api.helpers import get_metadata_record
+from api.serializers import (AddCollectionPOSTSerializer,
+                             AddDatabasePOSTSerializer,
+                             AsyncPostDocumentSerializer,
+                             GetMetadataSerializer)
 
 
 # Use the custom logger
@@ -44,7 +46,7 @@ class CreateDatabaseView(APIView):
     """
     serializer_class = AddDatabasePOSTSerializer
 
-    def post(self, request, *args, **kwargs):
+    def post(self, request):
         try:
             # Validate request data
             serializer = AddDatabasePOSTSerializer(data=request.data)
@@ -146,7 +148,9 @@ class CreateDatabaseView(APIView):
         for coll in collections:
             collection_name = coll["name"]
             await asyncio.to_thread(db.create_collection, collection_name, session=session)
-            logger.info(f"Created collection '{collection_name}' in database '{db_metadata['database_name']}'.")
+            logger.info(
+                f"Created collection '{collection_name}' in database '{db_metadata['database_name']}'."
+            )
 
             # Initialize each collection with an empty document containing the specified fields
             sample_doc = {field["name"]: None for field in coll["fields"]}
@@ -179,6 +183,28 @@ class AddCollectionView(APIView):
     serializer_class = AddCollectionPOSTSerializer
 
     def post(self, request, *args, **kwargs):
+        """
+        Handles the POST request to add new collections to a specified database.
+        Args:
+            request (Request): The HTTP request object.
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments.
+        Returns:
+            Response: A Response object containing the result of the operation.
+        Raises:
+            Exception: If any error occurs during the process.
+        The method performs the following steps:
+        1. Validates the request data using AddCollectionPOSTSerializer.
+        2. Extracts the database ID and collections from the validated data.
+        3. Checks if the specified database exists.
+        4. Starts an atomic transaction.
+        5. Validates and filters the collections to be added.
+        6. Adds new collections to the database metadata and the database itself.
+        7. Commits the transaction if successful.
+        8. Returns a success response with the details of the added collections and updated database metadata.
+        9. Aborts the transaction and rolls back changes if any error occurs during the process.
+        """
+        
         try:
             # Validate the request data
             serializer = AddCollectionPOSTSerializer(data=request.data)
@@ -330,10 +356,38 @@ class AddCollectionView(APIView):
 
 class DataCrudView(APIView):
     """
-    A streamlined view for CRUD operations on MongoDB collections using names with metadata validation.
+    DataCrudView is a Django REST framework API view that provides CRUD operations for MongoDB collections.
+    It handles HTTP POST, GET, PUT, and DELETE requests asynchronously.
+    Methods:
+        post(request, *args, **kwargs):
+        get(request, *args, **kwargs):
+            Handle GET requests asynchronously.
+        put(request, *args, **kwargs):
+            Handle PUT requests asynchronously.
+        delete(request, *args, **kwargs):
+            Handle DELETE requests asynchronously.
+        async_post(request):
+        async_get(request):
+        async_put(request):
+        async_delete(request):
+        validate_collection(database_id, collection_name):
+        get_collection_by_name(database_id, collection_name):
+        convert_object_id(filters):
+            Convert string ObjectIds in filters to actual ObjectId instances.
     """
 
     def post(self, request, *args, **kwargs):
+        """
+        Handle POST requests asynchronously.
+
+        Args:
+            request: The HTTP request object.
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            The result of the asynchronous post method.
+        """
         return asyncio.run(self.async_post(request))
 
     def get(self, request, *args, **kwargs):
@@ -343,55 +397,112 @@ class DataCrudView(APIView):
         return asyncio.run(self.async_put(request))
 
     def delete(self, request, *args, **kwargs):
+        """
+        Handle the DELETE request to delete a resource.
+        This method runs the asynchronous delete operation using asyncio.run.
+        Args:
+            request: The HTTP request object.
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments.
+        Returns:
+            The result of the asynchronous delete operation.
+        """
+
         return asyncio.run(self.async_delete(request))
 
     async def async_post(self, request):
+        """
+        Handle asynchronous POST requests to insert documents into a MongoDB collection.
+        Args:
+            request (Request): The request object containing the data to be inserted.
+        Returns:
+            Response: A response object indicating the success or failure of the operation.
+        Raises:
+            Exception: If there is an error during the database operation.
+        The request data should include:
+            - database_id (str): The ID of the database.
+            - collection_name (str): The name of the collection.
+            - data (list): A list of documents to be inserted.
+        The response will include:
+            - success (bool): Whether the operation was successful.
+            - message (str): A message indicating the result of the operation.
+            - inserted_ids (list): A list of IDs of the inserted documents (if successful).
+        """
+
+        serializer = AsyncPostDocumentSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                {"success": False, "message": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        validated_data = serializer.validated_data
+        database_id = validated_data["database_id"]
+        collection_name = validated_data["collection_name"]
+        documents = validated_data["data"]
+
         try:
-            data = request.data
-            database_id = data.get("database_id")
-            collection_name = data.get("collection_name")
-            documents = data.get("data")
-
-            if isinstance(documents, dict):
-                documents = [documents]
-
-            valid_fields = await self.validate_collection(database_id, collection_name)
-
-            for doc in documents:
-                invalid_fields = [key for key in doc if key not in valid_fields]
-                if invalid_fields:
-                    raise ValueError(f"Invalid fields: {', '.join(invalid_fields)}")
-
-                doc["is_deleted"] = False
-
+            # Fetch the collection object
             collection = await self.get_collection_by_name(database_id, collection_name)
             session = await asyncio.to_thread(settings.MONGODB_CLIENT.start_session)
+
             with session:
                 session.start_transaction()
                 try:
-                    result = await asyncio.to_thread(collection.insert_many, documents, session=session)
+                    # Insert documents
+                    result = await asyncio.to_thread(
+                        collection.insert_many, documents, session=session
+                    )
                     session.commit_transaction()
                 except Exception as e:
                     session.abort_transaction()
                     raise e
 
-            return Response({
-                "success": True,
-                "message": "Documents inserted successfully",
-                "inserted_ids": [str(id) for id in result.inserted_ids]
-            }, status=status.HTTP_201_CREATED)
-
+            return Response(
+                {
+                    "success": True,
+                    "message": "Documents inserted successfully",
+                    "inserted_ids": [str(id) for id in result.inserted_ids]
+                },
+                status=status.HTTP_201_CREATED
+            )
         except Exception as e:
-            logger.error(f"Error in POST operation: {e}")
-            return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            logger.error("Error in POST operation: %s", e)
+            return Response(
+                {"success": False, "message": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
     async def async_get(self, request):
+        """
+        Asynchronously handles GET requests to fetch data from a specified collection in the database.
+        Args:
+            request (Request): The request object containing query parameters.
+        Returns:
+            Response: A response object containing the fetched data, pagination details, and success status.
+        Query Parameters:
+            - database_id (str): The ID of the database to query.
+            - collection_name (str): The name of the collection to query.
+            - filters (str, optional): JSON string of filters to apply to the query. Defaults to "{}".
+            - limit (int, optional): The maximum number of records to return. Defaults to 50.
+            - offset (int, optional): The number of records to skip. Defaults to 0.
+        Response:
+            - success (bool): Indicates whether the data was fetched successfully.
+            - message (str): A message describing the result of the operation.
+            - data (list): A list of documents fetched from the collection.
+            - pagination (dict): Pagination details including total records, current page, and page size.
+        Raises:
+            Exception: If an error occurs during the GET operation.
+        """
+
         try:
             data = request.query_params
             database_id = data.get("database_id")
             collection_name = data.get("collection_name")
             
             import json
+
             filters = data.get("filters", "{}")
             if isinstance(filters, str):
                 try:
@@ -431,6 +542,30 @@ class DataCrudView(APIView):
             return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     async def async_put(self, request):
+        """
+        Asynchronous PUT method to update documents in a MongoDB collection.
+        Args:
+            request (Request): The request object containing the data for the update operation.
+        Returns:
+            Response: A response object indicating the success or failure of the update operation.
+        Raises:
+            ValueError: If any of the fields in the update data are invalid.
+            Exception: If any error occurs during the update operation.
+        The request data should contain the following keys:
+            - database_id (str): The ID of the database.
+            - collection_name (str): The name of the collection.
+            - filters (dict): The filters to select the documents to be updated.
+            - update_data (dict): The data to update the selected documents with.
+        The method performs the following steps:
+            1. Extracts the data from the request.
+            2. Validates the fields in the update data.
+            3. Retrieves the collection by name.
+            4. Starts a MongoDB session and transaction.
+            5. Updates the documents in the collection.
+            6. Commits the transaction if successful, otherwise aborts the transaction.
+            7. Returns a response indicating the number of documents updated or an error message.
+        """
+
         try:
             data = request.data
             database_id = data.get("database_id")
@@ -464,6 +599,24 @@ class DataCrudView(APIView):
             return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     async def async_delete(self, request):
+        """
+        Asynchronously deletes documents from a MongoDB collection based on provided filters.
+        Args:
+            request (Request): The request object containing the data for the delete operation.
+        Returns:
+            Response: A response object containing the success status and a message.
+        Raises:
+            Exception: If an error occurs during the delete operation.
+        Request Data:
+            - database_id (str): The ID of the database.
+            - collection_name (str): The name of the collection.
+            - filters (dict, optional): The filters to apply for selecting documents to delete. Defaults to an empty dict.
+            - soft_delete (bool, optional): If True, performs a soft delete by setting `is_deleted` to True. If False, performs a hard delete. Defaults to True.
+        Response:
+            - success (bool): Indicates whether the operation was successful.
+            - message (str): A message describing the result of the operation.
+        """
+
         try:
             data = request.data
             database_id = data.get("database_id")
@@ -497,6 +650,18 @@ class DataCrudView(APIView):
             return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     async def validate_collection(self, database_id, collection_name):
+        """
+        Validate the existence of a collection within a specified database and return its field names.
+        Args:
+            database_id (str): The ID of the database to validate.
+            collection_name (str): The name of the collection to validate.
+        Returns:
+            list: A list of field names in the specified collection.
+        Raises:
+            ValueError: If the database with the given ID does not exist.
+            ValueError: If the collection with the given name does not exist in the specified database.
+        """
+
         metadata_coll = settings.METADATA_COLLECTION
         db_metadata = await asyncio.to_thread(metadata_coll.find_one, {"_id": ObjectId(database_id)})
 
@@ -511,6 +676,18 @@ class DataCrudView(APIView):
         return [field["name"] for field in coll_metadata["fields"]]
 
     async def get_collection_by_name(self, database_id, collection_name):
+        """
+        Retrieve a MongoDB collection by its name from a specified database.
+        Args:
+            database_id (str): The ID of the database to search within.
+            collection_name (str): The name of the collection to retrieve.
+        Returns:
+            Collection: The MongoDB collection object.
+        Raises:
+            ValueError: If the database with the specified ID does not exist.
+            ValueError: If the collection with the specified name does not exist in the database.
+        """
+
         metadata_coll = settings.METADATA_COLLECTION
         db_metadata = await asyncio.to_thread(metadata_coll.find_one, {"_id": ObjectId(database_id)})
 
@@ -626,6 +803,15 @@ class ListCollectionsView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            # Ensure database_id is a valid ObjectId
+            try:
+                database_id = ObjectId(database_id)
+            except InvalidId:
+                return Response(
+                    {"success": False, "message": "Invalid Database ID format"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             # Fetch metadata record for the specified database ID
             metadata_record = asyncio.run(get_metadata_record(database_id))
             if not metadata_record:
@@ -656,7 +842,7 @@ class ListCollectionsView(APIView):
                 {
                     "success": True,
                     "message": "Collections found!",
-                    "data": collections
+                    "collections": collections
                 },
                 status=status.HTTP_200_OK
             )
