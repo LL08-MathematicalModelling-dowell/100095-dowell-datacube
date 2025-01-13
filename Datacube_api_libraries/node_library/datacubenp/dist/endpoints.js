@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.GET_METADATA = exports.DATA_CRUD = exports.DROP_DATABASE = exports.DROP_COLLECTIONS = exports.LIST_COLLECTIONS = exports.LIST_DATABASES = exports.CREATE_COLLECTION = exports.CREATE_DATABASE = exports.BASE_URL = void 0;
+exports.BASE_URL = "http://localhost:8000";
+exports.CREATE_DATABASE = "/api/create_database";
+exports.CREATE_COLLECTION = "/api/add_collection";
+exports.LIST_DATABASES = "/api/list_databases";
+exports.LIST_COLLECTIONS = "/api/list_collections";
+exports.DROP_COLLECTIONS = "/api/drop_collections";
+exports.DROP_DATABASE = "/api/drop_database";
+exports.DATA_CRUD = "/api/crud";
+exports.GET_METADATA = "/api/get_metadata";

@@ -1,5 +1,6 @@
 """
-This module contains views for handling database and collection operations in the Datacube API.
+This module contains views for handling database and
+collection operations in the Datacube API.
 """
 
 import asyncio
@@ -18,7 +19,7 @@ from api.helpers import get_metadata_record
 from api.serializers import (AddCollectionPOSTSerializer,
                              AddDatabasePOSTSerializer,
                              AsyncPostDocumentSerializer,
-                             GetMetadataSerializer)
+    )
 
 
 # Use the custom logger
@@ -391,6 +392,7 @@ class DataCrudView(APIView):
         return asyncio.run(self.async_post(request))
 
     def get(self, request, *args, **kwargs):
+        """ Handle GET requests asynchronously. """
         return asyncio.run(self.async_get(request))
 
     def put(self, request, *args, **kwargs):
@@ -716,6 +718,22 @@ class ListDatabasesView(APIView):
     """
 
     def get(self, request, *args, **kwargs):
+        """
+        Handles GET requests to list databases with pagination and filtering.
+        Args:
+            request (Request): The HTTP request object.
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments.
+        Returns:
+            Response: A paginated response containing database metadata or an error message.
+        Query Parameters:
+            - page (int, optional): The page number for pagination. Defaults to 1.
+            - page_size (int, optional): The number of items per page. Defaults to 10.
+            - filter (str, optional): A filter term to search database names. Defaults to an empty string.
+        Raises:
+            Exception: If an error occurs during the database listing process.
+        """
+
         try:
             # Extract pagination and filtering parameters from query params
             page = int(request.query_params.get("page", 1))
@@ -967,6 +985,7 @@ class DropDatabaseView(APIView):
                 logger.error(f"Error during transaction for dropping database '{db_name}': {e}")
                 raise e
 
+
 class DropCollectionsView(APIView):
     """
     API view to safely drop specified collections from a database.
@@ -1121,31 +1140,53 @@ class DropCollectionsView(APIView):
 
 class GetMetadataView(APIView):
     """
-    API View to fetch metadata of a specific database.
+    API View to fetch metadata of a specific database using database ID as a query parameter.
     """
-    serialiser_class = GetMetadataSerializer
 
     def get(self, request, *args, **kwargs):
+        """
+        Handles GET requests to fetch metadata for a given database ID.
+        Args:
+            request (Request): The HTTP request object.
+            *args: Variable length argument list.
+            **kwargs: Arbitrary keyword arguments.
+        Returns:
+            Response: A DRF Response object containing the metadata or an error message.
+        Raises:
+            Exception: If an error occurs while fetching metadata.
+        Responses:
+            200 OK: If metadata is successfully fetched.
+            400 Bad Request: If the database ID is missing or invalid.
+            404 Not Found: If no metadata is found for the given database ID.
+            500 Internal Server Error: If an error occurs while fetching metadata.
+        """
+
         try:
-            serializer = GetMetadataSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
+            # Extract database ID from query parameters
+            database_id = request.query_params.get("database_id", "").strip()
 
-            # Extract database name from query parameters
-            db_name = serializer.validated_data.get('db_name', '').lower()
-
-            if not db_name:
+            if not database_id:
                 return Response(
-                    {"success": False, "message": "Database name is required."},
+                    {"success": False, "message": "Database ID is required."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Validate database ID
+            try:
+                database_id = ObjectId(database_id)
+            except InvalidId:
+                return Response(
+                    {"success": False, "message": "Invalid Database ID format."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
             # Fetch metadata from the metadata collection
             metadata_coll = settings.METADATA_COLLECTION
-            metadata = metadata_coll.find_one({"database_name": db_name})
+            metadata = metadata_coll.find_one({"_id": database_id})
 
             if not metadata:
                 return Response(
-                    {"success": False, "message": f"No metadata found for database '{db_name}'."},
+                    {"success": False, "message": f"No metadata found for database with ID '{database_id}'."},
                     status=status.HTTP_404_NOT_FOUND
                 )
 
@@ -1158,7 +1199,7 @@ class GetMetadataView(APIView):
             )
 
         except Exception as e:
-            logger.error(f"Error fetching metadata for database '{db_name}': {e}", exc_info=True)
+            logger.error(f"Error fetching metadata for database ID '{database_id}': {e}", exc_info=True)
             return Response(
                 {"success": False, "message": "An error occurred while fetching metadata."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1179,7 +1220,26 @@ class GetMetadataView(APIView):
 
 
 class HealthCheck(APIView):
-    def get(self, request):
+    """
+    HealthCheck API view to check the server status.
+    Methods:
+        get(request):
+            Handles GET requests to check if the server is running.
+            Returns a JSON response with the server status.
+            - If the server is running, returns HTTP 200 OK with a success message.
+            - If there is an exception, returns HTTP 500 Internal Server Error with an error message.
+    """
+        
+    def get(self, request, *args, **kwargs):
+        """
+        Handles GET requests to check server status.
+        Args:
+            request (Request): The HTTP request object.
+        Returns:
+            Response: A JSON response indicating whether the server is running fine or down, 
+                      along with the appropriate HTTP status code.
+        """
+
         try:
             return Response({
                 "success": True,
