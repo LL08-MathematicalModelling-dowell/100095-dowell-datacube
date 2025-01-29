@@ -1,0 +1,9 @@
+export declare const BASE_URL = "http://localhost:8000";
+export declare const CREATE_DATABASE = "/api/create_database";
+export declare const CREATE_COLLECTION = "/api/add_collection";
+export declare const LIST_DATABASES = "/api/list_databases";
+export declare const LIST_COLLECTIONS = "/api/list_collections";
+export declare const DROP_COLLECTIONS = "/api/drop_collections";
+export declare const DROP_DATABASE = "/api/drop_database";
+export declare const DATA_CRUD = "/api/crud";
+export declare const GET_METADATA = "/api/get_metadata";
