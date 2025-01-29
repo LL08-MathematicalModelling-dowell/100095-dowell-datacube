@@ -85,7 +85,16 @@ apis = [
             "request_bodies": {
                 "POST": """{
                     "db_name": "example_db",
-                    "collections": [...]
+                    "collections": [
+                        {
+                            "name": "new_collection",
+                            "fields": ["field1", "field2", "field3"]
+                        },
+                        {
+                            "name": "another_collection",
+                            "fields": ["fieldA", "fieldB", "fieldC"]
+                        }
+                    ]
                 }"""
             },
             "responses": {
