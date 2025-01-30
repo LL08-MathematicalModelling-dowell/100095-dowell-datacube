@@ -22,8 +22,8 @@ from api.serializers import (AddCollectionPOSTSerializer,
     )
 
 
-# Use the custom logger
-logger = logging.getLogger('database_operations')
+# Use the custom # logger
+# logger = logging.getLogger('database_operations')
 
 # Cache for database and collection validation
 db_cache = {}
@@ -100,7 +100,7 @@ class CreateDatabaseView(APIView):
             except Exception as inner_exception:
                 # Abort transaction on failure
                 session.abort_transaction()
-                logger.error(f"Transaction aborted due to error: {inner_exception}", exc_info=True)
+                # logger.error(f"Transaction aborted due to error: {inner_exception}", exc_info=True)
                 self.rollback_collections(cluster[db_name], [coll['name'] for coll in collections])
                 raise inner_exception
 
@@ -108,7 +108,7 @@ class CreateDatabaseView(APIView):
                 session.end_session()
 
         except Exception as e:
-            logger.error(f"Error creating database: {e}", exc_info=True)
+            # logger.error(f"Error creating database: {e}", exc_info=True)
             return Response(
                 {"success": False, "message": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -149,9 +149,9 @@ class CreateDatabaseView(APIView):
         for coll in collections:
             collection_name = coll["name"]
             await asyncio.to_thread(db.create_collection, collection_name, session=session)
-            logger.info(
-                f"Created collection '{collection_name}' in database '{db_metadata['database_name']}'."
-            )
+            # logger.info(
+            #     f"Created collection '{collection_name}' in database '{db_metadata['database_name']}'."
+            # )
 
             # Initialize each collection with an empty document containing the specified fields
             sample_doc = {field["name"]: None for field in coll["fields"]}
@@ -165,7 +165,7 @@ class CreateDatabaseView(APIView):
                 ]
             })
 
-            logger.info(f"Inserted sample document with fields {[field['name'] for field in coll['fields']]} into collection '{collection_name}'.")
+            # logger.info(f"Inserted sample document with fields {[field['name'] for field in coll['fields']]} into collection '{collection_name}'.")
 
         return collection_metadata
 
@@ -173,7 +173,7 @@ class CreateDatabaseView(APIView):
         """Rollback partially created collections."""
         for coll_name in created_collections:
             db.drop_collection(coll_name)
-            logger.info(f"Rolled back collection '{coll_name}'")
+            # logger.info(f"Rolled back collection '{coll_name}'")
 
 
 class AddCollectionView(APIView):
@@ -262,7 +262,7 @@ class AddCollectionView(APIView):
             except Exception as inner_exception:
                 # Abort transaction on failure
                 session.abort_transaction()
-                logger.error(f"Transaction aborted due to error: {inner_exception}", exc_info=True)
+                # logger.error(f"Transaction aborted due to error: {inner_exception}", exc_info=True)
                 self.rollback_collections(cluster[db_metadata['database_name']], [coll['name'] for coll in new_collections])
                 raise inner_exception
 
@@ -270,7 +270,7 @@ class AddCollectionView(APIView):
                 session.end_session()
 
         except Exception as e:
-            logger.error(f"Error adding collections: {e}", exc_info=True)
+            # logger.error(f"Error adding collections: {e}", exc_info=True)
             return Response(
                 {"success": False, "message": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -330,7 +330,7 @@ class AddCollectionView(APIView):
         for coll in new_collections:
             collection_name = coll["name"]
             await asyncio.to_thread(db.create_collection, collection_name, session=session)
-            logger.info(f"Created collection '{collection_name}' in database '{db_metadata['database_name']}'.")
+            # logger.info(f"Created collection '{collection_name}' in database '{db_metadata['database_name']}'.")
 
             # Initialize each collection with an empty document containing the specified fields
             sample_doc = {field["name"]: None for field in coll["fields"]}
@@ -344,7 +344,7 @@ class AddCollectionView(APIView):
                 ]
             })
 
-            logger.info(f"Inserted sample document with fields {[field['name'] for field in coll['fields']]} into collection '{collection_name}'.")
+            # logger.info(f"Inserted sample document with fields {[field['name'] for field in coll['fields']]} into collection '{collection_name}'.")
 
         return collection_metadata
 
@@ -352,7 +352,7 @@ class AddCollectionView(APIView):
         """Rollback partially created collections."""
         for coll_name in created_collections:
             db.drop_collection(coll_name)
-            logger.info(f"Rolled back collection '{coll_name}'")
+            # logger.info(f"Rolled back collection '{coll_name}'")
 
 
 class DataCrudView(APIView):
@@ -470,7 +470,7 @@ class DataCrudView(APIView):
                 status=status.HTTP_201_CREATED
             )
         except Exception as e:
-            logger.error("Error in POST operation: %s", e)
+            # logger.error("Error in POST operation: %s", e)
             return Response(
                 {"success": False, "message": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -540,7 +540,7 @@ class DataCrudView(APIView):
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
-            logger.error(f"Error in GET operation: {e}")
+            # logger.error(f"Error in GET operation: {e}")
             return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     async def async_put(self, request):
@@ -597,7 +597,7 @@ class DataCrudView(APIView):
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
-            logger.error(f"Error in PUT operation: {e}")
+            # logger.error(f"Error in PUT operation: {e}")
             return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     async def async_delete(self, request):
@@ -648,7 +648,7 @@ class DataCrudView(APIView):
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
-            logger.error(f"Error in DELETE operation: {e}")
+            # logger.error(f"Error in DELETE operation: {e}")
             return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     async def validate_collection(self, database_id, collection_name):
@@ -708,7 +708,8 @@ class DataCrudView(APIView):
                 try:
                     filters[key] = ObjectId(value)
                 except Exception as e:
-                    logger.warning(f"Invalid ObjectId format for key '{key}': {value}. Error: {e}")
+                    # logger.warning(f"Invalid ObjectId format for key '{key}': {value}. Error: {e}")
+                    pass
         return filters
 
 
@@ -767,7 +768,7 @@ class ListDatabasesView(APIView):
             )
 
         except Exception as e:
-            logger.error(f"Error listing databases: {e}")
+            # logger.error(f"Error listing databases: {e}")
             return Response(
                 {"success": False, "message": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -797,7 +798,7 @@ class ListDatabasesView(APIView):
                     "num_collections": num_collections
                 })
             except Exception as e:
-                logger.warning(f"Error fetching metadata for database '{db_name}': {e}")
+                # logger.warning(f"Error fetching metadata for database '{db_name}': {e}")
                 db_info.append({
                     "name": db_name,
                     "num_collections": "Error fetching metadata"
@@ -854,7 +855,8 @@ class ListCollectionsView(APIView):
 
             # Log any discrepancies
             if missing_in_db:
-                logger.warning(f"Collections in metadata but missing in MongoDB: {', '.join(missing_in_db)}")
+                # logger.warning(f"Collections in metadata but missing in MongoDB: {', '.join(missing_in_db)}")
+                collections = [coll for coll in collections if coll not in missing_in_db]
 
             return Response(
                 {
@@ -866,7 +868,7 @@ class ListCollectionsView(APIView):
             )
 
         except Exception as e:
-            logger.error(f"Error listing collections for database with ID '{request.query_params.get('database_id', 'unknown')}': {e}")
+            # logger.error(f"Error listing collections for database with ID '{request.query_params.get('database_id', 'unknown')}': {e}")
             return Response(
                 {"success": False, "message": str(e), "data": []},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -879,7 +881,7 @@ class ListCollectionsView(APIView):
             db = cluster[database_name]
             return await asyncio.to_thread(db.list_collection_names)
         except Exception as e:
-            logger.error(f"Error fetching actual collections for database '{database_name}': {e}")
+            # logger.error(f"Error fetching actual collections for database '{database_name}': {e}")
             return []
 
 
@@ -946,7 +948,7 @@ class DropDatabaseView(APIView):
             )
 
         except Exception as e:
-            logger.error(f"Error dropping database with ID '{request.data.get('database_id', 'unknown')}': {e}")
+            # logger.error(f"Error dropping database with ID '{request.data.get('database_id', 'unknown')}': {e}")
             return Response(
                 {"success": False, "message": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -977,12 +979,12 @@ class DropDatabaseView(APIView):
                 await asyncio.to_thread(lambda: cluster.drop_database(db_name))
 
                 session.commit_transaction()
-                logger.info(f"Database '{db_name}' dropped successfully with {dropped_collections_count} collections.")
+                # logger.info(f"Database '{db_name}' dropped successfully with {dropped_collections_count} collections.")
                 return dropped_collections_count
 
             except Exception as e:
                 session.abort_transaction()
-                logger.error(f"Error during transaction for dropping database '{db_name}': {e}")
+                # logger.error(f"Error during transaction for dropping database '{db_name}': {e}")
                 raise e
 
 
@@ -1052,7 +1054,7 @@ class DropCollectionsView(APIView):
             )
 
         except Exception as e:
-            logger.error(f"Error dropping collections for database with ID '{request.data.get('database_id', 'unknown')}': {e}")
+            # logger.error(f"Error dropping collections for database with ID '{request.data.get('database_id', 'unknown')}': {e}")
             return Response(
                 {"success": False, "message": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1080,7 +1082,7 @@ class DropCollectionsView(APIView):
                         else:
                             failed_collections.append(coll_name)
                     except Exception as e:
-                        logger.error(f"Error dropping collection '{coll_name}': {e}")
+                        # logger.error(f"Error dropping collection '{coll_name}': {e}")
                         failed_collections.append(coll_name)
 
                 # Update metadata to remove dropped collections
@@ -1091,7 +1093,7 @@ class DropCollectionsView(APIView):
                 )
 
                 session.commit_transaction()
-                logger.info(f"Collections dropped successfully from database '{db_name}': {dropped_collections}")
+                # logger.info(f"Collections dropped successfully from database '{db_name}': {dropped_collections}")
                 return {
                     "dropped_collections": dropped_collections,
                     "failed_collections": failed_collections,
@@ -1099,43 +1101,42 @@ class DropCollectionsView(APIView):
 
             except Exception as e:
                 session.abort_transaction()
-                logger.error(f"Error during transaction for dropping collections from database '{db_name}': {e}")
+                # logger.error(f"Error during transaction for dropping collections from database '{db_name}': {e}")
                 raise e
 
+    # async def drop_collections(self, database_id, db_name, collection_names):
+    #     """Remove specified collections from the database and update metadata."""
+    #     cluster = settings.MONGODB_CLIENT
+    #     metadata_coll = settings.METADATA_COLLECTION
+    #     dropped_collections_count = 0
 
-    async def drop_collections(self, database_id, db_name, collection_names):
-        """Remove specified collections from the database and update metadata."""
-        cluster = settings.MONGODB_CLIENT
-        metadata_coll = settings.METADATA_COLLECTION
-        dropped_collections_count = 0
+    #     # Start an atomic transaction
+    #     session = await asyncio.to_thread(cluster.start_session)
+    #     with session:
+    #         session.start_transaction()
+    #         try:
+    #             # Drop collections from the database
+    #             database = cluster[db_name]
+    #             for coll_name in collection_names:
+    #                 if coll_name in await asyncio.to_thread(database.list_collection_names):
+    #                     await asyncio.to_thread(database[coll_name].drop)
+    #                     dropped_collections_count += 1
 
-        # Start an atomic transaction
-        session = await asyncio.to_thread(cluster.start_session)
-        with session:
-            session.start_transaction()
-            try:
-                # Drop collections from the database
-                database = cluster[db_name]
-                for coll_name in collection_names:
-                    if coll_name in await asyncio.to_thread(database.list_collection_names):
-                        await asyncio.to_thread(database[coll_name].drop)
-                        dropped_collections_count += 1
+    #             # Update metadata to remove dropped collections
+    #             await asyncio.to_thread(
+    #                 metadata_coll.update_one,
+    #                 {"_id": database_id},
+    #                 {"$pull": {"collections": {"name": {"$in": collection_names}}}}
+    #             )
 
-                # Update metadata to remove dropped collections
-                await asyncio.to_thread(
-                    metadata_coll.update_one,
-                    {"_id": database_id},
-                    {"$pull": {"collections": {"name": {"$in": collection_names}}}}
-                )
+    #             session.commit_transaction()
+    #             # logger.info(f"Collections '{', '.join(collection_names)}' dropped successfully from database '{db_name}'.")
+    #             return dropped_collections_count
 
-                session.commit_transaction()
-                logger.info(f"Collections '{', '.join(collection_names)}' dropped successfully from database '{db_name}'.")
-                return dropped_collections_count
-
-            except Exception as e:
-                session.abort_transaction()
-                logger.error(f"Error during transaction for dropping collections from database '{db_name}': {e}")
-                raise e
+    #         except Exception as e:
+    #             session.abort_transaction()
+    #             # logger.error(f"Error during transaction for dropping collections from database '{db_name}': {e}")
+    #             raise e
 
 
 class GetMetadataView(APIView):
@@ -1199,7 +1200,7 @@ class GetMetadataView(APIView):
             )
 
         except Exception as e:
-            logger.error(f"Error fetching metadata for database ID '{database_id}': {e}", exc_info=True)
+            # logger.error(f"Error fetching metadata for database ID '{database_id}': {e}", exc_info=True)
             return Response(
                 {"success": False, "message": "An error occurred while fetching metadata."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
