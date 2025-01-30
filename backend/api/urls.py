@@ -36,5 +36,5 @@ urlpatterns = [
     path('health_check/', HealthCheck.as_view(), name='health_check'),
     path('api/get_metadata/', GetMetadataView.as_view(), name='get_metadata'),
     path('api/drop_database/', DropDatabaseView.as_view(), name='drop_database'),
-    path('api/drop_collections/', DropCollectionsView.as_view(), name='drop_database'),
+    path('api/drop_collections/', DropCollectionsView.as_view(), name='drop_collections'),
 ]
