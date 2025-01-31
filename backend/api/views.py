@@ -1252,3 +1252,4 @@ class HealthCheck(APIView):
                 "message": f"Server is down for {str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
