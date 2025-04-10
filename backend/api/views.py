@@ -3,8 +3,11 @@ This module contains views for handling database and
 collection operations in the Datacube API.
 """
 
+import os
+import re
 import asyncio
 import logging
+import json
 
 from bson.objectid import InvalidId, ObjectId
 from django.conf import settings
@@ -14,16 +17,22 @@ from rest_framework.response import Response
 from rest_framework.serializers import ValidationError
 from rest_framework.views import APIView
 from tenacity import retry, stop_after_attempt, wait_exponential
+# from rest_framework.permissions import IsAuthenticated
 
 from api.helpers import get_metadata_record
 from api.serializers import (AddCollectionPOSTSerializer,
                              AddDatabasePOSTSerializer,
                              AsyncPostDocumentSerializer,
+                             JSonImportSerializer,
     )
+# from .models import Metadata
 
 
-# Use the custom # logger
-# logger = logging.getLogger('database_operations')
+
+
+
+# Use the custom logger
+logger = logging.getLogger('database_operations')
 
 # Cache for database and collection validation
 db_cache = {}
@@ -48,6 +57,15 @@ class CreateDatabaseView(APIView):
     serializer_class = AddDatabasePOSTSerializer
 
     def post(self, request):
+        """
+        Handle POST request to create a new database with collections.
+        
+        Args:
+            request: HTTP request containing database and collection details
+            
+        Returns:
+            Response: Created database details or error message
+        """
         try:
             # Validate request data
             serializer = AddDatabasePOSTSerializer(data=request.data)
@@ -81,8 +99,6 @@ class CreateDatabaseView(APIView):
                 # Insert metadata and initialize the database
                 db_metadata = self.insert_metadata(db_name, collections, session)
                 collection_metadata = asyncio.run(self.create_collections_in_db(db_metadata, collections, session))
-
-                # Commit the transaction
                 session.commit_transaction()
 
                 response_data = {
@@ -97,21 +113,26 @@ class CreateDatabaseView(APIView):
 
                 return Response(response_data, status=status.HTTP_201_CREATED)
 
-            except Exception as inner_exception:
-                # Abort transaction on failure
+            except (ValidationError, InvalidId, asyncio.TimeoutError) as inner_exception:
                 session.abort_transaction()
-                # logger.error(f"Transaction aborted due to error: {inner_exception}", exc_info=True)
+                logger.error(f"Transaction aborted due to error: {inner_exception}", exc_info=True)
                 self.rollback_collections(cluster[db_name], [coll['name'] for coll in collections])
                 raise inner_exception
 
             finally:
                 session.end_session()
 
-        except Exception as e:
-            # logger.error(f"Error creating database: {e}", exc_info=True)
+        except (ValidationError, InvalidId) as e:
+            logger.error(f"Validation error: {e}", exc_info=True)
             return Response(
                 {"success": False, "message": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except asyncio.TimeoutError as e:
+            logger.error(f"Timeout error: {e}", exc_info=True)
+            return Response(
+                {"success": False, "message": "Operation timed out"},
+                status=status.HTTP_504_GATEWAY_TIMEOUT
             )
 
     def check_database_exists(self, db_name):
@@ -149,9 +170,9 @@ class CreateDatabaseView(APIView):
         for coll in collections:
             collection_name = coll["name"]
             await asyncio.to_thread(db.create_collection, collection_name, session=session)
-            # logger.info(
-            #     f"Created collection '{collection_name}' in database '{db_metadata['database_name']}'."
-            # )
+            logger.info(
+                f"Created collection '{collection_name}' in database '{db_metadata['database_name']}'."
+            )
 
             # Initialize each collection with an empty document containing the specified fields
             sample_doc = {field["name"]: None for field in coll["fields"]}
@@ -165,7 +186,7 @@ class CreateDatabaseView(APIView):
                 ]
             })
 
-            # logger.info(f"Inserted sample document with fields {[field['name'] for field in coll['fields']]} into collection '{collection_name}'.")
+            logger.info(f"Inserted sample document with fields {[field['name'] for field in coll['fields']]} into collection '{collection_name}'.")
 
         return collection_metadata
 
@@ -173,7 +194,97 @@ class CreateDatabaseView(APIView):
         """Rollback partially created collections."""
         for coll_name in created_collections:
             db.drop_collection(coll_name)
-            # logger.info(f"Rolled back collection '{coll_name}'")
+            logger.info(f"Rolled back collection '{coll_name}'")
+
+
+
+'''
+# # DONE
+# class CreateDatabaseView(APIView):
+#     """API view to create a new database and collections."""
+#     permission_classes = [IsAuthenticated]
+    
+#     def post(self, request):
+#         """
+#         Handle POST request to create a new database and its collections.
+#         """
+#         data = request.data
+#         db_name = data.get("db_name", "").lower()
+#         collections = data.get("collections", [])
+
+#         if not db_name or not collections:
+#             return Response(
+#                 {"success": False, "message": "Database name and collections are required."},
+#                 status=status.HTTP_400_BAD_REQUEST
+#             )
+        
+#         # Get the user object from the API key (using the middleware)
+#         user = request.user
+
+#         try:
+#             # Fetch or create the user's metadata
+#             metadata, created = Metadata.objects.get_or_create(user_id=user.id)
+
+#             # Check if the database already exists in the user's metadata
+#             if db_name in metadata.databases:
+#                 return Response(
+#                     {"success": False, "message": f"Database '{db_name}' already exists in your account."},
+#                     status=status.HTTP_400_BAD_REQUEST
+#                 )
+
+#             # Start MongoDB operations (using old method)
+#             cluster = settings.MONGODB_CLIENT
+#             # db = cluster[db_name]
+
+#             # Check if the database exists, create it if it doesn't exist
+#             if db_name not in cluster.list_database_names():
+#                 cluster[db_name].command("create")
+#                 logger.info(f"Created database '{db_name}'.")
+
+#             db = cluster[db_name]
+
+#             # Create collections and their metadata
+#             collection_metadata = []
+#             for collection in collections:
+#                 collection_name = collection.get("name")
+#                 if collection_name not in db.list_collection_names():
+#                     db.create_collection(collection_name)
+#                     logger.info(f"Created collection '{collection_name}' in database '{db_name}'.")
+
+#                     # Initialize the collection with sample data
+#                     sample_doc = {field["name"]: None for field in collection.get("fields", [])}
+#                     db[collection_name].insert_one(sample_doc)
+
+#                     # Store collection metadata
+#                     collection_metadata.append({
+#                         "name": collection_name,
+#                         "fields": collection.get("fields", [])
+#                     })
+
+#             # Update metadata (databases and collections)
+#             metadata.databases.append(db_name)
+#             metadata.collections.extend(collection_metadata)
+#             metadata.number_of_databases += 1
+#             metadata.number_of_collections += len(collections)
+#             metadata.save()
+
+#             return Response(
+#                 {
+#                     "success": True,
+#                     "message": f"Database '{db_name}' and collections created successfully.",
+#                     "database": db_name,
+#                     "collections": collection_metadata
+#                 },
+#                 status=status.HTTP_201_CREATED
+#             )
+
+#         except Exception as e:
+#             logger.error(f"Error creating database and collections: {e}", exc_info=True)
+#             return Response(
+#                 {"success": False, "message": str(e)},
+#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
+#             )
+'''
 
 
 class AddCollectionView(APIView):
@@ -262,7 +373,7 @@ class AddCollectionView(APIView):
             except Exception as inner_exception:
                 # Abort transaction on failure
                 session.abort_transaction()
-                # logger.error(f"Transaction aborted due to error: {inner_exception}", exc_info=True)
+                logger.error(f"Transaction aborted due to error: {inner_exception}", exc_info=True)
                 self.rollback_collections(cluster[db_metadata['database_name']], [coll['name'] for coll in new_collections])
                 raise inner_exception
 
@@ -270,7 +381,7 @@ class AddCollectionView(APIView):
                 session.end_session()
 
         except Exception as e:
-            # logger.error(f"Error adding collections: {e}", exc_info=True)
+            logger.error(f"Error adding collections: {e}", exc_info=True)
             return Response(
                 {"success": False, "message": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -330,7 +441,7 @@ class AddCollectionView(APIView):
         for coll in new_collections:
             collection_name = coll["name"]
             await asyncio.to_thread(db.create_collection, collection_name, session=session)
-            # logger.info(f"Created collection '{collection_name}' in database '{db_metadata['database_name']}'.")
+            logger.info(f"Created collection '{collection_name}' in database '{db_metadata['database_name']}'.")
 
             # Initialize each collection with an empty document containing the specified fields
             sample_doc = {field["name"]: None for field in coll["fields"]}
@@ -344,7 +455,7 @@ class AddCollectionView(APIView):
                 ]
             })
 
-            # logger.info(f"Inserted sample document with fields {[field['name'] for field in coll['fields']]} into collection '{collection_name}'.")
+            logger.info(f"Inserted sample document with fields {[field['name'] for field in coll['fields']]} into collection '{collection_name}'.")
 
         return collection_metadata
 
@@ -352,7 +463,7 @@ class AddCollectionView(APIView):
         """Rollback partially created collections."""
         for coll_name in created_collections:
             db.drop_collection(coll_name)
-            # logger.info(f"Rolled back collection '{coll_name}'")
+            logger.info(f"Rolled back collection '{coll_name}'")
 
 
 class DataCrudView(APIView):
@@ -470,7 +581,7 @@ class DataCrudView(APIView):
                 status=status.HTTP_201_CREATED
             )
         except Exception as e:
-            # logger.error("Error in POST operation: %s", e)
+            logger.error("Error in POST operation: %s", e)
             return Response(
                 {"success": False, "message": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -479,69 +590,180 @@ class DataCrudView(APIView):
     async def async_get(self, request):
         """
         Asynchronously handles GET requests to fetch data from a specified collection in the database.
+
         Args:
             request (Request): The request object containing query parameters.
+
         Returns:
             Response: A response object containing the fetched data, pagination details, and success status.
+
         Query Parameters:
             - database_id (str): The ID of the database to query.
             - collection_name (str): The name of the collection to query.
             - filters (str, optional): JSON string of filters to apply to the query. Defaults to "{}".
-            - limit (int, optional): The maximum number of records to return. Defaults to 50.
-            - offset (int, optional): The number of records to skip. Defaults to 0.
+            - page (int, optional): The page number to return. Defaults to 1.
+            - page_size (int, optional): The maximum number of records to return per page. Defaults to 50.
+
         Response:
             - success (bool): Indicates whether the data was fetched successfully.
             - message (str): A message describing the result of the operation.
             - data (list): A list of documents fetched from the collection.
             - pagination (dict): Pagination details including total records, current page, and page size.
+        
         Raises:
             Exception: If an error occurs during the GET operation.
         """
-
         try:
+            # Extract query parameters with default values
             data = request.query_params
             database_id = data.get("database_id")
             collection_name = data.get("collection_name")
-            
-            import json
-
             filters = data.get("filters", "{}")
-            if isinstance(filters, str):
-                try:
-                    filters = json.loads(filters)
-                except json.JSONDecodeError:
-                    filters = {}
-            filters = self.convert_object_id(filters)
+            page = int(data.get("page", 1))       # Use 'page' parameter for pagination
+            page_size = int(data.get("page_size", 50))  # Use 'page_size' for limiting results
 
-            limit = int(data.get("limit", 50))
-            offset = int(data.get("offset", 0))
+            if page < 1 or page_size < 1:
+                raise ValueError("Page and page_size must be positive integers")
+            if not database_id or not collection_name:
+                raise ValueError("Database ID and collection name are required")
 
+            # Load filters safely
+            filters = self.load_filters(filters)
+
+
+            # Validate database and collection names
             valid_fields = await self.validate_collection(database_id, collection_name)
+            
+            # Filter valid fields and ensure 'is_deleted' is included
             filters = {key: value for key, value in filters.items() if key in valid_fields or key == "is_deleted"}
-
             filters["is_deleted"] = filters.get("is_deleted", False)
+
+
+            # Access collection and perform database operations
             collection = await self.get_collection_by_name(database_id, collection_name)
             total_count = await asyncio.to_thread(collection.count_documents, filters)
 
-            cursor = collection.find(filters).skip(offset).limit(limit)
+            # Calculate pagination values
+            start = (page - 1) * page_size
+            cursor = collection.find(filters).skip(start).limit(page_size)
             results = await asyncio.to_thread(list, cursor)
-            for doc in results:
-                doc["_id"] = str(doc["_id"])
 
+            # Convert ObjectId to string for JSON serialization
+            self.convert_ids_to_string(results)
+
+            # Prepare paginated response
             return Response({
                 "success": True,
                 "message": "Data fetched successfully" if results else "No data found",
                 "data": results,
                 "pagination": {
-                    "total_records": total_count,
-                    "current_page": (offset // limit) + 1,
-                    "page_size": limit
+                    "page": page,
+                    "page_size": page_size,
+                    "total": total_count,
+                    "total_pages": (total_count // page_size) + (1 if total_count % page_size > 0 else 0)
                 }
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
-            # logger.error(f"Error in GET operation: {e}")
-            return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            logger.error(f"Error in GET operation: {e}")
+            return Response({"success": False, "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+    def load_filters(self, filters):
+        """
+        Safely load and parse filter parameters from a JSON string.
+        
+        Args:
+            filters (str): JSON string of filters.
+
+        Returns:
+            dict: Parsed filters as a dictionary.
+        """
+        try:
+            filters = json.loads(filters)
+        except json.JSONDecodeError:
+            filters = {}
+        return self.convert_object_id(filters)
+
+    def convert_ids_to_string(self, results):
+        """
+        Convert MongoDB ObjectId to string for JSON serialization.
+
+        Args:
+            results (list): List of documents fetched from the database.
+
+        Returns:
+            None: Results are modified in place.
+        """
+        for doc in results:
+            doc["_id"] = str(doc["_id"])
+
+    # async def async_get(self, request):
+    #     """
+    #     Asynchronously handles GET requests to fetch data from a specified collection in the database.
+    #     Args:
+    #         request (Request): The request object containing query parameters.
+    #     Returns:
+    #         Response: A response object containing the fetched data, pagination details, and success status.
+    #     Query Parameters:
+    #         - database_id (str): The ID of the database to query.
+    #         - collection_name (str): The name of the collection to query.
+    #         - filters (str, optional): JSON string of filters to apply to the query. Defaults to "{}".
+    #         - limit (int, optional): The maximum number of records to return. Defaults to 50.
+    #         - offset (int, optional): The number of records to skip. Defaults to 0.
+    #     Response:
+    #         - success (bool): Indicates whether the data was fetched successfully.
+    #         - message (str): A message describing the result of the operation.
+    #         - data (list): A list of documents fetched from the collection.
+    #         - pagination (dict): Pagination details including total records, current page, and page size.
+    #     Raises:
+    #         Exception: If an error occurs during the GET operation.
+    #     """
+
+    #     try:
+    #         data = request.query_params
+    #         database_id = data.get("database_id")
+    #         collection_name = data.get("collection_name")
+            
+    #         import json
+
+    #         filters = data.get("filters", "{}")
+    #         if isinstance(filters, str):
+    #             try:
+    #                 filters = json.loads(filters)
+    #             except json.JSONDecodeError:
+    #                 filters = {}
+    #         filters = self.convert_object_id(filters)
+
+    #         limit = int(data.get("limit", 50))
+    #         offset = int(data.get("offset", 0))
+
+    #         valid_fields = await self.validate_collection(database_id, collection_name)
+    #         filters = {key: value for key, value in filters.items() if key in valid_fields or key == "is_deleted"}
+
+    #         filters["is_deleted"] = filters.get("is_deleted", False)
+    #         collection = await self.get_collection_by_name(database_id, collection_name)
+    #         total_count = await asyncio.to_thread(collection.count_documents, filters)
+
+    #         cursor = collection.find(filters).skip(offset).limit(limit)
+    #         results = await asyncio.to_thread(list, cursor)
+    #         for doc in results:
+    #             doc["_id"] = str(doc["_id"])
+
+    #         return Response({
+    #             "success": True,
+    #             "message": "Data fetched successfully" if results else "No data found",
+    #             "data": results,
+    #             "pagination": {
+    #                 "total_records": total_count,
+    #                 "current_page": (offset // limit) + 1,
+    #                 "page_size": limit
+    #             }
+    #         }, status=status.HTTP_200_OK)
+
+    #     except Exception as e:
+    #         logger.error(f"Error in GET operation: {e}")
+    #         return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     async def async_put(self, request):
         """
@@ -597,7 +819,7 @@ class DataCrudView(APIView):
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
-            # logger.error(f"Error in PUT operation: {e}")
+            logger.error(f"Error in PUT operation: {e}")
             return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     async def async_delete(self, request):
@@ -648,7 +870,7 @@ class DataCrudView(APIView):
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
-            # logger.error(f"Error in DELETE operation: {e}")
+            logger.error(f"Error in DELETE operation: {e}")
             return Response({"success": False, "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     async def validate_collection(self, database_id, collection_name):
@@ -663,19 +885,25 @@ class DataCrudView(APIView):
             ValueError: If the database with the given ID does not exist.
             ValueError: If the collection with the given name does not exist in the specified database.
         """
-
         metadata_coll = settings.METADATA_COLLECTION
         db_metadata = await asyncio.to_thread(metadata_coll.find_one, {"_id": ObjectId(database_id)})
 
+
         if not db_metadata:
             raise ValueError(f"Database with ID '{database_id}' does not exist.")
-
-        coll_metadata = next((coll for coll in db_metadata["collections"] if coll["name"] == collection_name), None)
+        
+        try:
+            coll_metadata = next((coll for coll in db_metadata["collections_metadata"] if coll["name"] == collection_name), None)
+        except Exception:
+            coll_metadata = next((coll for coll in db_metadata["collections"] if coll["name"] == collection_name), None)
 
         if not coll_metadata:
             raise ValueError(f"Collection '{collection_name}' does not exist in the specified database.")
-
-        return [field["name"] for field in coll_metadata["fields"]]
+    
+        try:
+            return [field["name"] for field in coll_metadata["fields"]]
+        except Exception:
+            return [field for field in coll_metadata["fields"]]
 
     async def get_collection_by_name(self, database_id, collection_name):
         """
@@ -696,8 +924,12 @@ class DataCrudView(APIView):
         if not db_metadata:
             raise ValueError(f"Database with ID '{database_id}' does not exist.")
 
-        if not any(coll["name"] == collection_name for coll in db_metadata["collections"]):
-            raise ValueError(f"Collection '{collection_name}' does not exist in the specified database.")
+        try:
+            if not any(coll["name"] == collection_name for coll in db_metadata["collections_metadata"]):
+                raise ValueError(f"Collection '{collection_name}' does not exist in the specified database.")
+        except Exception:
+            if not any(coll["name"] == collection_name for coll in db_metadata["collections"]):
+                raise ValueError(f"Collection '{collection_name}' does not exist in the specified database.")
 
         return settings.MONGODB_CLIENT[db_metadata["database_name"]][collection_name]
 
@@ -708,11 +940,12 @@ class DataCrudView(APIView):
                 try:
                     filters[key] = ObjectId(value)
                 except Exception as e:
-                    # logger.warning(f"Invalid ObjectId format for key '{key}': {value}. Error: {e}")
+                    logger.warning(f"Invalid ObjectId format for key '{key}': {value}. Error: {e}")
                     pass
         return filters
 
 
+# DONE
 class ListDatabasesView(APIView):
     """
     API view to list all databases in the MongoDB cluster, with optional pagination, filtering, and metadata.
@@ -721,38 +954,25 @@ class ListDatabasesView(APIView):
     def get(self, request, *args, **kwargs):
         """
         Handles GET requests to list databases with pagination and filtering.
-        Args:
-            request (Request): The HTTP request object.
-            *args: Additional positional arguments.
-            **kwargs: Additional keyword arguments.
-        Returns:
-            Response: A paginated response containing database metadata or an error message.
-        Query Parameters:
-            - page (int, optional): The page number for pagination. Defaults to 1.
-            - page_size (int, optional): The number of items per page. Defaults to 10.
-            - filter (str, optional): A filter term to search database names. Defaults to an empty string.
-        Raises:
-            Exception: If an error occurs during the database listing process.
         """
-
         try:
-            # Extract pagination and filtering parameters from query params
+            # Extract pagination and filtering parameters
             page = int(request.query_params.get("page", 1))
-            page_size = int(request.query_params.get("page_size", 10))
+            page_size = int(request.query_params.get("page_size", 50))
             filter_term = request.query_params.get("filter", "")
 
-            # Run async functions to fetch database names and metadata
-            db_names = asyncio.run(self.list_database_names(filter_term))
+            # Fetch database metadata including IDs
+            db_list = asyncio.run(self.get_database_metadata_from_metadata_collection(filter_term))
 
             # Pagination logic
             start = (page - 1) * page_size
             end = start + page_size
-            paginated_dbs = db_names[start:end]
+            paginated_dbs = db_list[start:end]
 
             # Fetch metadata for each paginated database
             db_info = asyncio.run(self.get_database_metadata(paginated_dbs))
 
-            # Prepare paginated response with metadata
+            # Prepare paginated response
             return Response(
                 {
                     "success": True,
@@ -761,46 +981,50 @@ class ListDatabasesView(APIView):
                     "pagination": {
                         "page": page,
                         "page_size": page_size,
-                        "total": len(db_names)
+                        "total": len(db_list)
                     }
                 },
                 status=status.HTTP_200_OK
             )
 
         except Exception as e:
-            # logger.error(f"Error listing databases: {e}")
             return Response(
                 {"success": False, "message": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    async def list_database_names(self, filter_term):
-        """Fetch all database names, optionally filtered by a term."""
-        cluster = settings.MONGODB_CLIENT
+    async def get_database_metadata_from_metadata_collection(self, filter_term):
+        """Fetch all database metadata including ID and name from the metadata collection."""
+        metadata_coll = settings.METADATA_COLLECTION
 
-        # Fetch all database names
-        db_names = await asyncio.to_thread(cluster.list_database_names)
+        # Fetch database metadata from the metadata collection
+        dbs = await asyncio.to_thread(lambda: list(metadata_coll.find({}, {"_id": 1, "database_name": 1})))
+
+        # Apply filtering
         if filter_term:
-            db_names = [db for db in db_names if filter_term.lower() in db.lower()]
-        return db_names
+            dbs = [db for db in dbs if filter_term.lower() in db["database_name"].lower()]
 
-    async def get_database_metadata(self, db_names):
+        # Convert ObjectId to string for serialization
+        return [{"id": str(db["_id"]), "name": db["database_name"]} for db in dbs]
+
+    async def get_database_metadata(self, db_list):
         """Fetch metadata for each database, including collection counts."""
         cluster = settings.MONGODB_CLIENT
         db_info = []
 
         # Fetch metadata for each database
-        for db_name in db_names:
+        for db in db_list:
             try:
-                num_collections = await asyncio.to_thread(lambda: len(cluster[db_name].list_collection_names()))
+                num_collections = await asyncio.to_thread(lambda: len(cluster[db["name"]].list_collection_names()))
                 db_info.append({
-                    "name": db_name,
+                    "id": db["id"],  # Ensure the ID is included
+                    "name": db["name"],
                     "num_collections": num_collections
                 })
-            except Exception as e:
-                # logger.warning(f"Error fetching metadata for database '{db_name}': {e}")
+            except Exception:
                 db_info.append({
-                    "name": db_name,
+                    "id": db["id"],
+                    "name": db["name"],
                     "num_collections": "Error fetching metadata"
                 })
         return db_info
@@ -812,6 +1036,7 @@ class ListCollectionsView(APIView):
     """
 
     def get(self, request, *args, **kwargs):
+        """ Handle GET requests to list collections for a specified database. """
         try:
             # Extract database ID from query parameters
             database_id = request.query_params.get("database_id", "").strip()
@@ -825,63 +1050,77 @@ class ListCollectionsView(APIView):
             # Ensure database_id is a valid ObjectId
             try:
                 database_id = ObjectId(database_id)
-            except InvalidId:
+            except Exception:
                 return Response(
                     {"success": False, "message": "Invalid Database ID format"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
             # Fetch metadata record for the specified database ID
-            metadata_record = asyncio.run(get_metadata_record(database_id))
+            metadata_record = asyncio.run(self.get_metadata_record(database_id))
             if not metadata_record:
                 return Response(
-                    {"success": False, "message": f"Database with ID '{database_id}' does not exist in Datacube", "data": []},
+                    {
+                        "success": False,
+                        "message": f"Database with ID '{database_id}' does not exist in Datacube",
+                        "data": []
+                    },
                     status=status.HTTP_404_NOT_FOUND
                 )
 
-            # Retrieve collection names from metadata
-            collections = metadata_record.get('collections', [])
-            collections = [coll["name"] for coll in collections] if collections else []
+            # Get actual collections from MongoDB
+            actual_collections = asyncio.run(self.get_actual_collections_and_number_documents(metadata_record["database_name"]))
 
-            if not collections:
+            if not actual_collections:
                 return Response(
-                    {"success": False, "message": f"No collections found for database with ID '{database_id}'", "data": []},
+                    {
+                        "success": False,
+                        "message": f"No collections found for database with ID '{database_id}'",
+                        "data": []
+                    },
                     status=status.HTTP_404_NOT_FOUND
                 )
-
-            # Fetch actual collections in the database
-            actual_collections = asyncio.run(self.get_actual_collections(metadata_record["database_name"]))
-            missing_in_db = set(collections) - set(actual_collections)
-
-            # Log any discrepancies
-            if missing_in_db:
-                # logger.warning(f"Collections in metadata but missing in MongoDB: {', '.join(missing_in_db)}")
-                collections = [coll for coll in collections if coll not in missing_in_db]
 
             return Response(
                 {
                     "success": True,
                     "message": "Collections found!",
-                    "collections": collections
+                    "collections": actual_collections
                 },
                 status=status.HTTP_200_OK
             )
 
         except Exception as e:
-            # logger.error(f"Error listing collections for database with ID '{request.query_params.get('database_id', 'unknown')}': {e}")
             return Response(
                 {"success": False, "message": str(e), "data": []},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    async def get_actual_collections(self, database_name):
-        """Fetch the actual list of collections from the database."""
+    async def get_metadata_record(self, database_id):
+        """Fetch metadata record for a given database ID."""
+        metadata_coll = settings.METADATA_COLLECTION
+
+        # Ensure database_id is a valid query format
+        metadata_record = await asyncio.to_thread(lambda: metadata_coll.find_one({"_id": database_id}))
+
+        return metadata_record
+
+    async def get_actual_collections_and_number_documents(self, database_name):
+        """Fetch the actual list of collections from MongoDB."""
         try:
             cluster = settings.MONGODB_CLIENT
             db = cluster[database_name]
-            return await asyncio.to_thread(db.list_collection_names)
+            collections = await asyncio.to_thread(db.list_collection_names)
+            collection_info = []
+
+            for coll_name in collections:
+                collection = db[coll_name]
+                num_documents = await asyncio.to_thread(collection.count_documents, {})
+                collection_info.append({"name": coll_name, "num_documents": num_documents})
+
+            return collection_info
+
         except Exception as e:
-            # logger.error(f"Error fetching actual collections for database '{database_name}': {e}")
             return []
 
 
@@ -948,7 +1187,7 @@ class DropDatabaseView(APIView):
             )
 
         except Exception as e:
-            # logger.error(f"Error dropping database with ID '{request.data.get('database_id', 'unknown')}': {e}")
+            logger.error(f"Error dropping database with ID '{request.data.get('database_id', 'unknown')}': {e}")
             return Response(
                 {"success": False, "message": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -979,12 +1218,12 @@ class DropDatabaseView(APIView):
                 await asyncio.to_thread(lambda: cluster.drop_database(db_name))
 
                 session.commit_transaction()
-                # logger.info(f"Database '{db_name}' dropped successfully with {dropped_collections_count} collections.")
+                logger.info(f"Database '{db_name}' dropped successfully with {dropped_collections_count} collections.")
                 return dropped_collections_count
 
             except Exception as e:
                 session.abort_transaction()
-                # logger.error(f"Error during transaction for dropping database '{db_name}': {e}")
+                logger.error(f"Error during transaction for dropping database '{db_name}': {e}")
                 raise e
 
 
@@ -1054,7 +1293,7 @@ class DropCollectionsView(APIView):
             )
 
         except Exception as e:
-            # logger.error(f"Error dropping collections for database with ID '{request.data.get('database_id', 'unknown')}': {e}")
+            logger.error(f"Error dropping collections for database with ID '{request.data.get('database_id', 'unknown')}': {e}")
             return Response(
                 {"success": False, "message": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1082,7 +1321,7 @@ class DropCollectionsView(APIView):
                         else:
                             failed_collections.append(coll_name)
                     except Exception as e:
-                        # logger.error(f"Error dropping collection '{coll_name}': {e}")
+                        logger.error(f"Error dropping collection '{coll_name}': {e}")
                         failed_collections.append(coll_name)
 
                 # Update metadata to remove dropped collections
@@ -1093,7 +1332,7 @@ class DropCollectionsView(APIView):
                 )
 
                 session.commit_transaction()
-                # logger.info(f"Collections dropped successfully from database '{db_name}': {dropped_collections}")
+                logger.info(f"Collections dropped successfully from database '{db_name}': {dropped_collections}")
                 return {
                     "dropped_collections": dropped_collections,
                     "failed_collections": failed_collections,
@@ -1101,7 +1340,7 @@ class DropCollectionsView(APIView):
 
             except Exception as e:
                 session.abort_transaction()
-                # logger.error(f"Error during transaction for dropping collections from database '{db_name}': {e}")
+                logger.error(f"Error during transaction for dropping collections from database '{db_name}': {e}")
                 raise e
 
     # async def drop_collections(self, database_id, db_name, collection_names):
@@ -1130,12 +1369,12 @@ class DropCollectionsView(APIView):
     #             )
 
     #             session.commit_transaction()
-    #             # logger.info(f"Collections '{', '.join(collection_names)}' dropped successfully from database '{db_name}'.")
+    #             logger.info(f"Collections '{', '.join(collection_names)}' dropped successfully from database '{db_name}'.")
     #             return dropped_collections_count
 
     #         except Exception as e:
     #             session.abort_transaction()
-    #             # logger.error(f"Error during transaction for dropping collections from database '{db_name}': {e}")
+    #             logger.error(f"Error during transaction for dropping collections from database '{db_name}': {e}")
     #             raise e
 
 
@@ -1200,7 +1439,7 @@ class GetMetadataView(APIView):
             )
 
         except Exception as e:
-            # logger.error(f"Error fetching metadata for database ID '{database_id}': {e}", exc_info=True)
+            logger.error(f"Error fetching metadata for database ID '{database_id}': {e}", exc_info=True)
             return Response(
                 {"success": False, "message": "An error occurred while fetching metadata."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1253,3 +1492,167 @@ class HealthCheck(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+
+def sanitize_collection_name(name):
+    """
+    Sanitize the provided collection name to be MongoDB compliant.
+    Replaces non-word characters with underscores and converts the result to lowercase.
+    """
+    return re.sub(r"\W+", "_", name).lower()
+
+
+class DatabaseMixin:
+    """
+    A mixin that provides common helper methods for working with the database metadata
+    and collections.
+    """
+
+    def check_database_exists(self, database_id):
+        """
+        Check if the database exists in the metadata collection.
+        Returns the metadata record if found, else None.
+        """
+        metadata_coll = settings.METADATA_COLLECTION
+        try:
+            db_obj_id = ObjectId(database_id)
+        except InvalidId:
+            raise ValueError("Invalid Database ID format")
+        return metadata_coll.find_one({"_id": db_obj_id})
+
+    async def create_collection_if_not_exists(self, db, collection_name):
+        """
+        Check if the collection exists in the given database.
+        If not, create it, update the metadata with an empty fields list, and return the collection.
+        """
+        # List existing collection names in a thread to avoid blocking
+        existing_collections = await asyncio.to_thread(db.list_collection_names)
+        if collection_name not in existing_collections:
+            # Create the collection in the database.
+            await asyncio.to_thread(db.create_collection, collection_name)
+            
+            # Update the metadata for the database by adding the new collection.
+            # Here, we assume that the metadata document is identified by the "database_name".
+            # You can adjust the filtering criteria if necessary.
+            metadata_coll = settings.METADATA_COLLECTION
+            await asyncio.to_thread(
+                metadata_coll.update_one,
+                {"database_name": db.name},
+                {
+                    "$addToSet": {"collections": {"name": collection_name, "fields": []}},
+                    "$inc": {"number_of_collections": 1}
+                }
+            )
+            logger.info(f"Collection '{collection_name}' created in database '{db.name}' and metadata updated.")
+        return db[collection_name]
+
+
+
+
+class ImportDataView(APIView, DatabaseMixin):
+    """
+    API view to import data into a MongoDB collection from a JSON file.
+    If no collection name is provided, a sanitized version of the JSON file name is used.
+    If the collection does not exist, it is created.
+    """
+
+    def get_serializer_class(self, request, *args, **kwargs):
+        """
+        Returns the serializer class for the import data view.
+        This can be overridden in subclasses to provide different serializers.
+        """
+        if request.method == "POST":
+            return JSonImportSerializer
+        return None
+
+
+    def post(self, request, *args, **kwargs):
+        """
+        Handles POST requests to import data into a MongoDB collection from a JSON file. 
+        """
+        try:
+            serializer = JSonImportSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+
+            # Extract validated data.
+            database_id = serializer.validated_data.get("database_id")
+            collection_name = serializer.validated_data.get("collection_name")
+            json_file = serializer.validated_data.get("json_file")
+
+            # If no collection name is provided, generate one from the JSON file name.
+            if not collection_name:
+                filename = os.path.basename(getattr(json_file, "name", str(json_file)))
+                name, _ = os.path.splitext(filename)
+                collection_name = sanitize_collection_name(name)
+
+            # Check if the database exists.
+            try:
+                db_metadata = self.check_database_exists(database_id)
+            except ValueError as ve:
+                return Response(
+                    {"success": False, "message": str(ve)},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if not db_metadata:
+                return Response(
+                    {
+                        "success": False,
+                        "message": f"Database with ID '{database_id}' does not exist"
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Get the actual MongoDB database handle.
+            db_name = db_metadata.get("database_name")
+            db = settings.MONGODB_CLIENT[db_name]
+
+            # Use the helper to get (or create) the collection.
+            collection = asyncio.run(self.create_collection_if_not_exists(db, collection_name))
+
+            # Read the JSON file.
+            if hasattr(json_file, "read"):
+                file_content = json_file.read()
+                data = json.loads(file_content)
+            else:
+                with open(json_file, "r") as file:
+                    data = json.load(file)
+
+            inserted_count = self.insert_data_into_collection(collection, data)
+
+            return Response(
+                {
+                    "success": True,
+                    "message": f"{inserted_count} documents imported successfully into '{collection_name}'"
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            logger.error(f"Error importing data: {e}", exc_info=True)
+            return Response(
+                {"success": False, "message": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def insert_data_into_collection(self, collection, data):
+        """
+        Insert data into the specified MongoDB collection.
+        If the data is not a list, it will be wrapped into a list.
+        """
+        if not isinstance(data, list):
+            data = [data]
+
+        # Run asynchronous insertion in a synchronous manner.
+        result = asyncio.run(self.insert_data(collection, data))
+        return len(result.inserted_ids) if result and result.inserted_ids else 0
+
+    async def insert_data(self, collection, data):
+        """
+        Asynchronously insert data into the MongoDB collection.
+        """
+        try:
+            result = await asyncio.to_thread(collection.insert_many, data)
+            return result
+        except Exception as e:
+            logger.error(f"Error inserting data into collection: {e}", exc_info=True)
+            raise e
