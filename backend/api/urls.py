@@ -20,7 +20,7 @@ Each endpoint is associated with a specific view that handles the request.
 from django.urls import path
 from .views import (AddCollectionView, CreateDatabaseView, DataCrudView,
                     DropCollectionsView, DropDatabaseView, GetMetadataView,
-                    HealthCheck, ListCollectionsView, ListDatabasesView,
+                    HealthCheck, ListCollectionsView, ListDatabasesView, ImportDataView,
                     api_home)
 
 
@@ -37,4 +37,5 @@ urlpatterns = [
     path('api/get_metadata/', GetMetadataView.as_view(), name='get_metadata'),
     path('api/drop_database/', DropDatabaseView.as_view(), name='drop_database'),
     path('api/drop_collections/', DropCollectionsView.as_view(), name='drop_collections'),
+    path('api/import_data/', ImportDataView.as_view(), name='import_data'),
 ]

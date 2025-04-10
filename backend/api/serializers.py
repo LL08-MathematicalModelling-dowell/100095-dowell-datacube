@@ -291,3 +291,9 @@ class AsyncPostDocumentSerializer(serializers.Serializer):
             document.setdefault("is_deleted", False)  # Default to False if not provided
 
         return attrs
+
+
+class JSonImportSerializer(serializers.Serializer):
+    database_id = serializers.CharField()
+    collection_name = serializers.CharField(required=False)
+    json_file = serializers.FileField(required=True)
