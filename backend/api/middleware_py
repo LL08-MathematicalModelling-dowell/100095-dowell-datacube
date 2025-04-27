@@ -4,7 +4,7 @@ from django.conf import settings
 from django.utils.deprecation import MiddlewareMixin
 import requests
 
-logger = logging.getLogger(__name__)
+# logger = logging.get# logger(__name__)
 
 AUTHENTICATION_SERVICE_URL = settings.AUTHENTICATION_SERVICE_URL  # Ensure this is set in settings
 
@@ -37,5 +37,5 @@ class APIKeyAuthenticationMiddleware(MiddlewareMixin):
                 return JsonResponse({"success": False, "message": "Invalid API key."}, status=403)
         
         except requests.exceptions.RequestException as e:
-            logger.error(f"API key validation error: {e}")
+            # logger.error(f"API key validation error: {e}")
             return JsonResponse({"success": False, "message": "Authentication service unavailable."}, status=503)
