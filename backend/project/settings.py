@@ -6,14 +6,6 @@ from pathlib import Path
 from pymongo import MongoClient
 
 
-import mongoengine
-
-# MongoDB Configuration (update with your actual MongoDB URI)
-mongoengine.connect(
-    db='datacube_db',  # The database name
-    host='mongodb://localhost:27017'  # MongoDB connection URI
-)
-
 # Base directory setup
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE_DIR_PATH = Path(BASE_DIR)
@@ -31,11 +23,14 @@ MONGODB_CLIENT = MongoClient(MONGODB_URI)
 METADATA_DB = MONGODB_CLIENT[MONGODB_DATABASE]
 METADATA_COLLECTION = METADATA_DB[MONGODB_COLLECTION]
 
-AUTHENTICATION_SERVICE_URL = 'http://localhost:8000/'
 
 # Django Settings
+DEBUG = False
 SECRET_KEY = 'django-insecure-%vs+xh0tfg#)hoyl!!_j7epqz5+56@3pw1*k0_k90&6lnwvfb#'
-DEBUG = True
+
+# if os.environ.get('DEBUG') == 'False':
+#     DEBUG = False
+#     SECRET_KEY = os.environ.get('SECRET_KEY', SECRET_KEY)
 
 INSTALLED_APPS = [
     # Django apps
@@ -57,20 +52,6 @@ INSTALLED_APPS = [
 
 SITE_ID = 1
 REST_USE_JWT = True
-
-
-
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-#         'USER': '',
-#         'PASSWORD': '',
-#         'HOST': '',
-#         'PORT': '',
-#     }
-# }
-
 
 
 
@@ -159,46 +140,52 @@ REST_FRAMEWORK = {
 
 # Logging Configuration
 BASE_DIR = Path(__file__).resolve().parent.parent
-LOGS_DIR = os.path.join(BASE_DIR, 'logs')
-if not os.path.exists(LOGS_DIR):
-    os.makedirs(LOGS_DIR, exist_ok=True)
+LOGS_DIR = ""
+LOGGING = {}
 
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {message}',
-            'style': '{',
+
+# LOGS_DIR = os.path.join(BASE_DIR, 'logs')
+if DEBUG:
+    LOGS_DIR = os.path.join(BASE_DIR, 'logs')
+    if not os.path.exists(LOGS_DIR):
+        os.makedirs(LOGS_DIR, exist_ok=True)
+
+    LOGGING = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {
+            'verbose': {
+                'format': '{levelname} {asctime} {module} {message}',
+                'style': '{',
+            },
+            'simple': {
+                'format': '{levelname} {message}',
+                'style': '{',
+            },
         },
-        'simple': {
-            'format': '{levelname} {message}',
-            'style': '{',
+        'handlers': {
+            'console': {
+                'level': 'DEBUG',
+                'class': 'logging.StreamHandler',
+                'formatter': 'simple',
+            },
+            'file': {
+                'level': 'INFO',
+                'class': 'logging.FileHandler',
+                'filename': os.path.join(LOGS_DIR, 'database_operations.log'),
+                'formatter': 'verbose',
+            },
         },
-    },
-    'handlers': {
-        'console': {
-            'level': 'DEBUG',
-            'class': 'logging.StreamHandler',
-            'formatter': 'simple',
+        'loggers': {
+            'django': {
+                'handlers': ['console', 'file'],
+                'level': 'INFO',
+                'propagate': True,
+            },
+            'database_operations': {
+                'handlers': ['console', 'file'],
+                'level': 'DEBUG',
+                'propagate': False,
+            },
         },
-        'file': {
-            'level': 'INFO',
-            'class': 'logging.FileHandler',
-            'filename': os.path.join(LOGS_DIR, 'database_operations.log'),
-            'formatter': 'verbose',
-        },
-    },
-    'loggers': {
-        'django': {
-            'handlers': ['console', 'file'],
-            'level': 'INFO',
-            'propagate': True,
-        },
-        'database_operations': {
-            'handlers': ['console', 'file'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },
-    },
-}
+    }
