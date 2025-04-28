@@ -23,7 +23,13 @@ MONGODB_CLIENT = MongoClient(MONGODB_URI)
 METADATA_DB = MONGODB_CLIENT[MONGODB_DATABASE]
 METADATA_COLLECTION = METADATA_DB[MONGODB_COLLECTION]
 
-
+# sqlite default
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+    }    
+}
 # Django Settings
 DEBUG = False
 SECRET_KEY = 'django-insecure-%vs+xh0tfg#)hoyl!!_j7epqz5+56@3pw1*k0_k90&6lnwvfb#'
