@@ -31,8 +31,6 @@ services:
       - ./frontend:/usr/src/app
     networks:
       - app-network
-    # depends_on:
-    #   - backend
     env_file:
       - ./frontend/.env
       - ./frontend/.env.local
