@@ -103,3 +103,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.next/
+*.tsbuildinfo
+*.d.ts
+*.js.map
+*.jsx.map
+*.ts.map
+*.tsx.map
+*.js.map
+*.jsx.map
+
+
