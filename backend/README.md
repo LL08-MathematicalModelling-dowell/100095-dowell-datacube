@@ -201,9 +201,7 @@ curl -X DELETE https://datacube.uxlivinglab.online/api/crud/ \
 
 ## Error Handling
 
-All API responses include a success status and a message. Errors return appropriate HTTP status codes.
-
-Example:
+All API responses include a success status and a message. Errors return appropriate HTTP status codes. Example:
 
 ```json
 {

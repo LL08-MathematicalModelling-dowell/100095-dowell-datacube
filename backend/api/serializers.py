@@ -291,27 +291,3 @@ class AsyncPostDocumentSerializer(serializers.Serializer):
             document.setdefault("is_deleted", False)  # Default to False if not provided
 
         return attrs
-
-class ListDatabasesPOSTSerializer(serializers.Serializer):
-    page      = serializers.IntegerField(default=1, min_value=1)
-    page_size = serializers.IntegerField(default=50, min_value=1)
-    # This allows any valid JSON object as a filter
-    filter    = serializers.JSONField(default=dict)
-
-class JSonImportSerializer(serializers.Serializer):
-    database_id = serializers.CharField()
-    collection_name = serializers.CharField(required=False)
-    json_file = serializers.FileField(required=True)
-
-
-class UpdateDocumentSerializer(serializers.Serializer):
-    database_id = serializers.CharField(required=True)
-    collection_name = serializers.CharField(required=True)
-    filters = serializers.JSONField(required=True)
-    update_data = serializers.JSONField(required=True)
-
-class DeleteDocumentSerializer(serializers.Serializer):
-    database_id = serializers.CharField(required=True)
-    collection_name = serializers.CharField(required=True)
-    filters = serializers.JSONField(required=True)
-    soft_delete = serializers.BooleanField(default=True)

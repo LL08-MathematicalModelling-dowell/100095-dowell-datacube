@@ -1,4 +1,4 @@
-version: "3.9"
+version: '3.9'
 
 services:
   backend:
@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile.prod
     container_name: backend_prod
     ports:
-      - "8000:8000"
+      - '8000:8000'
     volumes:
       - ./backend:/usr/src/app
     restart: always
@@ -18,6 +18,7 @@ services:
     command: >
       sh -c "python manage.py migrate &&
              gunicorn --workers=3 --bind=0.0.0.0:8000 project.wsgi:application"
+
 
   frontend:
     build:
@@ -37,10 +38,24 @@ services:
       - ./frontend/.env
       - ./frontend/.env.local
 
+
 networks:
   app-network:
-    external: true # Use the external network created manually
+    external: true  # Use the external network created manually
 
+
+  # frontend:
+  #   build: ./frontend
+  #   container_name: frontend_prod
+  #   ports:
+  #     - '80:80'
+  #   restart: always
+  #   volumes:
+  #     - ./frontend:/usr/src/app
+  #   networks:
+  #     - queue-net
+  #   depends_on:
+  #     - backend
 
   # mongo:
   #   image: mongo
@@ -51,3 +66,5 @@ networks:
   #     - '27017:27017'
   #   networks:
   #     - queue-net
+
+  

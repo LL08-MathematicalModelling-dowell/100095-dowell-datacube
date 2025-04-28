@@ -4,28 +4,24 @@ on:
   push:
     branches:
       - main
+
 jobs:
   deploy:
-    name: Deploy Aplication
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - name: Adding Known Hosts
-        run: |
-          mkdir ~/.ssh
-          chmod 700 ~/.ssh
-          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
-          # ssh-keyscan -p 22 -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-      - name: Deploy with github
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.USER_NAME }}
-          key: ${{secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT }}
-          script: |
+      - name: Install sshpass
+        run: sudo apt-get install -y sshpass
+
+      - name: Deploy to Server
+        env:
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          sshpass -p $SSH_PASSWORD ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             cd ${{ secrets.WORKING_DIR }}
             git pull origin main
-            docker-compose -f docker-compose.prod down && docker-compose -f docker-compose.prod up -d --build
+            # docker-compose up -d --build
+            echo "Deployment successful"
+          EOF

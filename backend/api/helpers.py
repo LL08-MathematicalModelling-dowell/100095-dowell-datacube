@@ -7,8 +7,8 @@ from rest_framework import status
 from django.conf import settings
 from rest_framework.response import Response
 
-# Use the custom # logger
-# logger = logging.get# logger('database_operations')
+# Use the custom logger
+logger = logging.getLogger('database_operations')
 
 PAYMENT_API_URL = 'https://100105.pythonanywhere.com/api/v3/process-services/?type=api_service&api_key='
 
@@ -45,5 +45,5 @@ async def get_metadata_record(database_id):
     try:
         return await asyncio.to_thread(settings.METADATA_COLLECTION.find_one, {"_id": database_id})
     except Exception as e:
-        # logger.error(f"Error fetching metadata record for database ID '{database_id}': {e}")
+        logger.error(f"Error fetching metadata record for database ID '{database_id}': {e}")
         return None

@@ -1,417 +1,406 @@
-Dowell DataCube API Documentation Template
-<!-- load template tags -->
-{% load static %} {% load i18n %} {% load l10n %} {% load tz from
-django.utils.timezone %}
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
       content="Comprehensive API documentation for the Dowell DataCube."
     />
     <meta name="author" content="Dowell Team" />
-    <title>Dowell DataCube API Docs</title>
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap"
     />
+    <title>Dowell DataCube API Documentation</title>
     <style>
-      /* --------------------
-       Variables
-    -------------------- */
-      :root {
-        --bg: #121212;
-        --bg-alt: #1e1e1e;
-        --fg: #e0e0e0;
-        --fg-muted: #bbbbbb;
-        --accent: #00ff88;
-        --accent-dark: #00cc66;
-        --border-radius: 6px;
-        --font-sans: "Roboto", sans-serif;
-        --sidebar-width: 240px;
-      }
-
-      /* --------------------
-       Global
-    -------------------- */
-      * {
-        box-sizing: border-box;
-      }
+      /* General Styling
       body {
+        font-family: "Roboto", sans-serif;
+        background-color: #1a1a1a;
+        color: #f5f5f5;
         margin: 0;
         padding: 0;
-        font-family: var(--font-sans);
-        background-color: var(--bg);
-        color: var(--fg);
-        line-height: 1.6;
-        scroll-behavior: smooth;
-      }
-      a {
-        color: var(--accent);
-        text-decoration: none;
-      }
-      a:hover {
-        color: var(--accent-dark);
       }
 
-      /* --------------------
-       Header
-    -------------------- */
       header {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 64px;
-        background: linear-gradient(135deg, #0f0f0f, #1a1a1a);
-        border-bottom: 3px solid var(--accent);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
+        background-color: #0f0f0f;
+        padding: 20px;
+        text-align: center;
+        border-bottom: 2px solid #00ff88;
       }
+
       header h1 {
+        font-size: 42px;
+        color: #00ff88;
         margin: 0;
-        font-size: 24px;
-        font-weight: 700;
-        color: var(--accent);
+        text-transform: uppercase;
       }
+
       header p {
-        margin: 0 0 0 16px;
-        font-size: 14px;
-        color: var(--fg-muted);
+        color: #cccccc;
+        font-weight: 400;
+        margin: 10px 0 0 0;
       }
 
-      /* --------------------
-       Sidebar (Bookmarks)
-    -------------------- */
-      #sidebarToggle {
-        position: fixed;
-        top: 18px;
-        left: 18px;
-        background: none;
-        border: none;
-        color: var(--accent);
-        font-size: 24px;
-        cursor: pointer;
-        z-index: 1100;
-        display: none;
-      }
-      @media (max-width: 900px) {
-        #sidebarToggle {
-          display: block;
-        }
-      }
-
-      #sidebar {
-        position: fixed;
-        top: 64px; /* below header */
-        left: 0;
-        width: var(--sidebar-width);
-        bottom: 0;
-        background: var(--bg-alt);
-        border-right: 1px solid #333;
-        padding: 16px;
-        overflow-y: auto;
-        transition: transform 0.3s ease;
-      }
-      body.sidebar-collapsed #sidebar {
-        transform: translateX(-100%);
-      }
-      #sidebar h2 {
-        font-size: 16px;
-        margin-top: 0;
-        margin-bottom: 12px;
-        color: var(--accent);
-        text-transform: uppercase;
-      }
-      #sidebar ul {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-      }
-      #sidebar li {
-        margin-bottom: 8px;
-      }
-      #sidebar a {
-        color: var(--fg);
-        font-size: 14px;
-        font-weight: 500;
-      }
-      #sidebar a:hover {
-        color: var(--accent);
-      }
-
-      /* --------------------
-       Main content
-    -------------------- */
       main {
-        margin-top: 80px; /* header */
-        margin-left: calc(var(--sidebar-width) + 32px);
-        padding: 0 32px 64px;
-        max-width: 900px;
-      }
-      @media (max-width: 900px) {
-        main {
-          margin-left: 16px;
-          margin-right: 16px;
-        }
+        max-width: 1200px;
+        margin: 40px auto;
+        padding: 20px;
       }
 
-      section.api-section {
-        margin-bottom: 64px;
-        padding-bottom: 32px;
-        border-bottom: 1px solid #333;
-      }
-      section.api-section:last-child {
-        border-bottom: none;
-      }
-      section.api-section h2 {
-        font-size: 22px;
-        margin-top: 0;
-        color: var(--accent);
-        display: flex;
-        align-items: center;
-      }
-      section.api-section h2 .anchor {
-        margin-left: 8px;
-        font-size: 18px;
-        visibility: hidden;
-        text-decoration: none;
-        color: var(--fg-muted);
-      }
-      section.api-section h2:hover .anchor {
-        visibility: visible;
-      }
-      section .api-description {
-        margin-top: 8px;
-        color: var(--fg-muted);
-      }
-      section .api-endpoint {
-        margin: 12px 0;
-        font-family: monospace;
-        background: #282828;
-        padding: 8px 12px;
-        border-radius: var(--border-radius);
-        display: inline-block;
-      }
-      section .label-method {
-        font-weight: 700;
+      h2 {
+        color: #00ff88;
+        font-size: 28px;
+        margin-bottom: 20px;
         text-transform: uppercase;
-        color: var(--bg);
-        padding: 2px 6px;
-        border-radius: 4px;
-        margin-right: 8px;
-      }
-      /* color code labels */
-      .label-method.GET {
-        background: #007acc;
-      }
-      .label-method.POST {
-        background: #00a000;
-      }
-      .label-method.PUT {
-        background: #ffaa00;
-      }
-      .label-method.DELETE {
-        background: #bb4444;
       }
 
-      /* --------------------
-       Code Tabs & Blocks
-    -------------------- */
-      .tabs {
-        display: flex;
-        margin-top: 16px;
+      .api-list {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 20px;
       }
-      .tabs .tab {
-        padding: 6px 12px;
-        background: #282828;
-        color: var(--fg);
+
+      .api-item {
+        background-color: #262626;
+        padding: 20px;
+        border-left: 6px solid #00ff88;
+        border-radius: 8px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+      }
+
+      .api-item:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+      }
+
+      .api-name {
+        font-size: 22px;
+        color: #f5f5f5;
+        margin-bottom: 10px;
+        font-weight: bold;
+      }
+
+      .api-description {
+        font-size: 16px;
+        color: #cccccc;
+        margin-bottom: 15px;
+      }
+
+      .api-url {
+        font-size: 16px;
+        color: #00ff88;
+        margin-bottom: 10px;
+      }
+
+      .collapsible {
+        background-color: #333333;
+        color: #00ff88;
         cursor: pointer;
-        margin-right: 4px;
-        border-top-left-radius: var(--border-radius);
-        border-top-right-radius: var(--border-radius);
+        padding: 10px;
+        width: 100%;
+        border: none;
+        text-align: left;
+        outline: none;
+        font-size: 16px;
+        font-weight: bold;
+        border-radius: 4px;
+        margin-bottom: 10px;
+      }
+
+      .collapsible:hover {
+        background-color: #444444;
+      }
+
+      .content {
+        padding: 0 18px;
+        display: none;
+        overflow: hidden;
+        background-color: #333333;
+        border-radius: 4px;
+        margin-bottom: 15px;
+      }
+
+      .request-body,
+      .response-body,
+      .request-params {
+        background-color: #2e2e2e;
+        padding: 15px;
+        border-radius: 5px;
+        color: #bfbfbf;
+        font-size: 14px;
+        white-space: pre-wrap;
+        margin-top: 10px;
+      }
+
+      footer {
+        background-color: #0f0f0f;
+        text-align: center;
+        padding: 15px;
+        color: #cccccc;
+        margin-top: 40px;
         font-size: 14px;
       }
-      .tabs .tab.active {
-        background: var(--bg-alt);
-        color: var(--accent);
+
+      a {
+        color: #00ff88;
+        text-decoration: none;
+      }
+
+      @media (max-width: 768px) {
+        .api-list {
+          grid-template-columns: 1fr; 
+        }
+      } */
+      /* General Styling */
+      body {
+        font-family: "Roboto", sans-serif;
+        background-color: #121212;
+        color: #e0e0e0;
+        margin: 0;
+        padding: 0;
+        line-height: 1.6;
+      }
+
+      /* Header */
+      header {
+        background: linear-gradient(135deg, #0f0f0f, #1a1a1a);
+        padding: 25px;
+        text-align: center;
+        border-bottom: 3px solid #00ff88;
+      }
+
+      header h1 {
+        font-size: 38px;
+        color: #00ff88;
+        margin: 0;
+        font-weight: 700;
+      }
+
+      header p {
+        color: #bbbbbb;
+        font-size: 18px;
+        margin-top: 8px;
+      }
+
+      /* Main Content */
+      main {
+        max-width: 1100px;
+        margin: 50px auto;
+        padding: 20px;
+      }
+
+      /* Section Titles */
+      h2 {
+        color: #00ff88;
+        font-size: 26px;
+        margin-bottom: 25px;
+        border-left: 5px solid #00ff88;
+        padding-left: 12px;
+        text-transform: uppercase;
         font-weight: 600;
       }
-      .code-block {
-        background: #1e1e1e;
-        border: 1px solid #333;
-        border-top: none;
-        border-radius: 0 0 var(--border-radius) var(--border-radius);
-        padding: 16px;
-        overflow-x: auto;
-        font-size: 13px;
-        line-height: 1.4;
-      }
-      .code-block pre {
-        margin: 0;
-        color: #f8f8f2;
+
+      /* API List Container */
+      .api-list {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 20px;
       }
 
-      /* --------------------
-       Footer
-    -------------------- */
-      footer {
-        text-align: center;
-        padding: 24px;
-        color: var(--fg-muted);
-        border-top: 1px solid #333;
-        font-size: 13px;
+      /* API Item Styling */
+      .api-item {
+        background-color: #1e1e1e;
+        padding: 20px;
+        border-left: 6px solid #00ff88;
+        border-radius: 10px;
+        box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
       }
+
+      .api-item:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+      }
+
+      .api-name {
+        font-size: 22px;
+        color: #ffffff;
+        font-weight: 700;
+        margin-bottom: 10px;
+      }
+
+      .api-description {
+        font-size: 16px;
+        color: #bbbbbb;
+        margin-bottom: 12px;
+      }
+
+      .api-url a {
+        font-size: 16px;
+        color: #00ff88;
+        font-weight: 500;
+        text-decoration: none;
+        transition: color 0.3s ease;
+      }
+
+      .api-url a:hover {
+        color: #00cc66;
+      }
+
+      /* Collapsible Sections */
+      .collapsible {
+        background-color: #282828;
+        color: #00ff88;
+        cursor: pointer;
+        padding: 12px 15px;
+        width: 100%;
+        border: none;
+        text-align: left;
+        font-size: 16px;
+        font-weight: 600;
+        border-radius: 6px;
+        margin-bottom: 8px;
+        transition: background 0.3s ease, transform 0.2s ease;
+      }
+
+      .collapsible:hover {
+        background-color: #333333;
+        transform: scale(1.02);
+      }
+
+      .content {
+        padding: 0 18px;
+        display: none;
+        overflow: hidden;
+        background-color: #252525;
+        border-radius: 6px;
+        margin-bottom: 12px;
+        padding: 15px;
+        font-size: 14px;
+        color: #cfcfcf;
+      }
+
+      /* API Data Blocks */
+      .request-body,
+      .response-body,
+      .request-params {
+        background-color: #2a2a2a;
+        padding: 12px;
+        border-radius: 6px;
+        color: #cfcfcf;
+        font-size: 14px;
+        white-space: pre-wrap;
+        margin-top: 10px;
+        border-left: 4px solid #00ff88;
+      }
+
+      /* Footer */
+      footer {
+        background-color: #0f0f0f;
+        text-align: center;
+        padding: 20px;
+        color: #bbbbbb;
+        margin-top: 50px;
+        font-size: 14px;
+        border-top: 2px solid #00ff88;
+      }
+
       footer a {
-        color: var(--accent);
+        color: #00ff88;
+        font-weight: 500;
+        text-decoration: none;
+      }
+
+      footer a:hover {
+        color: #00cc66;
+      }
+
+      /* Responsive Design */
+      @media (max-width: 768px) {
+        .api-list {
+          grid-template-columns: 1fr;
+        }
+
+        header h1 {
+          font-size: 32px;
+        }
+
+        h2 {
+          font-size: 22px;
+        }
       }
     </style>
   </head>
   <body>
-    <button id="sidebarToggle">☰</button>
     <header>
       <h1>Dowell DataCube API</h1>
-      <p>Manage your databases, collections & documents – all via REST.</p>
+      <p>
+        Your go-to resource for managing data in the Dowell DataCube. Explore
+        our API endpoints below.
+      </p>
     </header>
 
-    <nav id="sidebar">
-      <h2>Quick Links</h2>
-      <ul>
-        {% for api in apis %}
-        <li><a href="#{{ api.name|slugify }}">{{ api.name }}</a></li>
-        {% endfor %}
-      </ul>
-    </nav>
-
     <main>
-      {% for api in apis %}
-      <section id="{{ api.name|slugify }}" class="api-section">
-        <h2>
-          {{ api.name }}
-          <a class="anchor" href="#{{ api.name|slugify }}">🔗</a>
-        </h2>
-        <p class="api-description">{{ api.description }}</p>
+      <section>
+        <h2>Available APIs</h2>
+        <ul class="api-list">
+          {% for api in apis %}
+          <li class="api-item">
+            <div class="api-name">{{ api.name }}</div>
+            <div class="api-description">{{ api.description }}</div>
+            <div class="api-url"><a href="{{ api.url }}">{{ api.url }}</a></div>
 
-        {% for method in api.methods %}
-        <div>
-          <span class="label-method {{ method.method }}"
-            >{{ method.method }}</span
-          >
-          <code class="api-endpoint">
-            {{ api.url }} {% if method.params %} ?{% for k,v in method.params.items %} 
-            {{ k }}={{ v }} 
-            {% if not forloop.last %}&{% endif %}{% endfor %} {% endif %}
-          </code>
-        </div>
-
-        <!-- Request Parameters -->
-        {% if method.params %}
-        <h4>Request Parameters</h4>
-        <div class="code-block">
-          <pre>{{ method.params|safe }}</pre>
-        </div>
-        {% endif %}
-
-        <!-- Request Body -->
-        {% if method.body %}
-        <h4>Request Body</h4>
-        <div class="code-block">
-          <pre>{{ method.body|safe }}</pre>
-        </div>
-        {% endif %}
-
-        <!-- Sample Code Tabs -->
-        <div class="tabs">
-          <div class="tab active" data-lang="curl">cURL</div>
-          <div class="tab" data-lang="python">Python</div>
-          <div class="tab" data-lang="javascript">JavaScript</div>
-        </div>
-        <div class="code-block sample-curl">
-          <pre><code>curl -X {{ method.method }}
-  "{{ api.url }}{% if method.params %}?{% for k,v in method.params.items %}{{ k }}={{ v }}{% if not forloop.last %}&{% endif %}{% endfor %}{% endif %}}" \
-  -H "Content-Type: application/json"{% if method.body %} \
-  -d '{{ method.body|escapejs }}'{% endif %}
-</code></pre>
-        </div>
-        <div class="code-block sample-python" style="display: none">
-          <pre><code>import requests
-
-url = "{{ api.url }}"{% if method.params %}
-params = {{ method.params|safe }}{% endif %}{% if method.body %}
-json_data = {{ method.body|safe }}{% endif %}
-
-response = requests.{{ method.method|lower }}(
-    url{% if method.params %}, params=params{% endif %}{% if method.body %}, json=json_data{% endif %}
-)
-
-print(response.status_code)
-print(response.json())
-</code></pre>
-        </div>
-        <div class="code-block sample-javascript" style="display: none">
-          <pre><code>const url = new URL("{{ api.url }}");{% if method.params %}
-Object.entries({{ method.params|safe }}).forEach(([k,v]) =&gt; url.searchParams.append(k,v));{% endif %}
-
-fetch(url{% if method.body %}, {
-  method: "{{ method.method }}",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({{ method.body|safe }})
-}{% endif %})
-  .then(res =&gt; res.json())
-  .then(data =&gt; console.log(data))
-  .catch(err =&gt; console.error(err));
-</code></pre>
-        </div>
-
-        <!-- Response Example -->
-        {% if method.response %}
-        <h4>Response Example</h4>
-        <div class="code-block">
-          <pre>{{ method.response|safe }}</pre>
-        </div>
-        {% endif %} {% endfor %}
+            {% if api.request_params %}
+            <button class="collapsible">Request Parameters</button>
+            <div class="content">
+              <div class="request-params">
+                <pre>{{ api.request_params }}</pre>
+              </div>
+            </div>
+            {% endif %} {% for method, body in api.request_bodies.items %}
+            <button class="collapsible">{{ method }} Request Body</button>
+            <div class="content">
+              <div class="request-body">
+                <pre>{{ body }}</pre>
+              </div>
+            </div>
+            {% endfor %} {% if api.responses %}
+            <button class="collapsible">Example Responses</button>
+            <div class="content">
+              {% for response_title, response_body in api.responses.items %}
+              <div class="response-body">
+                <strong>{{ response_title }}:</strong>
+                <pre>{{ response_body }}</pre>
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
       </section>
-      {% endfor %}
     </main>
 
     <footer>
-      &copy; 2024 Dowell DataCube &nbsp;|&nbsp;
-      <a href="mailto:support@dowell.com">support@dowell.com</a>
+      <p>&copy; 2024 Dowell DataCube | API Documentation</p>
+      <p>
+        For support, please contact us at
+        <a href="mailto:support@dowell.com">support@dowell.com</a>.
+      </p>
     </footer>
 
     <script>
-      // Sidebar toggle
-      document.getElementById("sidebarToggle").addEventListener("click", () => {
-        document.body.classList.toggle("sidebar-collapsed");
-      });
-
-      // Code‐tabs logic
-      document.querySelectorAll(".tabs").forEach((tabContainer) => {
-        const tabs = tabContainer.querySelectorAll(".tab");
-        tabs.forEach((tab) => {
-          tab.addEventListener("click", () => {
-            const lang = tab.getAttribute("data-lang");
-            // deactivate siblings
-            tabs.forEach((t) => t.classList.remove("active"));
-            tab.classList.add("active");
-            // show/hide code blocks
-            const section = tabContainer.closest("section");
-            section
-              .querySelectorAll(
-                ".sample-curl, .sample-python, .sample-javascript"
-              )
-              .forEach(
-                (el) =>
-                  (el.style.display = el.classList.contains(`sample-${lang}`)
-                    ? "block"
-                    : "none")
-              );
-          });
+      // JavaScript for collapsible sections
+      const collapsibles = document.querySelectorAll(".collapsible");
+      collapsibles.forEach((collapsible) => {
+        collapsible.addEventListener("click", function () {
+          this.classList.toggle("active");
+          const content = this.nextElementSibling;
+          content.style.display =
+            content.style.display === "block" ? "none" : "block";
         });
       });
     </script>
