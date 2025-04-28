@@ -21,21 +21,21 @@ services:
 
   frontend:
     build:
-      context: ./datacubeweb
+      context: ./frontend
       dockerfile: Dockerfile.prod
     container_name: frontend_prod
     ports:
       - "80:80"
     restart: always
     volumes:
-      - ./datacubeweb:/usr/src/app
+      - ./frontend:/usr/src/app
     networks:
       - app-network
-    depends_on:
-      - backend
+    # depends_on:
+    #   - backend
     env_file:
-      - ./datacubeweb/.env
-      - ./datacubeweb/.env.local
+      - ./frontend/.env
+      - ./frontend/.env.local
 
 networks:
   app-network:
