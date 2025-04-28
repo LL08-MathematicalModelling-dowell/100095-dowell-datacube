@@ -189,8 +189,8 @@ export default function RegisterPage() {
             </div>
             <div className="flex gap-4">
               <motion.button
-                disabled
                 onClick={() => { }}
+                disabled
                 // onClick={googleSignIn}
                 className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-white/20 hover:bg-white/30 transition"
                 whileHover={{ scale: 1.05 }}
@@ -199,8 +199,8 @@ export default function RegisterPage() {
                 <FaGoogle className="text-red-500" size={20} /> Google
               </motion.button>
               <motion.button
-                disabled
                 onClick={() => { }}
+                disabled
                 // onClick={githubSignIn}
                 className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-white/20 hover:bg-white/30 transition"
                 whileHover={{ scale: 1.05 }}

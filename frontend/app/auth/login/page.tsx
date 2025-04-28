@@ -1,8 +1,8 @@
 // app/auth/login/page.tsx
 'use client'
 // import { Navbar } from '@/components/NavBar'
-import { credentialLogin } from '@/lib/actions/auth'
 // import { credentialLogin, githubSignIn, googleSignIn } from '@/lib/actions/auth'
+import { credentialLogin } from '@/lib/actions/auth'
 import { motion } from 'framer-motion'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
@@ -159,8 +159,8 @@ export default function LoginPage() {
             </div>
             <div className="flex gap-4">
               <motion.button
-                disabled
                 onClick={() => { }}
+                disabled
                 // onClick={googleSignIn}
                 className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-white/20 hover:bg-white/30 transition"
                 whileHover={{ scale: 1.05 }}
@@ -182,7 +182,7 @@ export default function LoginPage() {
           </div>
 
           <p className="mt-6 text-center text-sm text-gray-400">
-            <Link href="#" className="hover:underline">
+            <Link href="/auth/forgot" className="hover:underline">
               Forgot password?
             </Link>{' '}
             |{' '}
