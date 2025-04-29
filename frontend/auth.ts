@@ -30,6 +30,7 @@ import { NextAuthConfig } from "next-auth";
 
 export const authOptions: NextAuthConfig = {
   adapter: PrismaAdapter(prisma),
+  
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -80,6 +81,7 @@ export const authOptions: NextAuthConfig = {
   session: {
     strategy: "jwt", // You can use JWT or database sessions based on your needs
   },
+
 };
 
 export const { auth, handlers, signIn, signOut } = NextAuth(authOptions);
