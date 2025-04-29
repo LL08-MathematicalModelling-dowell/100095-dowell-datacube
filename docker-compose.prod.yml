@@ -23,9 +23,9 @@ services:
       - ./backend/.env.prod
     ports:
       - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
+    # depends_on:
+    #   db:
+    #     condition: service_healthy
     entrypoint: ["/usr/src/app/entrypoint.sh"]
     command:
       [
