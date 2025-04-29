@@ -53,7 +53,8 @@ COPY --from=builder /app/public ./public
 
 # copy the standalone server build & static files
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./‌​.next/static
+# COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./‌​.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static /app/.next/static
 
 USER nextjs
 EXPOSE 3000
