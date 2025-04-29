@@ -1,5 +1,5 @@
-// app/(your‐layout)/reports/page.tsx
 'use client'
+
 import React, { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
@@ -42,10 +42,13 @@ export default function ReportsPage() {
     const [endDate, setEndDate] = useState('')
     const [selectedMetric, setMetric] = useState('All Metrics')
 
-    // guard
-    const rawHistory: HistoryItem[] = data?.history ?? []
+    // 1) Memoize the rawHistory array so it’s stable across renders
+    const rawHistory = useMemo<HistoryItem[]>(
+        () => data?.history ?? [],
+        [data?.history]
+    )
 
-    // filtered history
+    // 2) Filtered history based on dates & selected metric
     const history = useMemo(() => {
         return rawHistory.filter((h) => {
             if (startDate && h.date < startDate) return false
@@ -56,53 +59,62 @@ export default function ReportsPage() {
         })
     }, [rawHistory, startDate, endDate, selectedMetric])
 
-    // bar chart
-    const barData = useMemo(() => ({
-        labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
-        datasets: [
-            {
-                label: 'Added',
-                data: data?.recordsAddedPerWeek ?? [],
-                backgroundColor: 'rgba(75,192,192,0.6)',
-            },
-            {
-                label: 'Removed',
-                data: data?.recordsRemovedPerWeek ?? [],
-                backgroundColor: 'rgba(255,99,132,0.6)',
-            },
-        ],
-    }), [data])
+    // 3) Data for the bar chart
+    const barData = useMemo(
+        () => ({
+            labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
+            datasets: [
+                {
+                    label: 'Added',
+                    data: data?.recordsAddedPerWeek ?? [],
+                    backgroundColor: 'rgba(75,192,192,0.6)',
+                },
+                {
+                    label: 'Removed',
+                    data: data?.recordsRemovedPerWeek ?? [],
+                    backgroundColor: 'rgba(255,99,132,0.6)',
+                },
+            ],
+        }),
+        [data]
+    )
 
-    // line chart
+    // 4) Data for the line chart
     const lineData = useMemo(() => {
         const labels = history.map((h) => h.date)
         const values = history.map((h) =>
-            selectedMetric === 'Records Added' ? h.recordsAdded :
-                selectedMetric === 'Records Removed' ? h.recordsRemoved :
-                    h.totalRecords
+            selectedMetric === 'Records Added'
+                ? h.recordsAdded
+                : selectedMetric === 'Records Removed'
+                    ? h.recordsRemoved
+                    : h.totalRecords
         )
         return {
             labels,
-            datasets: [{
-                label: selectedMetric,
-                data: values,
-                borderColor: 'rgba(54,162,235,0.8)',
-                backgroundColor: 'rgba(54,162,235,0.4)',
-                fill: true,
-                tension: 0.3,
-            }],
+            datasets: [
+                {
+                    label: selectedMetric,
+                    data: values,
+                    borderColor: 'rgba(54,162,235,0.8)',
+                    backgroundColor: 'rgba(54,162,235,0.4)',
+                    fill: true,
+                    tension: 0.3,
+                },
+            ],
         }
     }, [history, selectedMetric])
 
-    // summary: last day
+    // 5) Summary: last item in rawHistory
     const latest = rawHistory[rawHistory.length - 1]
-    const summaryRows = latest ? [
-        { metric: 'Total Records', value: data!.totalRecords, date: latest.date },
-        { metric: 'Records Added', value: latest.recordsAdded, date: latest.date },
-        { metric: 'Records Removed', value: latest.recordsRemoved, date: latest.date },
-    ] : []
+    const summaryRows = latest
+        ? [
+            { metric: 'Total Records', value: data!.totalRecords, date: latest.date },
+            { metric: 'Records Added', value: latest.recordsAdded, date: latest.date },
+            { metric: 'Records Removed', value: latest.recordsRemoved, date: latest.date },
+        ]
+        : []
 
-    // handlers
+    // 6) Handlers
     const handleView = (date: string) => {
         router.push(`/dashboard/details?date=${date}`)
     }
@@ -110,10 +122,9 @@ export default function ReportsPage() {
         window.open(`/api/reports/csv?date=${date}`, '_blank')
     }
 
+    // 7) Loading / Error states
     if (isLoading) {
-        return (
-            <Loading />
-        )
+        return <Loading />
     }
     if (isError) {
         return (
