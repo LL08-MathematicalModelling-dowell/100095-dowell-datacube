@@ -22,9 +22,13 @@ def jsonify_object_ids(docs):
             doc["_id"] = str(doc["_id"])
     return docs
 
-def safe_load_filters(f_str):
-    """ Safely load filters from a string."""
+def safe_load_filters(f):
+    """
+    Accept either a dict or a JSON string. Return a dict.
+    """
+    if isinstance(f, dict):
+        return f
     try:
-        return json.loads(f_str or "{}")
-    except json.JSONDecodeError:
+        return json.loads(f or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
         return {}
