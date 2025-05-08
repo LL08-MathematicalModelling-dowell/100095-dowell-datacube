@@ -34,20 +34,17 @@ export default function LoginPage() {
 
 
   const onSubmit = async (data: FormData) => {
-    try {
-      setError(null);
-      await credentialLogin(data)
 
-    } catch (error) {
-      if (error instanceof Error) {
-        console.error('Login error:', error.message);
-        setError(error.message);
-        alert(error.message);
-      } else {
-        // Handle unexpected errors
-        console.error('Unexpected error:', error);
-        setError('An unexpected error occurred. Please try again.');
-      }
+    setError(null);
+    const result = await credentialLogin(data)
+
+    if (result.status === "error") {
+      setError(result.error);
+      alert(result.error);
+    }
+    if (result.ok) {
+      // Redirect to dashboard or perform any other action on successful login
+      redirect("/dashboard")
     }
   };
 
