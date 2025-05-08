@@ -1,12 +1,13 @@
 // app/auth/login/page.tsx
 'use client'
+// import { signIn } from '@/auth'
 // import { Navbar } from '@/components/NavBar'
-// import { credentialLogin, githubSignIn, googleSignIn } from '@/lib/actions/auth'
-import { credentialLogin } from '@/lib/actions/auth'
+import { credentialLogin, githubSignIn, googleSignIn } from '@/lib/actions/auth'
 import { motion } from 'framer-motion'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
-import { redirect, useRouter } from 'next/navigation'
+import { redirect } from 'next/navigation'
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { FaGithub, FaGoogle } from 'react-icons/fa'
 
@@ -17,7 +18,10 @@ interface FormData {
 
 export default function LoginPage() {
   const { status } = useSession()
-  const router = useRouter()
+  // const router = useRouter()
+  // set invalid credentials error message
+  const [error, setError] = useState<string | null>(null)
+
 
   const {
     register,
@@ -28,16 +32,21 @@ export default function LoginPage() {
   if (status === "loading") return null;
   if (status === "authenticated") return redirect("/dashboard");
 
+
   const onSubmit = async (data: FormData) => {
-    try {
-      await credentialLogin(data.email, data.password)
-      router.replace('/dashboard')
-    } catch (err: unknown) {
-      console.error(err)
-      const errorMessage = (err instanceof Error && err.message) ? err.message : 'Login failed';
-      alert(errorMessage);
+
+    setError(null);
+    const result = await credentialLogin(data)
+
+    if (result.status === "error") {
+      setError(result.error);
+      alert(result.error);
     }
-  }
+    if (result.ok) {
+      // Redirect to dashboard or perform any other action on successful login
+      redirect("/dashboard")
+    }
+  };
 
   return (
     <div className="relative flex min-h-screen bg-gradient-to-tr from-indigo-900 via-purple-900 to-pink-900 overflow-hidden pt-10">
@@ -139,6 +148,12 @@ export default function LoginPage() {
               )}
             </div>
 
+            {error && (
+              <p className="mt-1 text-xs text-red-400">
+                {error}
+              </p>
+            )}
+
             <button
               type="submit"
               disabled={isSubmitting}
@@ -159,9 +174,7 @@ export default function LoginPage() {
             </div>
             <div className="flex gap-4">
               <motion.button
-                onClick={() => { }}
-                disabled
-                // onClick={googleSignIn}
+                onClick={googleSignIn}
                 className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-white/20 hover:bg-white/30 transition"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -169,9 +182,7 @@ export default function LoginPage() {
                 <FaGoogle className="text-red-500" size={20} /> Google
               </motion.button>
               <motion.button
-                disabled
-                onClick={() => { }}
-                // onClick={githubSignIn}
+                onClick={githubSignIn}
                 className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg bg-white/20 hover:bg-white/30 transition"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}

@@ -10,13 +10,38 @@ export const googleSignIn = async () => {
   await signIn("google", { redirectTo: "/dashboard" });
 };
 
-export const credentialLogin = async (email: string, password: string) => {
-  await signIn("credentials", {
+export const credentialLogin = async ({
+  email,
+  password,
+}: {
+  email: string;
+  password: string;
+}) => {
+  const result = await signIn("credentials", {
     email,
     password,
-    redirectTo: "/dashboard",
+    redirect: false,
   });
-}
+
+  console.log(
+    "<<<<<<<<<<<<<<<<<<<<  Credential login result: >>>>>>>>>>>>>>>>>>>>>>    ",
+    result
+  ); // Log the result for debugging
+
+  if (result) {
+    return {
+      status: "success",
+      ok: true,
+      error: null,
+    };
+  } else {
+    return {
+      status: "error",
+      ok: false,
+      error: "Invalid email or password",
+    };
+  }
+};
 
 export const logout = async () => {
   await signOut({ redirectTo: "/" });
