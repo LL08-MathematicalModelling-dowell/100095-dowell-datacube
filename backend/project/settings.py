@@ -1,69 +1,78 @@
-"""Django settings for the project."""
-
 import os
 import json
 from pathlib import Path
 from pymongo import MongoClient
+from dotenv import load_dotenv
 
+# Load .env file if available
+load_dotenv()
 
-# Base directory setup
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BASE_DIR_PATH = Path(BASE_DIR)
+# Paths
+BASE_DIR = Path(__file__).resolve().parent.parent
+CONFIG_PATH = BASE_DIR / 'config.json'
 
-# Load config
-config_path = BASE_DIR_PATH / 'config.json'
-with open(config_path, encoding='utf-8') as f:
-    config = json.load(f)
+# Load external config (e.g., for local development)
+if CONFIG_PATH.exists():
+    with open(CONFIG_PATH, encoding='utf-8') as f:
+        config = json.load(f)
+else:
+    config = {}
 
-# MongoDB Configuration
-MONGODB_URI = config['mongo_path']
-MONGODB_DATABASE = config['database']
-MONGODB_COLLECTION = config['collection']
+# Environment flags
+DEBUG = os.getenv('DEBUG', True)
+# DEBUG=True
+SECRET_KEY = os.getenv('SECRET_KEY', config.get('secret_key'))
+
+# MongoDB
+MONGODB_URI = os.getenv('MONGODB_URI', config.get('mongo_path'))
+MONGODB_DATABASE = os.getenv('MONGODB_DATABASE', config.get('database'))
+MONGODB_COLLECTION = os.getenv('MONGODB_COLLECTION', config.get('collection'))
+
+if not all([MONGODB_URI, MONGODB_DATABASE, MONGODB_COLLECTION]):
+    raise Exception("MongoDB settings missing. Please set them in config.json or environment.")
+
 MONGODB_CLIENT = MongoClient(MONGODB_URI)
 METADATA_DB = MONGODB_CLIENT[MONGODB_DATABASE]
 METADATA_COLLECTION = METADATA_DB[MONGODB_COLLECTION]
 
-# sqlite default
+# SQLite (default for dev)
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-    }    
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
 }
-# Django Settings
-DEBUG = False
-SECRET_KEY = 'django-insecure-%vs+xh0tfg#)hoyl!!_j7epqz5+56@3pw1*k0_k90&6lnwvfb#'
 
-# if os.environ.get('DEBUG') == 'False':
-#     DEBUG = False
-#     SECRET_KEY = os.environ.get('SECRET_KEY', SECRET_KEY)
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',') if not DEBUG else [
+    '127.0.0.1',
+    'localhost',
+    'datacube.uxlivinglab.online',
+    'www.dowelldatacube.uxlivinglab.online'
+]
 
 INSTALLED_APPS = [
-    # Django apps
+    # Django
     'django.contrib.admin',
     'django.contrib.auth',
-    'django.contrib.contenttypes', 
+    'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.sites',
-    
-    # Third party apps
+
+    # Third-party
     'corsheaders',
     'rest_framework',
-    
-    # Local apps
+
+    # Local
     'api',
 ]
 
 SITE_ID = 1
 REST_USE_JWT = True
 
-
-
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
-    # 'api.middleware.APIKeyAuthenticationMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -73,9 +82,8 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# URLs and Templates
 ROOT_URLCONF = 'project.urls'
-TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
+TEMPLATE_DIR = BASE_DIR / 'templates'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -92,8 +100,6 @@ TEMPLATES = [
     },
 ]
 
-
-# Application Configuration
 WSGI_APPLICATION = 'project.wsgi.application'
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -103,95 +109,63 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-
-ALLOWED_HOSTS = [
-    'datacube.uxlivinglab.online',
-    '127.0.0.1',
-    'localhost', 
-    'www.dowelldatacube.uxlivinglab.online',
-    'dowelldatacube.uxlivinglab.online',
-]
-
-
-# CORS Settings
 CORS_ORIGIN_ALLOW_ALL = True
 CORS_ALLOW_HEADERS = ['*']
 
-
-# Localization
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_L10N = True
 USE_TZ = True
 
-# Static Files
 STATIC_URL = '/static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Other Settings
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-MY_BASE_URL = 'https://datacube.uxlivinglab.online'
+MY_BASE_URL = os.getenv('MY_BASE_URL', 'https://datacube.uxlivinglab.online')
 
-
-# REST Framework Settings
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
-        "rest_framework.renderers.BrowsableAPIRenderer",
+        "rest_framework.renderers.BrowsableAPIRenderer" if DEBUG else "rest_framework.renderers.JSONRenderer",
     ],
 }
 
+# Logging
+# LOGS_DIR = BASE_DIR / 'logs'
+# LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
-
-# Logging Configuration
-BASE_DIR = Path(__file__).resolve().parent.parent
-LOGS_DIR = ""
-LOGGING = {}
-
-
-# LOGS_DIR = os.path.join(BASE_DIR, 'logs')
-if DEBUG:
-    LOGS_DIR = os.path.join(BASE_DIR, 'logs')
-    if not os.path.exists(LOGS_DIR):
-        os.makedirs(LOGS_DIR, exist_ok=True)
-
-    LOGGING = {
-        'version': 1,
-        'disable_existing_loggers': False,
-        'formatters': {
-            'verbose': {
-                'format': '{levelname} {asctime} {module} {message}',
-                'style': '{',
-            },
-            'simple': {
-                'format': '{levelname} {message}',
-                'style': '{',
-            },
-        },
-        'handlers': {
-            'console': {
-                'level': 'DEBUG',
-                'class': 'logging.StreamHandler',
-                'formatter': 'simple',
-            },
-            'file': {
-                'level': 'INFO',
-                'class': 'logging.FileHandler',
-                'filename': os.path.join(LOGS_DIR, 'database_operations.log'),
-                'formatter': 'verbose',
-            },
-        },
-        'loggers': {
-            'django': {
-                'handlers': ['console', 'file'],
-                'level': 'INFO',
-                'propagate': True,
-            },
-            'database_operations': {
-                'handlers': ['console', 'file'],
-                'level': 'DEBUG',
-                'propagate': False,
-            },
-        },
-    }
+# LOGGING = {
+#     'version': 1,
+#     'disable_existing_loggers': False,
+#     'formatters': {
+#         'verbose': {
+#             'format': '{levelname} {asctime} {module} {message}',
+#             'style': '{',
+#         },
+#         'simple': {
+#             'format': '{levelname} {message}',
+#             'style': '{',
+#         },
+#     },
+#     'handlers': {
+#         'console': {
+#             'level': 'DEBUG' if DEBUG else 'INFO',
+#             'class': 'logging.StreamHandler',
+#             'formatter': 'simple',
+#         },
+#         'file': {
+#             'level': 'INFO',
+#             'class': 'logging.FileHandler',
+#             'filename': LOGS_DIR / 'application.log',
+#             'formatter': 'verbose',
+#         },
+#     },
+#     'loggers': {
+#         'django': {
+#             'handlers': ['console', 'file'],
+#             'level': 'DEBUG' if DEBUG else 'INFO',
+#             'propagate': True,
+#         },
+#     },
+# }
