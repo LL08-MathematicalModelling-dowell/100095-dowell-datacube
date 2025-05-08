@@ -1,7 +1,6 @@
 "use server";
 
 import { signIn, signOut } from "@/auth";
-import { redirect } from "next/navigation";
 
 export const githubSignIn = async () => {
   await signIn("github", { redirectTo: "/dashboard" });
@@ -24,16 +23,24 @@ export const credentialLogin = async ({
     redirect: false,
   });
 
+  console.log(
+    "<<<<<<<<<<<<<<<<<<<<  Credential login result: >>>>>>>>>>>>>>>>>>>>>>    ",
+    result
+  ); // Log the result for debugging
 
   if (result) {
-    redirect("/dashboard"); // Redirect to the dashboard on successful login
+    return {
+      status: "success",
+      ok: true,
+      error: null,
+    };
   } else {
-    throw new Error("Invalid credentials");
+    return {
+      status: "error",
+      ok: false,
+      error: "Invalid email or password",
+    };
   }
-
-  // Handle the case where result is null or undefined
-  console.error("Login failed: result is null or undefined");
-  throw new Error("Login failed: result is null or undefined");
 };
 
 export const logout = async () => {
