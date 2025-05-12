@@ -1,5 +1,4 @@
-from typing import List, Dict, Tuple, Union
-from bson import ObjectId
+from typing import List, Dict, Tuple
 from api.services.metadata_service import MetadataService
 from api.services.collection_service import CollectionService
 from pymongo.errors import PyMongoError
@@ -74,7 +73,9 @@ class DocumentService:
             raise ValueError("No update data provided.")
         try:
             svc = await self.get_collection(db_id, coll_name)
-            return await svc.update_many(coll_name, filt or {}, {"$set": update})
+            
+            # return await svc.update_many(coll_name, filt or {}, update)
+            return await svc.update_many_existing(coll_name, filt or {}, update)
         except (ValueError, PyMongoError) as e:
             raise RuntimeError(f"Failed to update documents: {e}")
 
@@ -89,7 +90,7 @@ class DocumentService:
         try:
             svc = await self.get_collection(db_id, coll_name)
             if soft:
-                return await svc.update_many(coll_name, filt or {}, {"$set": {"is_deleted": True}})
+                return await svc.update_many(coll_name, filt or {}, {"is_deleted": True})
             else:
                 return await svc.delete_many(coll_name, filt or {})
         except (ValueError, PyMongoError) as e:
