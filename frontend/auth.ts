@@ -1,15 +1,10 @@
 import { prisma } from "@/prisma/client";
 import { compare } from "bcryptjs";
-import NextAuth, { AuthError } from "next-auth";
+import NextAuth, { AuthError, NextAuthConfig } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 // import GitHubProvider from "next-auth/providers/github";
 // import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
-import { NextAuthConfig } from "next-auth";
-
-export class InvalidCredentialsError extends AuthError {
-  static type = "CredentialsSignin";
-}
 
 export const authOptions: NextAuthConfig = {
   adapter: PrismaAdapter(prisma),
@@ -30,7 +25,7 @@ export const authOptions: NextAuthConfig = {
           }
 
           if (!user) {
-            throw new InvalidCredentialsError("Invalid email or password");
+            throw new AuthError("Invalid email or password");
           }
           const isValid = await compare(
             credentials.password as string,
@@ -38,7 +33,7 @@ export const authOptions: NextAuthConfig = {
           );
 
           if (!isValid) {
-            throw new InvalidCredentialsError("Invalid email or password");
+            throw new AuthError("Invalid email or password");
           }
 
           // return user object without hashedPassword
