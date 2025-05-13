@@ -17,30 +17,11 @@ export const credentialLogin = async ({
   email: string;
   password: string;
 }) => {
-  const result = await signIn("credentials", {
+  return await signIn("credentials", {
     email,
     password,
     redirect: false,
   });
-
-  console.log(
-    "<<<<<<<<<<<<<<<<<<<<  Credential login result: >>>>>>>>>>>>>>>>>>>>>>    ",
-    result
-  ); // Log the result for debugging
-
-  if (result) {
-    return {
-      status: "success",
-      ok: true,
-      error: null,
-    };
-  } else {
-    return {
-      status: "error",
-      ok: false,
-      error: "Invalid email or password",
-    };
-  }
 };
 
 export const logout = async () => {
