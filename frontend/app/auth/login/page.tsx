@@ -1,9 +1,9 @@
-// app/auth/login/page.tsx
 'use client'
-// import { signIn } from '@/auth'
-// import { Navbar } from '@/components/NavBar'
+
 import { credentialLogin, githubSignIn, googleSignIn } from '@/lib/actions/auth'
 import { motion } from 'framer-motion'
+import { AuthError } from 'next-auth'
+import { InvalidCredentialsError } from '@/auth'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -11,15 +11,14 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { FaGithub, FaGoogle } from 'react-icons/fa'
 
+
 interface FormData {
   email: string
   password: string
 }
 
 export default function LoginPage() {
-  const { status } = useSession()
-  // const router = useRouter()
-  // set invalid credentials error message
+  const { status, update } = useSession()
   const [error, setError] = useState<string | null>(null)
 
 
@@ -34,17 +33,17 @@ export default function LoginPage() {
 
 
   const onSubmit = async (data: FormData) => {
-
     setError(null);
-    const result = await credentialLogin(data)
-
-    if (result.status === "error") {
-      setError(result.error);
-      alert(result.error);
-    }
-    if (result.ok) {
-      // Redirect to dashboard or perform any other action on successful login
+    try {
+      await credentialLogin(data);
+      await update();
       redirect("/dashboard")
+    } catch (error) {
+      if (error instanceof InvalidCredentialsError) {
+        setError("Wrong email or password");
+      } else {
+        setError("Something went wrong, please try again")
+      }
     }
   };
 
@@ -206,4 +205,3 @@ export default function LoginPage() {
     </div>
   )
 }
-

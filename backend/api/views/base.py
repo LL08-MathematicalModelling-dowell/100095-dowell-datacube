@@ -1,40 +1,63 @@
 """CRUD operations for documents in a MongoDB collection."""
 
+
+import asyncio
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.exceptions import ValidationError, ParseError
-from django.core.exceptions import ObjectDoesNotExist
-import logging
-
-# logger = logging.getLogger(__name__)
 
 
 class BaseAPIView(APIView):
-    """Base API view with standardized error handling and validation."""
+    """Base API view class to handle common functionality for all API views."""
 
     @staticmethod
     def handle_errors(fn):
-        """Decorator to handle errors in API views gracefully."""
-        async def wrapper(self, request, *args, **kwargs):
+        """
+        Decorator to catch exceptions in both sync and async views,
+        and return an appropriate DRF Response.
+        """
+        if asyncio.iscoroutinefunction(fn):
+            async def async_wrapper(self, request, *args, **kwargs):
+                try:
+                    return await fn(self, request, *args, **kwargs)
+                except ValueError as e:
+                    return Response(
+                        {"success": False, "message": f"Value Error: {str(e)}"},
+                        status=400
+                    )
+                except TypeError as e:
+                    return Response(
+                        {"success": False, "message": f"Type Error: {str(e)}"},
+                        status=400
+                    )
+                except Exception as e:
+                    return Response(
+                        {"success": False, "message": f"Internal Error: {str(e)}"},
+                        status=500
+                    )
+            return async_wrapper
+
+        # sync path
+        def sync_wrapper(self, request, *args, **kwargs):
             try:
-                return await fn(self, request, *args, **kwargs)
-            except ValidationError as e:
-                return Response({"success": False, "message": f"Validation error", "errors": e.detail}, status=400)
-            except ParseError as e:
-                return Response({"success": False, "message": f"Parse error: {str(e)}"}, status=400)
-            except ObjectDoesNotExist as e:
-                return Response({"success": False, "message": f"Not found: {str(e)}"}, status=404)
+                return fn(self, request, *args, **kwargs)
             except ValueError as e:
-                return Response({"success": False, "message": f"Value error: {str(e)}"}, status=400)
+                return Response(
+                    {"success": False, "message": f"Value Error: {str(e)}"},
+                    status=400
+                )
             except TypeError as e:
-                return Response({"success": False, "message": f"Type error: {str(e)}"}, status=400)
+                return Response(
+                    {"success": False, "message": f"Type Error: {str(e)}"},
+                    status=400
+                )
             except Exception as e:
-                # logger.exception("Unhandled exception in view")
-                return Response({"success": False, "message": f"Internal server error: {str(e)}"}, status=500)
-        return wrapper
+                return Response(
+                    {"success": False, "message": f"Internal Error: {str(e)}"},
+                    status=500
+                )
+        return sync_wrapper
 
     def validate_serializer(self, serializer_class, data):
-        """Validate request data with serializer, return validated fields only."""
-        serializer = serializer_class(data=data)
-        serializer.is_valid(raise_exception=True)
-        return serializer.validated_data
+        ser = serializer_class(data=data)
+        ser.is_valid(raise_exception=True)
+        return ser.validated_data
