@@ -3,7 +3,6 @@
 import { credentialLogin, githubSignIn, googleSignIn } from '@/lib/actions/auth'
 import { motion } from 'framer-motion'
 import { AuthError } from 'next-auth'
-import { InvalidCredentialsError } from '@/auth'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -36,10 +35,10 @@ export default function LoginPage() {
     setError(null);
     try {
       await credentialLogin(data);
-      update();
+      await update();
       redirect("/dashboard")
     } catch (error) {
-      if (error instanceof InvalidCredentialsError) {
+      if (error instanceof AuthError) {
         setError("Wrong email or password");
       } else {
         setError("Something went wrong, please try again")
