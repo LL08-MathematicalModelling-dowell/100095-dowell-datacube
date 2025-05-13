@@ -36,7 +36,7 @@ export default function LoginPage() {
     setError(null);
     try {
       await credentialLogin(data);
-      await update();
+      update();
       redirect("/dashboard")
     } catch (error) {
       if (error instanceof InvalidCredentialsError) {
