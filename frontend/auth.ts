@@ -1,17 +1,14 @@
 import { prisma } from "@/prisma/client";
 import { compare } from "bcryptjs";
-import NextAuth from "next-auth";
+import NextAuth, { AuthError } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 // import GitHubProvider from "next-auth/providers/github";
 // import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { NextAuthConfig } from "next-auth";
 
-class InvalidCredentialsError extends Error {
-  name = "InvalidCredentialsError";
-  constructor(message: string) {
-    super(message);
-  }
+export class InvalidCredentialsError extends AuthError {
+  static type = "CredentialsSignin";
 }
 
 export const authOptions: NextAuthConfig = {
@@ -48,16 +45,7 @@ export const authOptions: NextAuthConfig = {
           const { id, name, email, image } = user;
 
           return { id, name, email, image };
-        } catch (error) {
-          if (error instanceof InvalidCredentialsError) {
-            return null; // Return null to indicate failure
-          }
-          console.error("Error during authorization:", error);
-          console.error(
-            `Authorization error: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
+        } catch {
           return null;
         }
       },

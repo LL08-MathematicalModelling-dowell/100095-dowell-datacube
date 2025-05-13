@@ -8,9 +8,10 @@ from api.serializers import (
     UpdateDocumentSerializer,
     DeleteDocumentSerializer,
 )
-from api.utils.mongodb import safe_load_filters, jsonify_object_ids
+from api.utils.mongodb import safe_load_filters, jsonify_object_ids, normalize_id_filter
 from api.services.document_service import DocumentService
 from api.utils.decorators import run_async
+from bson import ObjectId
 
 
 class DataCrudView(BaseAPIView):
@@ -81,7 +82,7 @@ class DataCrudView(BaseAPIView):
         except Exception as e:
             return Response({
                 "success": False,
-                "message": f"Failed to fetch documents: {str(e)}"
+                "message": f"{str(e)}"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @run_async
@@ -94,9 +95,18 @@ class DataCrudView(BaseAPIView):
         coll_name = payload.get("collection_name")
         update_data = payload.get("update_data")
         try:
-            filt = safe_load_filters(payload.get("filters", {}))
+            raw = safe_load_filters(payload.get("filters", {}))
         except ValueError as e:
             return Response({"success": False, "message": f"Invalid filters: {str(e)}"}, status=400)
+
+        # normalize id/_id → ObjectId
+        try:
+            filt = normalize_id_filter(raw)
+        except ValueError as e:
+            return Response(
+                {"success": False, "message": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         if not update_data:
             return Response(
@@ -127,9 +137,18 @@ class DataCrudView(BaseAPIView):
         soft_delete = payload.get("soft_delete", True)
 
         try:
-            filt = safe_load_filters(payload.get("filters", {}))
+            raw = safe_load_filters(payload.get("filters", {}))
         except ValueError as e:
             return Response({"success": False, "message": f"Invalid filters: {str(e)}"}, status=400)
+
+         # normalize id/_id → ObjectId
+        try:
+            filt = normalize_id_filter(raw)
+        except ValueError as e:
+            return Response(
+                {"success": False, "message": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
             result = await self.doc_svc.delete_docs(db_id, coll_name, filt, soft_delete)
