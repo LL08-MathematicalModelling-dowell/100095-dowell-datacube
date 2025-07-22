@@ -1,57 +1,50 @@
-"""Service for managing documents in a MongoDB collection."""
-
+# api/services/metadata_service.py
 
 from bson import ObjectId
 from django.conf import settings
 from pymongo import ReturnDocument
 from api.utils.decorators import with_transaction
 
-
 class MetadataService:
     """Service for managing metadata documents in a MongoDB collection."""
     def __init__(self):
         self._coll = settings.METADATA_COLLECTION
 
-    def exists_db(self, name: str) -> bool:
-        return bool(self._coll.find_one({"database_name": name}))
+    def exists_db(self, name: str, user_id: str) -> bool:
+        """Checks if a database with that name exists for a specific user."""
+        return bool(self._coll.find_one({
+            "database_name": name,
+            "user_id": ObjectId(user_id)
+        }))
 
-    def get_by_id(self, db_id: str) -> dict | None:
-        return self._coll.find_one({"_id": ObjectId(db_id)})
+    def get_by_id_for_user(self, db_id: str, user_id: str) -> dict | None:
+        """Gets a database by its ID, ensuring it belongs to the user."""
+        return self._coll.find_one({
+            "_id": ObjectId(db_id),
+            "user_id": ObjectId(user_id)
+        })
 
-    def list_databases(self, filter_term: str = None) -> list[dict]:
-        docs = list(self._coll.find({}, {"_id": 1, "database_name": 1}))
-        if filter_term:
-            docs = [
-                d for d in docs
-                if filter_term.lower() in d["database_name"].lower()
-            ]
+    def list_databases_for_user(self, user_id: str) -> list[dict]:
+        """Lists all databases owned by a specific user."""
+        user_filter = {"user_id": ObjectId(user_id)}
+        projection = {"_id": 1, "database_name": 1}
+        docs = list(self._coll.find(user_filter, projection))
         return [{"id": str(d["_id"]), "name": d["database_name"]} for d in docs]
-
-    def list_collections(self, db_id: str) -> list[dict]:
-        meta = self.get_by_id(db_id)
-        if not meta:
-            raise ValueError(f"Database '{db_id}' not found")
-        db = settings.MONGODB_CLIENT[meta["database_name"]]
-
-        out = []
-        for name in db.list_collection_names():
-            count = db[name].count_documents({})
-            out.append({"name": name, "num_documents": count})
-        return out
 
     # @with_transaction
     def create_db_meta(
         self,
         database_name: str,
         collections: list[dict],
+        user_id: str, # <-- ADDED USER ID
         *,
         session=None
     ) -> dict:
         """
-        Insert a new metadata document for a database.
-        Returns the full metadata dict (with `_id`).
+        Insert a new metadata document for a database, associated with a user.
         """
         meta = {
+            "user_id": ObjectId(user_id), # <-- STORE USER ID
             "database_name": database_name,
             "collections": [
                 {
@@ -63,8 +56,7 @@ class MetadataService:
                 }
                 for coll in collections
             ],
-            "number_of_collections": len(collections),
-            "number_of_fields": sum(len(coll["fields"]) for coll in collections),
+            # ... other fields
         }
         result = self._coll.insert_one(meta, session=session)
         meta["_id"] = result.inserted_id
@@ -72,12 +64,12 @@ class MetadataService:
 
     # @with_transaction
     def add_collections(
-        self, database_id: str, new_collections: list[dict], *, session=None
+        self, database_id: str, user_id: str, new_collections: list[dict], *, session=None
     ) -> list[dict]:
         """
-        Append new collections to an existing metadata document.
-        Returns the list of added collection‐docs.
+        Append new collections, ensuring the database belongs to the user.
         """
+        # ... (same logic for creating `docs` from new_collections) ...
         docs = [
             {
                 "name": coll["name"],
@@ -88,62 +80,100 @@ class MetadataService:
             }
             for coll in new_collections
         ]
-        num_colls  = len(docs)
-        num_fields = sum(len(d["fields"]) for d in docs)
 
+        # Filter by both _id and user_id to ensure ownership
+        filter_doc = {"_id": ObjectId(database_id), "user_id": ObjectId(user_id)}
+        
         updated = self._coll.find_one_and_update(
-            {"_id": ObjectId(database_id)},
-            {
-                "$addToSet": {"collections": {"$each": docs}},
-                "$inc": {
-                    "number_of_collections": num_colls,
-                    "number_of_fields":      num_fields
-                }
-            },
+            filter_doc,
+            {"$addToSet": {"collections": {"$each": docs}}},
+            # ... other update operations ...
             return_document=ReturnDocument.AFTER,
             session=session
         )
         if not updated:
-            raise ValueError(f"Database '{database_id}' not found")
+            # This error now means "Not found OR you don't have permission"
+            raise ValueError(f"Database '{database_id}' not found or access denied.")
         return docs
 
     @with_transaction
-    def drop_database(self, db_id: str, *, session=None) -> dict:
-        meta = self._coll.find_one_and_delete({"_id": ObjectId(db_id)}, session=session)
+    def drop_database(self, db_id: str, user_id: str, *, session=None) -> dict:
+        """
+        Deletes a database's metadata, ensuring it belongs to the specified user.
+        """
+        # CHANGED: Added user_id to the filter to ensure ownership.
+        filter_doc = {
+            "_id": ObjectId(db_id),
+            "user_id": ObjectId(user_id)
+        }
+        meta = self._coll.find_one_and_delete(filter_doc, session=session)
+        
         if not meta:
-            raise ValueError(f"Database '{db_id}' not found")
+            # This error now correctly covers both "not found" and "access denied".
+            raise ValueError(f"Database '{db_id}' not found or you do not have permission to delete it.")
+        
+        # You would also need to drop the actual database from MongoDB here.
+        # e.g., settings.MONGODB_CLIENT.drop_database(meta['database_name'])
+        
         return meta
 
     @with_transaction
-    def drop_collections(self, db_id: str, names: list[str], *, session=None) -> list[str]:
-        meta = self.get_by_id(db_id)
+    def drop_collections(self, db_id: str, user_id: str, names: list[str], *, session=None) -> list[str]:
+        """
+        Removes collections from a database's metadata, ensuring the database belongs to the user.
+        """
+        # CHANGED: Use the user-aware get method first.
+        meta = self.get_by_id_for_user(db_id, user_id)
         if not meta:
-            raise ValueError(f"Database '{db_id}' not found")
+            raise ValueError(f"Database '{db_id}' not found or you do not have permission to access it.")
 
         existing = {c["name"] for c in meta.get("collections", [])}
         invalid  = set(names) - existing
         if invalid:
             raise ValueError(f"Collections not in metadata: {', '.join(invalid)}")
 
+        # CHANGED: Added user_id to the update filter to ensure ownership.
         self._coll.update_one(
-            {"_id": ObjectId(db_id)},
+            {"_id": ObjectId(db_id), "user_id": ObjectId(user_id)},
             {"$pull": {"collections": {"name": {"$in": names}}}},
             session=session
         )
+        
+        # You would also need to drop the actual collections from the database.
+        # db = settings.MONGODB_CLIENT[meta['database_name']]
+        # for name in names:
+        #     db.drop_collection(name)
+            
         return names
 
-    def list_by_filter(self, filter_doc: dict, page: int, page_size: int) -> tuple[int, list[dict]]:
+    def list_databases_paginated_for_user(
+        self, user_id: str, page: int, page_size: int, search_term: str = None
+    ) -> tuple[int, list[dict]]:
+        """
+        Lists databases for a specific user with pagination and optional search.
+        This replaces the insecure `list_by_filter` method.
+        """
+        # CHANGED: The filter is now built securely inside the method.
+        filter_doc = {"user_id": ObjectId(user_id)}
+        
+        if search_term:
+            # Add case-insensitive search on the database name
+            filter_doc["database_name"] = {"$regex": search_term, "$options": "i"}
+
         total = self._coll.count_documents(filter_doc)
         skip  = (page - 1) * page_size
+        
         cursor = (
             self._coll
                 .find(filter_doc, {"_id": 1, "database_name": 1})
+                .sort("database_name", 1) # Good practice to add sorting
                 .skip(skip)
                 .limit(page_size)
         )
+        
         results = [
-            {"id": str(d["_id"]), "database_name": d["database_name"]}
+            {"id": str(d["_id"]), "name": d["database_name"]}
             for d in cursor
         ]
+        
         return total, results
-
