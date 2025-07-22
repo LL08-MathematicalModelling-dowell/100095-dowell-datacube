@@ -20,21 +20,17 @@ from pymongo.errors import CollectionInvalid
 from asgiref.sync import sync_to_async
 
 from api.utils.mongodb import build_existing_fields_update_pipeline
-# ADDED: Import MetadataService to verify database ownership.
 from api.services.metadata_service import MetadataService
 
 
 class CollectionService:
-    # CHANGED: The constructor now requires a user_id for security verification.
     def __init__(self, db_name: str, user_id: str):
         """
         Initializes the service for a specific database, but only after
         verifying the user has permission to access it.
         """
-        # ADDED: Security check to ensure the user owns the database.
         meta_svc = MetadataService()
         if not meta_svc.exists_db(name=db_name, user_id=user_id):
-            # This is the security gate. If the user doesn't own the DB, stop immediately.
             raise PermissionError(f"Access denied: You do not own database '{db_name}' or it does not exist.")
 
         # This line is only reached if the security check passes.
@@ -57,7 +53,6 @@ class CollectionService:
             "error":   <error message> or None
           }
         """
-        # This method is now implicitly secure due to the check in __init__.
         results = []
         for name in names:
             rec = {"name": name, "created": False, "exists": False, "error": None}
@@ -72,9 +67,6 @@ class CollectionService:
 
             results.append(rec)
         return results
-
-    # NOTE: The following async methods are now implicitly secure. They operate on `self.db`,
-    # which was validated against the user's ownership in the `__init__` method.
 
     async def count_documents(self, coll_name: str, filt: dict) -> int:
         return await sync_to_async(
