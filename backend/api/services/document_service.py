@@ -31,14 +31,11 @@ class DocumentService:
         """
         Get a collection service, but only after verifying the user owns the database.
         """
-        # CHANGED: Use the secure, user-aware method to fetch metadata.
         meta = self.meta.get_by_id_for_user(db_id, user_id)
         if not meta:
-            # This now correctly handles both "not found" and "access denied".
             raise PermissionError(f"Database '{db_id}' not found or access denied.")
 
         try:
-            # This logic for finding the collection name in metadata remains the same.
             collection_names = [c["name"] for c in meta.get("collections", [])]
         except KeyError as e:
             raise ValueError(f"Invalid metadata format: missing key {e}")
@@ -46,21 +43,19 @@ class DocumentService:
         if coll_name not in collection_names:
             raise ValueError(f"Collection '{coll_name}' not listed in metadata for database '{db_id}'.")
 
-        # CHANGED: Instantiate the CollectionService with the user_id for security.
         return CollectionService(meta["database_name"], user_id=user_id)
 
     async def list_docs(
         self,
         db_id: str,
         coll_name: str,
-        user_id: str,  # ADDED: user_id is now required.
+        user_id: str,
         filt: dict,
         page: int,
         page_size: int
     ) -> Tuple[int, List[Dict]]:
         """List documents in a collection with pagination."""
         try:
-            # CHANGED: Pass user_id to the security checkpoint.
             svc = await self.get_collection(db_id, coll_name, user_id)
             skip = (page - 1) * page_size
             total = await svc.count_documents(coll_name, filt or {})
@@ -73,12 +68,11 @@ class DocumentService:
         self,
         db_id: str,
         coll_name: str,
-        user_id: str,  # ADDED: user_id is now required.
+        user_id: str,
         docs: List[Dict]
     ):
         """Insert multiple documents into a collection."""
         try:
-            # CHANGED: Pass user_id to the security checkpoint.
             svc = await self.get_collection(db_id, coll_name, user_id)
             return await svc.insert_many(coll_name, docs)
         except (ValueError, PyMongoError, PermissionError) as e:
@@ -88,7 +82,7 @@ class DocumentService:
         self,
         db_id: str,
         coll_name: str,
-        user_id: str,  # ADDED: user_id is now required.
+        user_id: str,
         filt: dict,
         update: dict,
         update_all_fields: bool = False
@@ -97,7 +91,6 @@ class DocumentService:
         if not update:
             raise ValueError("No update data provided.")
         try:
-            # CHANGED: Pass user_id to the security checkpoint.
             svc = await self.get_collection(db_id, coll_name, user_id)
             
             if update_all_fields:
@@ -111,13 +104,12 @@ class DocumentService:
         self,
         db_id: str,
         coll_name: str,
-        user_id: str,  # ADDED: user_id is now required.
+        user_id: str,
         filt: dict,
         soft: bool = True
     ):
         """Soft or hard delete documents in a collection."""
         try:
-            # CHANGED: Pass user_id to the security checkpoint.
             svc = await self.get_collection(db_id, coll_name, user_id)
             if soft:
                 return await svc.update_many(coll_name, filt or {}, {"is_deleted": True})

@@ -30,7 +30,7 @@ class DatabaseService:
         self,
         db_name: str,
         collections: list[dict],
-        user_id: str,  # CHANGED: Added user_id parameter
+        user_id: str,
         session=None
     ) -> tuple[dict, list[dict]]:
         """
@@ -38,7 +38,6 @@ class DatabaseService:
         2) Create the actual MongoDB collections.
         All in one transaction. If anything fails, we abort.
         """
-        # CHANGED: Pass the user_id to assign ownership of the new database metadata.
         meta = self.meta_svc.create_db_meta(
             db_name,
             collections,
@@ -46,7 +45,6 @@ class DatabaseService:
             session=session
         )
 
-        # CHANGED: Instantiate CollectionService with the user_id for a security check.
         coll_svc  = CollectionService(db_name, user_id=user_id)
         names     = [c["name"] for c in collections]
         coll_info = coll_svc.create(names, session=session)
@@ -58,7 +56,7 @@ class DatabaseService:
         self,
         database_id: str,
         new_cols: list[dict],
-        user_id: str,  # CHANGED: Added user_id parameter
+        user_id: str,
         session=None
     ) -> list[dict]:
         """
@@ -66,14 +64,12 @@ class DatabaseService:
         2) Append new_cols to metadata.
         3) Create the new MongoDB collections.
         """
-        # ADDED: First, securely fetch the metadata to verify ownership and get the db_name.
         meta = self.meta_svc.get_by_id_for_user(database_id, user_id)
         if not meta:
             raise PermissionError(f"Database '{database_id}' not found or access denied.")
         
         db_name = meta["database_name"]
 
-        # CHANGED: Pass the user_id to the metadata update call for an atomic check.
         self.meta_svc.add_collections(
             database_id,
             user_id=user_id,
@@ -81,7 +77,6 @@ class DatabaseService:
             session=session
         )
 
-        # CHANGED: Instantiate CollectionService with the verified user_id and db_name.
         coll_svc   = CollectionService(db_name, user_id=user_id)
         names      = [c["name"] for c in new_cols]
         return coll_svc.create(names, session=session)
