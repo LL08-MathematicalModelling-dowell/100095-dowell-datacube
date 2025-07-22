@@ -1,16 +1,46 @@
-''' This file contains environment variables for the frontend application.'''
+"""
+This service provides CRUD operations for collections within a specific database.
 
+This file has been updated to integrate with the custom authentication system.
+Key Changes:
+1.  Secure Initialization: The __init__ method now requires both a `db_name`
+    and a `user_id`. It uses the MetadataService to verify that the user
+    is the legitimate owner of the database before proceeding.
+2.  Exception on Unauthorized Access: If a user tries to instantiate this
+    service for a database they do not own, a PermissionError is raised,
+    preventing any further operations.
+3.  Implicit Security: Because the ownership check happens at instantiation,
+    all subsequent methods (`find`, `insert_many`, etc.) are implicitly
+    secure, as they can only operate on collections within a database that
+    the user has already been authorized to access.
+"""
 
 from django.conf import settings
-from api.utils.mongodb import build_existing_fields_update_pipeline
 from pymongo.errors import CollectionInvalid
 from asgiref.sync import sync_to_async
-# from api.utils.decorators import with_transaction
+
+from api.utils.mongodb import build_existing_fields_update_pipeline
+# ADDED: Import MetadataService to verify database ownership.
+from api.services.metadata_service import MetadataService
 
 
 class CollectionService:
-    def __init__(self, db_name: str):
+    # CHANGED: The constructor now requires a user_id for security verification.
+    def __init__(self, db_name: str, user_id: str):
+        """
+        Initializes the service for a specific database, but only after
+        verifying the user has permission to access it.
+        """
+        # ADDED: Security check to ensure the user owns the database.
+        meta_svc = MetadataService()
+        if not meta_svc.exists_db(name=db_name, user_id=user_id):
+            # This is the security gate. If the user doesn't own the DB, stop immediately.
+            raise PermissionError(f"Access denied: You do not own database '{db_name}' or it does not exist.")
+
+        # This line is only reached if the security check passes.
         self.db = settings.MONGODB_CLIENT[db_name]
+        self.db_name = db_name
+        self.user_id = user_id
 
     # @with_transaction
     def create(
@@ -27,6 +57,7 @@ class CollectionService:
             "error":   <error message> or None
           }
         """
+        # This method is now implicitly secure due to the check in __init__.
         results = []
         for name in names:
             rec = {"name": name, "created": False, "exists": False, "error": None}
@@ -41,6 +72,9 @@ class CollectionService:
 
             results.append(rec)
         return results
+
+    # NOTE: The following async methods are now implicitly secure. They operate on `self.db`,
+    # which was validated against the user's ownership in the `__init__` method.
 
     async def count_documents(self, coll_name: str, filt: dict) -> int:
         return await sync_to_async(
@@ -63,7 +97,7 @@ class CollectionService:
         )()
 
     async def update_many(self, coll_name: str, filt: dict, update: dict):
-        """Updates documents, creade field if not exist"""
+        """Updates documents, creating fields if they do not exist."""
         return await sync_to_async(
             lambda: self.db[coll_name].update_many(filt or {}, {"$set": update}),
             thread_sensitive=True
@@ -72,7 +106,7 @@ class CollectionService:
     async def update_many_existing(
         self, coll_name: str, filt: dict, update_data: dict
     ):
-        """Update documents existing filed s only, does not create if filed not available"""
+        """Updates only existing fields in documents, does not create new fields."""
         pipeline = build_existing_fields_update_pipeline(update_data)
         return await sync_to_async(
             lambda: self.db[coll_name].update_many(filt, pipeline),
