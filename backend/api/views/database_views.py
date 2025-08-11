@@ -13,7 +13,6 @@ Key Changes:
 
 from rest_framework import status
 from rest_framework.response import Response
-# ADDED: Import IsAuthenticated for view protection.
 from rest_framework.permissions import IsAuthenticated
 
 from api.views.base import BaseAPIView
@@ -24,17 +23,18 @@ from api.services.metadata_service import MetadataService
 
 
 class CreateDatabaseView(BaseAPIView):
-    # ADDED: This endpoint is now protected. A valid token is required.
     permission_classes = [IsAuthenticated]
 
     @BaseAPIView.handle_errors
     def post(self, request):
-        # ADDED: Get the authenticated user's ID from the request object.
         current_user_id = request.user.id
 
         data = self.validate_serializer(AddDatabasePOSTSerializer, request.data)
-        name = data["db_name"].lower()
+        # This is the name the user provided, e.g., "my_project"
+        user_provided_name = data["db_name"].lower() 
         cols = data["collections"]
+        
+        # ... validation ...
         if not cols:
             raise ValueError("At least one collection must be provided")
 
@@ -44,33 +44,28 @@ class CreateDatabaseView(BaseAPIView):
             validate_unique_fields(c["fields"])
 
         meta_svc = MetadataService()
-        # CHANGED: Check if the DB exists *for this specific user*.
-        if meta_svc.exists_db(name, user_id=current_user_id):
-            # CHANGED: More specific error message for a better user experience.
+        if meta_svc.exists_db(user_provided_name, user_id=current_user_id):
             raise ValueError("A database with this name already exists for your account.")
 
         db_svc = DatabaseService()
-        # CHANGED: Pass the user ID to the service layer for ownership assignment.
         meta, coll_info = db_svc.create_database_with_collections(
-            name,
+            user_provided_name,
             cols,
             user_id=current_user_id
         )
 
         return Response({
             "success":     True,
-            "database":    {"id": str(meta["_id"]), "name": meta["database_name"]},
+            "database":    {"id": str(meta["_id"]), "name": meta["displayName"]},
             "collections": coll_info
         }, status=status.HTTP_201_CREATED)
 
 
 class AddCollectionView(BaseAPIView):
-    # ADDED: This endpoint is now protected. A valid token is required.
     permission_classes = [IsAuthenticated]
 
     @BaseAPIView.handle_errors
     def post(self, request):
-        # ADDED: Get the authenticated user's ID.
         current_user_id = request.user.id
 
         data    = self.validate_serializer(AddCollectionPOSTSerializer, request.data)
@@ -83,7 +78,6 @@ class AddCollectionView(BaseAPIView):
             validate_unique_fields(c["fields"])
 
         db_svc = DatabaseService()
-        # CHANGED: Pass the user ID to verify ownership before adding collections.
         coll_info = db_svc.add_collections_with_creation(
             db_id,
             new_cols,

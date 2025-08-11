@@ -1,0 +1,157 @@
+{% extends 'api/base.html' %}
+
+{% block title %}Manage Database - DataCube{% endblock %}
+
+{% block page_title %}
+<!-- This block now just sets a simple, static loading message. -->
+Loading Database...
+{% endblock %}
+
+{% block content %}
+<!-- (All the HTML for the cards remains exactly the same as before) -->
+<div class="card">
+  <h3>Database Stats</h3>
+  <div style="display: flex; flex-wrap: wrap; gap: 2rem; margin-top: 1rem;">
+    <div>
+      <div style="font-size: 0.9rem; color: var(--text-muted);">Collections</div>
+      <div id="collection-count-stat" style="font-size: 2rem; font-weight: 700;"><i class="fa fa-spinner fa-spin"></i>
+      </div>
+    </div>
+    <div>
+      <div style="font-size: 0.9rem; color: var(--text-muted);">Total Fields Defined</div>
+      <div id="field-count-stat" style="font-size: 2rem; font-weight: 700;"><i class="fa fa-spinner fa-spin"></i></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Collections</h3>
+  <!-- ... (rest of the collections card HTML) ... -->
+  <div id="collections-container">
+    <div id="collections-message" style="text-align: center; padding: 2rem; color: var(--text-muted);"><i
+        class="fa fa-spinner fa-spin"></i> Loading collections...</div>
+    <table id="collections-table" style="display: none; margin-top: 1.5rem;">
+      <thead>
+        <tr>
+          <th>Collection Name</th>
+          <th>Fields</th>
+          <th>Documents</th>
+          <th style="text-align: right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="collections-table-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Danger Zone Card -->
+<div class="card" style="border-color: #ef4444;">
+  <!-- (Danger Zone content remains the same) -->
+  <h3>Danger Zone</h3>
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+    <div>
+      <strong>Delete this database</strong>
+      <p style="color: var(--text-muted); margin: 0;">Once you delete a database, there is no going back. Please be
+        certain.</p>
+    </div>
+    <button class="btn btn-danger" disabled style="opacity: 0.5;pointer-events: none;">Delete Database</button>
+  </div>
+</div>
+
+
+<!-- JAVASCRIPT SECTION -->
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    // --- Get DOM Elements ---
+    // **THIS IS THE FIX:** We now target the stable H1 tag from the header.
+    const pageTitleHeading = document.getElementById('page-title-heading');
+
+    const collectionCountEl = document.getElementById('collection-count-stat');
+    const fieldCountEl = document.getElementById('field-count-stat');
+    const table = document.getElementById('collections-table');
+    const tableBody = document.getElementById('collections-table-body');
+    const messageArea = document.getElementById('collections-message');
+
+    const dbId = "{{ db_id }}";
+    const API_URL = "{% url 'core:api_database_detail' 'DB_ID_PLACEHOLDER' %}".replace('DB_ID_PLACEHOLDER', dbId);
+
+    async function fetchDatabaseDetails() {
+      const accessToken = localStorage.getItem('accessToken');
+      if (!accessToken) return;
+
+      try {
+        const response = await fetch(API_URL, {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to load database details.');
+        }
+
+        const data = await response.json();
+
+        renderPageTitle(data.database);
+        renderStats(data.stats);
+        renderCollectionsList(data.collections);
+
+      } catch (error) {
+        console.error('Database Detail Error:', error);
+        // **FIX:** Update the reliable heading element on error.
+        if (pageTitleHeading) pageTitleHeading.textContent = 'Error';
+        messageArea.innerHTML = `<span style="color: #dc2626;">${error.message}</span>`;
+        messageArea.style.display = 'block';
+        table.style.display = 'none';
+      }
+    }
+
+    function renderPageTitle(database) {
+      // **FIX:** Update the textContent of the h1 tag directly.
+      if (pageTitleHeading) {
+        pageTitleHeading.textContent = database.displayName;
+      }
+      document.title = `${database.displayName} - DataCube`;
+    }
+
+    // (The rest of the script: renderStats, renderCollectionsList, escapeHTML, etc. remains the same)
+    function renderStats(stats) {
+      collectionCountEl.textContent = stats.collection_count.toLocaleString();
+      fieldCountEl.textContent = stats.total_fields.toLocaleString();
+    }
+
+    function renderCollectionsList(collections) {
+      tableBody.innerHTML = '';
+      if (collections.length === 0) {
+        messageArea.innerHTML = `<p>This database has no collections yet.</p>`;
+        messageArea.style.display = 'block';
+        table.style.display = 'none';
+      } else {
+        collections.forEach(collection => {
+          const row = `
+                    <tr>
+                        <td><code>${escapeHTML(collection.name)}</code></td>
+                        <td>${collection.field_count}</td>
+                        <td>${collection.num_documents}</td>
+                        <td style="text-align: right;">
+                            <a href="#" class="btn btn-secondary btn-sm" style="text-decoration: none;opacity: 0.5;pointer-events: none;" disabled>Browse Data</a>
+                            <a href="#" class="btn btn-danger btn-sm" style="text-decoration: none;opacity: 0.5;pointer-events: none;" disabled>Delete</a>
+                        </td>
+                    </tr>
+                `;
+          tableBody.insertAdjacentHTML('beforeend', row);
+        });
+        messageArea.style.display = 'none';
+        table.style.display = 'table';
+      }
+    }
+
+    function escapeHTML(str) {
+      const p = document.createElement('p');
+      p.textContent = str;
+      return p.innerHTML;
+    }
+
+    fetchDatabaseDetails();
+  });
+</script>
+{% endblock %}

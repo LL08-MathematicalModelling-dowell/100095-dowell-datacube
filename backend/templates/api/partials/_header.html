@@ -1,0 +1,86 @@
+<header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+  <h1 id="page-title-heading">
+    {% block page_title %}
+    <!-- Default page title can go here -->
+    {% endblock %}
+  </h1>
+
+  <!--
+    This 'div' is now a placeholder. JavaScript will populate it
+    based on whether a token exists in localStorage.
+  -->
+  <div id="auth-controls">
+    <!-- Default state (if JS fails or no token) -->
+    <a href="{% url 'api:login' %}" class="btn btn-secondary">Log In</a>
+    <a href="{% url 'api:register' %}" class="btn btn-primary">Sign Up</a>
+  </div>
+
+</header>
+
+<!-- This script should be placed in your base.html or at the end of this partial -->
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const authControls = document.getElementById('auth-controls');
+    const accessToken = localStorage.getItem('accessToken');
+
+    function updateHeader() {
+      if (accessToken) {
+        // User is "logged in" on the client side.
+        // We need to fetch their profile info to display their name.
+        fetchUserProfile(accessToken);
+      } else {
+        // User is not logged in, show the default login/signup buttons.
+        // The default HTML is already correct, so we don't need to do anything here.
+      }
+    }
+
+    async function fetchUserProfile(token) {
+      try {
+        // IMPORTANT: Use your actual profile endpoint URL
+        const response = await fetch("{% url 'core:user_profile' %}", {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const user = await response.json();
+          renderLoggedInState(user);
+        } else {
+          // Token might be expired or invalid.
+          // Clear the bad token and show the logged-out state.
+          console.error("Failed to fetch user profile, token might be invalid.");
+          logout();
+        }
+      } catch (error) {
+        console.error("Network error fetching user profile:", error);
+        // Don't change the header if the server is down
+      }
+    }
+
+    function renderLoggedInState(user) {
+      // Create the HTML for the logged-in user
+      const welcomeText = user.firstName ? `Welcome, ${user.firstName}` : 'Welcome';
+      authControls.innerHTML = `
+        <span style="color: var(--text-muted); margin-right: 1rem;">${welcomeText}</span>
+        <button id="logout-btn" class="btn btn-secondary">Log Out</button>
+      `;
+
+      // Add an event listener to the new logout button
+      document.getElementById('logout-btn').addEventListener('click', logout);
+    }
+
+    function logout() {
+      // Clear the tokens from localStorage
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+
+      // Redirect to the login page to complete the logout process
+      window.location.href = "{% url 'api:login' %}";
+    }
+
+    // Run the function when the page loads
+    updateHeader();
+  });
+</script>

@@ -50,10 +50,8 @@ class ApiHomeView(BaseAPIView):
 
 class ListDatabasesView(BaseAPIView):
     """List databases owned by the authenticated user with pagination and search."""
-    # ADDED: This endpoint is now protected.
     permission_classes = [IsAuthenticated]
 
-    # REFACTORED: Changed from POST to GET to follow REST best practices for listing resources.
     @BaseAPIView.handle_errors
     def get(self, request):
         """
@@ -63,45 +61,34 @@ class ListDatabasesView(BaseAPIView):
         - page_size (int, default: 10)
         - search (str, optional): A search term to filter databases by name.
         """
-        # ADDED: Get the authenticated user's ID.
         user_id = request.user.id
 
-        # 1) Get and validate query parameters
+        # --- Step 1: Validate query parameters ---
         try:
             page = int(request.query_params.get('page', 1))
             page_size = int(request.query_params.get('page_size', 10))
+            if page < 1 or page_size < 1:
+                raise ValueError("Page and page_size must be positive integers.")
         except (ValueError, TypeError):
-            return Response({"error": "Page and page_size must be integers."}, status=400)
+            return Response({"error": "Invalid pagination parameters."}, status=status.HTTP_400_BAD_REQUEST)
         
         search_term = request.query_params.get('search', None)
 
-        # 2) Get paged metadata docs using the new secure, user-aware method.
-        total, basic_list = meta_svc.list_databases_paginated_for_user(
+        # --- Step 2: Call the updated, enriched service method ---
+        # The service layer now handles all the complex logic, including collection counting.
+        total, databases_list = meta_svc.list_databases_paginated_for_user(
             user_id=user_id,
             page=page,
             page_size=page_size,
             search_term=search_term
         )
 
-        # 3) Enrich with real-time collection counts (this logic remains the same).
-        client = settings.MONGODB_CLIENT
-        enriched = []
-        for item in basic_list:
-            # We use item['name'] here because that's what the paginated method returns.
-            db_name = item["name"]
-            try:
-                coll_names = client[db_name].list_collection_names()
-                item["num_collections"] = len(coll_names)
-            except Exception:
-                item["num_collections"] = None  # Or 0, depending on desired behavior
-            enriched.append(item)
-
-        # 4) Build pagination info.
+        # --- Step 3: Build pagination info ---
         total_pages = (total + page_size - 1) // page_size if page_size > 0 else 0
 
         return Response({
             "success": True,
-            "data": enriched,
+            "data": databases_list,
             "pagination": {
                 "page": page,
                 "page_size": page_size,
@@ -122,9 +109,8 @@ class ListCollectionsView(BaseAPIView):
         if not db_id:
             raise ValueError("database_id is required")
 
-        # CHANGED: Use the secure user-aware method to get collections.
         # This implicitly checks for ownership.
-        cols = meta_svc.list_collections_for_user(db_id, user_id)
+        cols = meta_svc.get_collections_for_user(db_id, user_id)
         return Response({
             "success": True,
             "collections": cols

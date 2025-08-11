@@ -1,0 +1,150 @@
+{% extends 'api/base.html' %}
+{% load static %}
+
+{% block title %}Login - DataCube{% endblock %}
+
+{% block content %}
+<style>
+  /* Page-specific styles for the auth form */
+  .auth-container {
+    max-width: 480px;
+    margin: 4rem auto;
+    padding: 2rem;
+  }
+
+  .form-group {
+    margin-bottom: 1.25rem;
+  }
+
+  .form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .form-group input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background-color: var(--bg-dark-1);
+    /* Slightly different from card bg */
+    color: var(--text-light);
+    font-size: 1rem;
+    transition: border-color 0.2s;
+  }
+
+  .form-group input:focus {
+    outline: none;
+    border-color: var(--green);
+    box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.25);
+  }
+
+  #submit-btn {
+    width: 100%;
+    margin-top: 1rem;
+  }
+
+  .message-area {
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 6px;
+    text-align: center;
+    color: white;
+    display: none;
+    /* Hidden by default */
+  }
+
+  .message-area.success {
+    background-color: var(--green-dark);
+    display: block;
+  }
+
+  .message-area.error {
+    background-color: #dc2626;
+    display: block;
+  }
+
+  .auth-link {
+    text-align: center;
+    margin-top: 1.5rem;
+    color: var(--text-muted);
+  }
+</style>
+
+<div class="card auth-container">
+  <h1 style="text-align: center; margin-bottom: 2rem;">Login to DataCube</h1>
+
+  <div id="message-area" class="message-area"></div>
+
+  <form id="login-form">
+    {% csrf_token %} <!-- Important for Django forms -->
+    <div class="form-group">
+      <label for="email">Email Address</label>
+      <input type="email" id="email" name="email" placeholder="Enter your email" required>
+    </div>
+    <div class="form-group">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" placeholder="Enter your password" required>
+    </div>
+    <button type="submit" id="submit-btn" class="btn btn-primary">Login</button>
+  </form>
+
+  <p class="auth-link">
+    Don't have an account? <a href="{% url 'api:register' %}">Register here</a>
+  </p>
+</div>
+
+<script>
+  // This script remains the same but now runs within your base template
+  document.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('login-form');
+    const submitBtn = document.getElementById('submit-btn');
+    const messageArea = document.getElementById('message-area');
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Logging In...';
+      messageArea.style.display = 'none';
+
+      const formData = new FormData(form);
+      const data = Object.fromEntries(formData.entries());
+
+      try {
+        const response = await fetch("{% url 'core:login' %}", { // Use Django URL tag
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': data.csrfmiddlewaretoken // Send CSRF token
+          },
+          body: JSON.stringify({ email: data.email, password: data.password }),
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          localStorage.setItem('accessToken', result.access);
+          localStorage.setItem('refreshToken', result.refresh);
+          messageArea.className = 'message-area success';
+          messageArea.textContent = 'Login successful! Redirecting...';
+          setTimeout(() => { window.location.href = "{% url 'api:api_docs' %}"; }, 1500); // Redirect to docs page
+        } else {
+          messageArea.className = 'message-area error';
+          messageArea.textContent = result.error || 'Invalid email or password.';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Login';
+        }
+      } catch (error) {
+        messageArea.className = 'message-area error';
+        messageArea.textContent = 'Failed to connect to the server.';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Login';
+        console.error('Login Error:', error);
+      }
+    });
+  });
+</script>
+{% endblock %}

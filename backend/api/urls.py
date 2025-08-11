@@ -1,10 +1,9 @@
 """URL configuration for the 'api' app, updated to handle optional trailing slashes."""
 
-# Import re_path in addition to path
-from django.urls import path, re_path
+from django.urls import re_path
 
 from api.views.admin_views import (
-    ApiHomeView,
+    # ApiHomeView,
     ListDatabasesView,
     ListCollectionsView,
     DropDatabaseView,
@@ -19,11 +18,17 @@ from api.views.database_views import (
 )
 from api.views.crud_views import DataCrudView
 
+from api.views.docs_views import APIDocsView, LoginView, RegisterView
+
 app_name = "api"
 
 urlpatterns = [
     # API homepage (docs) - GET only, path is fine but re_path is consistent
-    re_path(r"^/?$", ApiHomeView.as_view(), name="api_home"),
+    re_path(r"^/?$", APIDocsView.as_view(), name="api_docs"),
+    re_path(r"^login/?$", LoginView.as_view(), name="login"),
+    re_path(r"^register/?$", RegisterView.as_view(), name="register"),
+    # re_path(r"^/?$", ApiHomeView.as_view(), name="api_home"),
+
 
     # Database management
     # Using re_path for all endpoints that handle POST or DELETE

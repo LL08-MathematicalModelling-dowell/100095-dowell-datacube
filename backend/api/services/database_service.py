@@ -16,9 +16,10 @@ Key Changes:
     a database the user has been verified to own.
 """
 
+from api.utils.naming import generate_db_name
 from api.services.metadata_service import MetadataService
 from api.services.collection_service import CollectionService
-from api.utils.decorators import with_transaction
+# from api.utils.decorators import with_transaction
 
 
 class DatabaseService:
@@ -28,24 +29,27 @@ class DatabaseService:
     # @with_transaction
     def create_database_with_collections(
         self,
-        db_name: str,
+        user_provided_name: str, # <-- Renamed for clarity
         collections: list[dict],
         user_id: str,
         session=None
     ) -> tuple[dict, list[dict]]:
-        """
-        1) Insert user-owned metadata doc.
-        2) Create the actual MongoDB collections.
-        All in one transaction. If anything fails, we abort.
-        """
+        
+        # **STEP 1: Generate the internal database name**
+        internal_db_name = generate_db_name(user_provided_name, user_id)
+        
+        # **STEP 2: Use the internal name for all backend operations**
+        # The metadata service will store both names.
         meta = self.meta_svc.create_db_meta(
-            db_name,
+            user_provided_name,
+            internal_db_name, # Pass the new name
             collections,
-            user_id=user_id,
-            session=session
+            user_id,
+            # session=session
         )
 
-        coll_svc  = CollectionService(db_name, user_id=user_id)
+        # The collection service operates on the actual, internal database name.
+        coll_svc  = CollectionService(internal_db_name, user_id=user_id)
         names     = [c["name"] for c in collections]
         coll_info = coll_svc.create(names, session=session)
 
@@ -68,7 +72,7 @@ class DatabaseService:
         if not meta:
             raise PermissionError(f"Database '{database_id}' not found or access denied.")
         
-        db_name = meta["database_name"]
+        db_name = meta["dbName"]
 
         self.meta_svc.add_collections(
             database_id,
