@@ -1,12 +1,11 @@
-# auth_app/authentication.py
 import secrets
 from datetime import datetime
 from bson import ObjectId
 from rest_framework.authentication import BaseAuthentication, get_authorization_header
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework import exceptions
-from .managers import user_manager
-from .db import mongo_conn
+from core.utils.managers import user_manager
+from core.utils.db import mongo_conn
 
 class MongoUser:
     """A proxy class for the user data retrieved from MongoDB."""
@@ -95,22 +94,59 @@ class APIKeyManager:
         self.collection = mongo_conn.get_collection('api_keys')
         
     def generate_key(self, user_id, name):
-        key = secrets.token_hex(24)
+        # The actual secret key is still generated randomly
+        key = f"sk_test_{secrets.token_urlsafe(32)}"
+        
+        # We will only store a HASH of the key for security checks later
+        # NOTE: For simplicity, we are not hashing here, but in a real-world high-security
+        # app, you would hash this `key` and check against the hash.
+        # For our current `APIKeyAuthentication`, we check the raw key.
+        
         key_data = {
-            "key": key,
+            "key": key, # Store the full key for now
             "user_id": ObjectId(user_id),
             "name": name,
             "is_active": True,
-            "created_at": datetime.utcnow()
+            "created_at": datetime.utcnow(),
+            "key_display": f"{key[:11]}..." # <-- ADDED: A safe-to-display prefix
         }
         self.collection.insert_one(key_data)
+        
+        # IMPORTANT: Return the full, un-hashed key ONLY upon creation
         return key
 
     def get_keys_for_user(self, user_id):
-        return list(self.collection.find({"user_id": ObjectId(user_id)}, {'key': 0}))
+        # Exclude the sensitive 'key' field from the query result
+        print(f"Fetching API keys for user: >>>>>>>>>>>>>>>>>>>>>>>>>>> {user_id}")
+        return list(self.collection.find({"user_id": ObjectId(user_id)}, {'key': 0})) 
 
     def revoke_key(self, key_id, user_id):
         result = self.collection.delete_one({"_id": ObjectId(key_id), "user_id": ObjectId(user_id)})
         return result.deleted_count > 0
 
 api_key_manager = APIKeyManager()
+
+# class APIKeyManager:
+#     def __init__(self):
+#         self.collection = mongo_conn.get_collection('api_keys')
+        
+#     def generate_key(self, user_id, name):
+#         key = secrets.token_hex(24)
+#         key_data = {
+#             "key": key,
+#             "user_id": ObjectId(user_id),
+#             "name": name,
+#             "is_active": True,
+#             "created_at": datetime.utcnow()
+#         }
+#         self.collection.insert_one(key_data)
+#         return key
+
+#     def get_keys_for_user(self, user_id):
+#         return list(self.collection.find({"user_id": ObjectId(user_id)}, {'key': 0}))
+
+#     def revoke_key(self, key_id, user_id):
+#         result = self.collection.delete_one({"_id": ObjectId(key_id), "user_id": ObjectId(user_id)})
+#         return result.deleted_count > 0
+
+# api_key_manager = APIKeyManager()

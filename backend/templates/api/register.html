@@ -1,0 +1,181 @@
+{% extends 'api/base.html' %}
+{% load static %}
+
+{% block title %}Register - DataCube{% endblock %}
+
+{% block content %}
+<!-- All the HTML and CSS from before remains the same -->
+<style>
+  .auth-container {
+    max-width: 480px;
+    margin: 4rem auto;
+    padding: 2rem;
+  }
+
+  .form-group {
+    margin-bottom: 1.25rem;
+  }
+
+  .form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .form-group input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background-color: var(--bg-dark-1);
+    color: var(--text-light);
+    font-size: 1rem;
+    transition: border-color 0.2s;
+  }
+
+  .form-group input:focus {
+    outline: none;
+    border-color: var(--green);
+    box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.25);
+  }
+
+  #submit-btn {
+    width: 100%;
+    margin-top: 1rem;
+  }
+
+  .message-area {
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 6px;
+    text-align: center;
+    color: white;
+    display: none;
+  }
+
+  .message-area.success {
+    background-color: var(--green-dark);
+    display: block;
+  }
+
+  .message-area.error {
+    background-color: #dc2626;
+    display: block;
+  }
+
+  .auth-link {
+    text-align: center;
+    margin-top: 1.5rem;
+    color: var(--text-muted);
+  }
+</style>
+
+<div class="card auth-container">
+  <h1 style="text-align: center; margin-bottom: 2rem;">Create Your DataCube Account</h1>
+  <div id="message-area" class="message-area">
+    <p id="message-text" style="margin: 0; padding: 0; font-size: 1rem; line-height: 1.5; color: var(--text-light);">
+    </p>
+  </div>
+  <form id="register-form">
+    {% csrf_token %}
+    <div class="form-group">
+      <label for="firstName">First Name</label>
+      <input type="text" id="firstName" name="firstName" required>
+    </div>
+    <div class="form-group">
+      <label for="lastName">Last Name</label>
+      <input type="text" id="lastName" name="lastName" required>
+    </div>
+    <div class="form-group">
+      <label for="email">Email Address</label>
+      <input type="email" id="email" name="email" required>
+    </div>
+    <div class="form-group">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" required minlength="8">
+    </div>
+    <button type="submit" id="submit-btn" class="btn btn-primary">Create Account</button>
+  </form>
+  <p class="auth-link">
+    Already have an account? <a href="{% url 'api:login' %}">Login here</a>
+  </p>
+</div>
+
+<script>
+  // --- START OF CORRECTED SCRIPT ---
+  document.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('register-form');
+    const submitBtn = document.getElementById('submit-btn');
+    const messageArea = document.getElementById('message-area');
+    const authLink = document.querySelector('.auth-link');
+    const messageText = document.getElementById('message-text');
+
+    // **FIX 1: Get the CSRF token directly from the hidden input field**
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Creating Account...';
+      messageArea.style.display = 'none';
+
+      // This part is simpler now, we don't need the whole FormData object
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const firstName = document.getElementById('firstName').value;
+      const lastName = document.getElementById('lastName').value;
+
+      try {
+        const response = await fetch("{% url 'core:register' %}", {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            // **FIX 2: Add the X-CSRFToken header with the correct value**
+            'X-CSRFToken': csrfToken
+          },
+          body: JSON.stringify({
+            email: email,
+            password: password,
+            firstName: firstName,
+            lastName: lastName
+          }),
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          form.style.display = 'none';
+          authLink.style.display = 'none';
+          messageArea.className = 'message-area success';
+          messageArea.textContent = result.message;
+          messageText.textContent = result.message;
+          messageArea.style.display = 'block';
+        } else {
+          let errorMessage = 'An error occurred. Please try again.';
+          if (result) {
+            errorMessage = Object.entries(result)
+              .map(([key, value]) => {
+                const formattedKey = key.charAt(0).toUpperCase() + key.slice(1);
+                return `${formattedKey}: ${Array.isArray(value) ? value.join(', ') : value}`;
+              })
+              .join('\n'); // Use newline for better formatting of multiple errors
+          }
+          messageArea.className = 'message-area error';
+          messageArea.textContent = errorMessage;
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Create Account';
+        }
+      } catch (error) {
+        messageArea.className = 'message-area error';
+        messageArea.textContent = 'Failed to connect to the server.';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Create Account';
+        console.error('Registration Error:', error);
+      }
+    });
+  });
+  // --- END OF CORRECTED SCRIPT ---
+</script>
+{% endblock %}

@@ -1,0 +1,223 @@
+{% extends 'api/base.html' %}
+{% load static %}
+
+{% block title %}API Keys - DataCube{% endblock %}
+
+{% block page_title %}API Keys{% endblock %}
+
+{% block content %}
+<style>
+  /* Modal Styles */
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+
+  .modal-content {
+    background: var(--bg-dark-2);
+    padding: 2rem;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    border: 1px solid var(--border-color);
+  }
+
+  .modal-content h3 {
+    margin-top: 0;
+  }
+
+  .modal-content pre {
+    position: relative;
+  }
+
+  .modal-content .key-display {
+    background: var(--bg-dark-1);
+    padding: 1rem;
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    word-break: break-all;
+    margin: 1rem 0;
+  }
+</style>
+
+<div class="card">
+  <div style="display: flex; justify-content: space-between; align-items: center;">
+    <div>
+      <h3>Manage API Keys</h3>
+      <p style="color: var(--text-muted); margin-top: 0.5rem;">Use these keys to authenticate your programmatic requests
+        to the Data API.</p>
+    </div>
+    <button id="generate-key-btn" class="btn btn-primary">Generate New Key</button>
+  </div>
+
+  <div id="api-key-list-message" style="text-align: center; padding: 2rem; color: var(--text-muted); display: none;">
+  </div>
+
+  <table style="margin-top: 1.5rem;">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Created On</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="api-key-table-body">
+      <!-- JavaScript will populate this table body -->
+    </tbody>
+  </table>
+</div>
+
+<!-- Modal for showing the new key -->
+<div id="new-key-modal" class="modal-overlay">
+  <div class="modal-content">
+    <h3>New API Key Generated</h3>
+    <p style="color: var(--text-muted);">Please copy your new API key now. You will not be able to see it again.</p>
+    <div class="key-display">
+      <code id="new-api-key-code"></code>
+    </div>
+    <button id="close-modal-btn" class="btn btn-secondary">I have copied my key</button>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const tableBody = document.getElementById('api-key-table-body');
+    const messageArea = document.getElementById('api-key-list-message');
+    const generateBtn = document.getElementById('generate-key-btn');
+    const modal = document.getElementById('new-key-modal');
+    const newKeyCode = document.getElementById('new-api-key-code');
+    const closeModalBtn = document.getElementById('close-modal-btn');
+
+    const API_URL = "{% url 'core:api_keys_list_create' %}"; // The base URL for API actions
+
+    // --- Function to fetch and display keys ---
+    async function fetchAndRenderKeys() {
+      const accessToken = localStorage.getItem('accessToken');
+      if (!accessToken) return; // Should be handled by base.html authManager
+
+      messageArea.textContent = 'Loading keys...';
+      messageArea.style.display = 'block';
+      tableBody.innerHTML = ''; // Clear existing table
+
+      try {
+        const response = await fetch(API_URL, {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+
+        if (!response.ok) throw new Error('Failed to fetch API keys.');
+
+        const keys = await response.json();
+
+        if (keys.length === 0) {
+          messageArea.textContent = 'You have not generated any API keys yet.';
+        } else {
+          messageArea.style.display = 'none';
+          keys.forEach(key => {
+            const createdDate = new Date(key.created_at).toLocaleDateString('en-US', {
+              year: 'numeric', month: 'long', day: 'numeric'
+            });
+            const row = `
+                        <tr data-key-id="${key._id}">
+                            <td>${escapeHTML(key.name)}</td>
+                            <td>${createdDate}</td>
+                            <td><button class="btn btn-danger btn-sm revoke-btn">Revoke</button></td>
+                        </tr>
+                    `;
+            tableBody.insertAdjacentHTML('beforeend', row);
+          });
+        }
+      } catch (error) {
+        messageArea.textContent = error.message;
+        console.error(error);
+      }
+    }
+
+    // --- Function to handle key generation ---
+    generateBtn.addEventListener('click', async () => {
+      const keyName = prompt("Please enter a name for your new API key (e.g., 'My Analytics Script'):");
+      if (!keyName || keyName.trim() === '') return;
+
+      const accessToken = localStorage.getItem('accessToken');
+      if (!accessToken) return;
+
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+            'X-CSRFToken': '{{ csrf_token }}' // Important for POST
+          },
+          body: JSON.stringify({ name: keyName.trim() })
+        });
+
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Failed to generate key.');
+
+        // Show the modal with the new key
+        newKeyCode.textContent = result.key;
+        modal.style.display = 'flex';
+
+      } catch (error) {
+        alert(`Error: ${error.message}`);
+      }
+    });
+
+    // --- Function to handle key revocation ---
+    tableBody.addEventListener('click', async (event) => {
+      if (event.target.classList.contains('revoke-btn')) {
+        const row = event.target.closest('tr');
+        const keyId = row.dataset.keyId;
+
+        if (!confirm('Are you sure you want to revoke this API key? This action cannot be undone.')) return;
+
+        const accessToken = localStorage.getItem('accessToken');
+        if (!accessToken) return;
+
+        try {
+          const response = await fetch(`${API_URL}${keyId}/`, { // Note the trailing slash
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'X-CSRFToken': '{{ csrf_token }}' // Important for DELETE
+            }
+          });
+
+          if (response.status === 204) {
+            row.remove(); // Remove the key from the UI
+          } else {
+            const result = await response.json();
+            throw new Error(result.error || 'Failed to revoke key.');
+          }
+        } catch (error) {
+          alert(`Error: ${error.message}`);
+        }
+      }
+    });
+
+    // --- Modal close functionality ---
+    closeModalBtn.addEventListener('click', () => {
+      modal.style.display = 'none';
+      newKeyCode.textContent = ''; // Clear the key from the modal
+      fetchAndRenderKeys(); // Refresh the list to show the new key
+    });
+
+    function escapeHTML(str) {
+      return str.replace(/[&<>"']/g, function (match) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[match];
+      });
+    }
+
+    // --- Initial Load ---
+    fetchAndRenderKeys();
+  });
+</script>
+{% endblock %}

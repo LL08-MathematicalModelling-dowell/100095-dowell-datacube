@@ -1,0 +1,63 @@
+{% extends 'api/base.html' %}
+
+{% block title %}API Documentation - DataCube{% endblock %}
+
+{% block page_title %}
+API Reference
+{% endblock %}
+
+{% block content %}
+
+<p style="font-size: 1.1rem; color: var(--text-muted); margin-top: -1.5rem; margin-bottom: 2rem;">
+  Welcome to the DataCube API. Use our RESTful endpoints to manage your databases, collections, and documents
+  programmatically.
+</p>
+
+<!-- 
+  CORRECTION: 
+  The outer 'group' loop was removed. We now loop directly over the 'apis' list,
+  with each item in the list being a single 'endpoint'.
+-->
+{% for endpoint in apis %}
+<div class="card">
+  <h3>{{ endpoint.name }}</h3>
+  <p style="color: var(--text-muted);">{{ endpoint.description }}</p>
+
+  <!-- This inner loop correctly iterates over the 'methods' for each endpoint -->
+  {% for method in endpoint.methods %}
+  <div>
+    <span class="btn"
+      style="background-color: var(--green-dark); color: white; font-weight: bold; cursor: default;">{{ method.method }}</span>
+    <!-- The URL is part of the 'endpoint' object, not the 'method' object -->
+    <code style="background-color: var(--bg-dark-3); padding: 0.75rem; border-radius: 6px;">{{ endpoint.url }}</code>
+  </div>
+
+  {% if method.body %}
+  <h4 style="margin-top: 1.5rem;">Request Body</h4>
+  <pre><button class="copy-btn" title="Copy request body"><i class="fa fa-copy"></i></button><code>{{ method.body|safe }}</code></pre>
+  {% endif %}
+
+  {% if method.response %}
+  <h4 style="margin-top: 1.5rem;">Example Response</h4>
+  <pre><button class="copy-btn" title="Copy response"><i class="fa fa-copy"></i></button><code>{{ method.response|safe }}</code></pre>
+  {% endif %}
+
+  <!-- Add a small space between multiple methods for the same endpoint (like CRUD) -->
+  {% if not forloop.last %}
+  <hr style="border-color: var(--bg-dark-3); margin: 1.5rem 0;">{% endif %}
+
+  {% endfor %} {# End of the 'methods' loop #}
+</div>
+{% endfor %} {# End of the main 'apis' loop #}
+
+<script>
+  const pageTitleHeading = document.getElementById('page-title-heading');
+  function renderPageTitle() {
+    if (pageTitleHeading) {
+      pageTitleHeading.textContent = "API Reference";
+    }
+    document.title = 'API Reference - DataCube';
+  }
+  renderPageTitle();
+</script>
+{% endblock %}

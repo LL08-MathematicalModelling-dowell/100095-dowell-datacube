@@ -21,6 +21,8 @@ from asgiref.sync import sync_to_async
 
 from api.utils.mongodb import build_existing_fields_update_pipeline
 from api.services.metadata_service import MetadataService
+# from api.utils.decorators import with_transaction
+
 
 
 class CollectionService:
@@ -30,7 +32,8 @@ class CollectionService:
         verifying the user has permission to access it.
         """
         meta_svc = MetadataService()
-        if not meta_svc.exists_db(name=db_name, user_id=user_id):
+
+        if not meta_svc.exists_db_by_internal_name(internal_name=db_name, user_id=user_id):
             raise PermissionError(f"Access denied: You do not own database '{db_name}' or it does not exist.")
 
         # This line is only reached if the security check passes.
