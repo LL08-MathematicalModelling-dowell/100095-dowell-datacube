@@ -1,19 +1,14 @@
 """
 Service for managing documents in a MongoDB collection.
 
-This file has been updated to integrate with the custom authentication system.
+This file has been updated to align with the displayName/dbName architecture.
 Key Changes:
-1.  User-Aware Methods: All public methods (`list_docs`, `create_docs`, etc.)
-    now require a `user_id` to ensure operations are performed on behalf of an
-    authenticated and authorized user.
-2.  Secure `get_collection` Method: This core helper method is now the primary
-    security gate. It takes the `user_id` and uses the secure `get_by_id_for_user`
-    method from MetadataService to verify ownership *before* returning a
-    CollectionService instance.
-3.  Secure `CollectionService` Instantiation: When `get_collection` creates
-    an instance of `CollectionService`, it passes the `user_id` to its
-    constructor, ensuring all subsequent raw database operations are also
-    scoped to the correct user.
+1.  User-Aware Methods: All public methods continue to be scoped by user_id.
+2.  Secure `get_collection` Method: This core helper is updated to retrieve the
+    unique internal `dbName` from the metadata, not the user-facing `displayName`.
+3.  Secure `CollectionService` Instantiation: The CollectionService is now
+    instantiated with the correct internal `dbName`, allowing it to connect
+    to the correct physical database.
 """
 from typing import List, Dict, Tuple
 from api.services.metadata_service import MetadataService
@@ -29,12 +24,15 @@ class DocumentService:
 
     async def get_collection(self, db_id: str, coll_name: str, user_id: str) -> CollectionService:
         """
-        Get a collection service, but only after verifying the user owns the database.
+        Get a collection service, but only after verifying the user owns the database
+        and retrieving the correct internal database name.
         """
+        # Step 1: Securely fetch the metadata document. This verifies ownership.
         meta = self.meta.get_by_id_for_user(db_id, user_id)
         if not meta:
             raise PermissionError(f"Database '{db_id}' not found or access denied.")
 
+        # Step 2: Verify the requested collection exists in the schema.
         try:
             collection_names = [c["name"] for c in meta.get("collections", [])]
         except KeyError as e:
@@ -43,7 +41,14 @@ class DocumentService:
         if coll_name not in collection_names:
             raise ValueError(f"Collection '{coll_name}' not listed in metadata for database '{db_id}'.")
 
-        return CollectionService(meta["database_name"], user_id=user_id)
+        # --- THIS IS THE KEY CHANGE ---
+        # Step 3: Get the internal database name from the metadata.
+        internal_db_name = meta.get("dbName")
+        if not internal_db_name:
+            raise ValueError(f"Internal database name (`dbName`) not found in metadata for ID '{db_id}'.")
+        
+        # Step 4: Instantiate the CollectionService with the correct internal name.
+        return CollectionService(internal_db_name, user_id=user_id)
 
     async def list_docs(
         self,

@@ -38,3 +38,11 @@ class APIKeySerializer(serializers.Serializer):
     key = serializers.CharField(read_only=True)
     name = serializers.CharField(max_length=100)
     created_at = serializers.DateTimeField(read_only=True)
+
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    password = serializers.CharField(min_length=8, write_only=True)

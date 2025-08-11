@@ -13,44 +13,70 @@ API Reference
   programmatically.
 </p>
 
-<!-- 
-  CORRECTION: 
-  The outer 'group' loop was removed. We now loop directly over the 'apis' list,
-  with each item in the list being a single 'endpoint'.
--->
-{% for endpoint in apis %}
+<!-- This template now expects a grouped structure -->
+{% for group in apis %}
 <div class="card">
-  <h3>{{ endpoint.name }}</h3>
-  <p style="color: var(--text-muted);">{{ endpoint.description }}</p>
+  <!-- Group Header -->
+  <h2 style="margin-top: 0; border: none;">{{ group.group }}</h2>
+  <p style="color: var(--text-muted); margin-top: -0.5rem; margin-bottom: 1.5rem;">{{ group.description }}</p>
 
-  <!-- This inner loop correctly iterates over the 'methods' for each endpoint -->
-  {% for method in endpoint.methods %}
-  <div>
-    <span class="btn"
-      style="background-color: var(--green-dark); color: white; font-weight: bold; cursor: default;">{{ method.method }}</span>
-    <!-- The URL is part of the 'endpoint' object, not the 'method' object -->
-    <code style="background-color: var(--bg-dark-3); padding: 0.75rem; border-radius: 6px;">{{ endpoint.url }}</code>
+  {% if group.auth_header %}
+  <div style="margin-bottom: 1.5rem;">
+    <h4 style="margin-bottom: 0.5rem;">Authentication Header</h4>
+    <code
+      style="background-color: var(--bg-dark-1); padding: 0.75rem; border-radius: 6px; display: block;">{{ group.auth_header }}</code>
   </div>
-
-  {% if method.body %}
-  <h4 style="margin-top: 1.5rem;">Request Body</h4>
-  <pre><button class="copy-btn" title="Copy request body"><i class="fa fa-copy"></i></button><code>{{ method.body|safe }}</code></pre>
   {% endif %}
 
-  {% if method.response %}
-  <h4 style="margin-top: 1.5rem;">Example Response</h4>
-  <pre><button class="copy-btn" title="Copy response"><i class="fa fa-copy"></i></button><code>{{ method.response|safe }}</code></pre>
+  {% if group.how_to_get_key %}
+  <div style="padding: 1rem; background-color: var(--bg-dark-3); border-radius: 6px; margin-bottom: 1.5rem;">
+    <p style="margin: 0;"><i class="fa fa-info-circle"
+        style="margin-right: 0.5rem; color: var(--green);"></i>{{ group.how_to_get_key }}</p>
+  </div>
   {% endif %}
 
-  <!-- Add a small space between multiple methods for the same endpoint (like CRUD) -->
-  {% if not forloop.last %}
-  <hr style="border-color: var(--bg-dark-3); margin: 1.5rem 0;">{% endif %}
+  <!-- Loop through endpoints within the group -->
+  {% for endpoint in group.endpoints %}
+  <div style="border-top: 1px solid var(--border-color); padding-top: 1.5rem; margin-top: 1.5rem;">
+    <h3>{{ endpoint.name }}</h3>
+    <p style="color: var(--text-muted);">{{ endpoint.description }}</p>
 
-  {% endfor %} {# End of the 'methods' loop #}
+    {% for method in endpoint.methods %}
+    <div>
+      <span class="btn"
+        style="background-color: var(--green-dark); color: white; font-weight: bold; cursor: default;">{{ method.method }}</span>
+      <code style="background-color: var(--bg-dark-3); padding: 0.75rem; border-radius: 6px;">{{ endpoint.url }}</code>
+    </div>
+
+    {% if method.params %}
+    <h4 style="margin-top: 1.5rem;">Query Parameters</h4>
+    <code
+      style="background-color: var(--bg-dark-1); padding: 0.75rem; border-radius: 6px; display: block;">{{ method.params }}</code>
+    {% endif %}
+
+    {% if method.body %}
+    <h4 style="margin-top: 1.5rem;">Request Body</h4>
+    <pre><button class="copy-btn" title="Copy request body"><i class="fa fa-copy"></i></button><code>{{ method.body|safe }}</code></pre>
+    {% endif %}
+
+    {% if method.response %}
+    <h4 style="margin-top: 1.5rem;">Example Response</h4>
+    <pre><button class="copy-btn" title="Copy response"><i class="fa fa-copy"></i></button><code>{{ method.response|safe }}</code></pre>
+    {% endif %}
+
+    {% if not forloop.last %}
+    <hr style="border-color: var(--bg-dark-3); margin: 1.5rem 0;">{% endif %}
+    {% endfor %} {# End of methods loop #}
+  </div>
+  {% endfor %} {# End of endpoints loop #}
 </div>
-{% endfor %} {# End of the main 'apis' loop #}
+{% endfor %} {# End of groups loop #}
+
 
 <script>
+  // This script to set the title is no longer needed in this file,
+  // as it should be handled by the base template's authManager or be static.
+  // I am leaving it here in case you need it for other pages.
   const pageTitleHeading = document.getElementById('page-title-heading');
   function renderPageTitle() {
     if (pageTitleHeading) {
@@ -60,4 +86,5 @@ API Reference
   }
   renderPageTitle();
 </script>
+
 {% endblock %}

@@ -94,30 +94,6 @@ class APIKeyAPIView(APIView):
             return Response({"error": "Key not found or permission denied."}, status=status.HTTP_404_NOT_FOUND)
         
 
-# class DatabaseDetailAPIView(APIView):
-#     """
-#     Provides detailed information (metadata and collections) for a single database as JSON.
-#     """
-#     permission_classes = [IsAuthenticated]
-
-#     def get(self, request, db_id, *args, **kwargs):
-#         user_id = request.user.id
-#         meta_svc = MetadataService()
-
-#         # Fetch the specific database's metadata, which also verifies ownership.
-#         database_meta = meta_svc.get_by_id_for_user(db_id, user_id)
-#         if not database_meta:
-#             return Response({"error": "Database not found or permission denied."}, status=status.HTTP_404_NOT_FOUND)
-
-#         # Fetch the list of collections for this database.
-#         # collections = database_meta.get('collections', [])
-        
-#         # Prepare the response data, ensuring it's all JSON-serializable
-#         response_data = serialize_mongo_document(database_meta)
-        
-#         return Response(response_data)
-
-
 class DatabaseDetailAPIView(APIView):
     """
     Provides detailed information and aggregated stats for a single database as JSON.
