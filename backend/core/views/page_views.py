@@ -1,27 +1,9 @@
-# core/views/page_views.py
-
 from django.shortcuts import render
 from rest_framework.views import APIView
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.renderers import TemplateHTMLRenderer
 
-from api.services.metadata_service import MetadataService
 
-# This is the key: APIView handles token auth, TemplateHTMLRenderer renders HTML.
-
-# class DashboardBaseView(APIView):
-#     """
-#     A base view for all dashboard pages. It ensures the user is authenticated
-#     via token and then renders an HTML template.
-#     """
-#     permission_classes = [AllowAny]
-#     renderer_classes = [TemplateHTMLRenderer]
-
-#     def get_context_data(self, request, **kwargs):
-#         """A helper to provide common context to all dashboard pages."""
-#         return {
-#             'user': request.user # The MongoUser proxy object
-#         }
 class DashboardBaseView(APIView):
     """
     A base view for all dashboard pages. It ensures the user is authenticated

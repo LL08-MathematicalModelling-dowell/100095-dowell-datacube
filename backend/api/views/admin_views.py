@@ -107,10 +107,11 @@ class ListCollectionsView(BaseAPIView):
         user_id = request.user.id
         db_id = request.query_params.get("database_id", "").strip()
         if not db_id:
-            raise ValueError("database_id is required")
+            return Response({"error": "database_id is a required query parameter."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # This implicitly checks for ownership.
-        cols = meta_svc.get_collections_for_user(db_id, user_id)
+        cols = meta_svc.list_collections_for_user(db_id, user_id)
+        
+        # We can add a success key for consistency
         return Response({
             "success": True,
             "collections": cols
@@ -130,17 +131,27 @@ class DropDatabaseView(BaseAPIView):
         if not db_id or not confirmation:
             raise ValueError("database_id and confirmation are required")
 
-        # CHANGED: Call the secure drop_database method with the user_id.
-        # This will fail if the user doesn't own the database.
-        meta = meta_svc.drop_database(db_id, user_id=user_id)
+        # Fetch the metadata first to get both names
+        meta = meta_svc.get_by_id_for_user(db_id, user_id)
+        if not meta:
+            raise PermissionError(f"Database '{db_id}' not found or access denied.")
+        
+        user_provided_name = meta["displayName"]
+        internal_db_name = meta["dbName"]
 
-        db_name = meta["database_name"]
-        if confirmation.lower() != db_name.lower():
-            raise ValueError("Confirmation does not match database_name")
+        if confirmation.lower() != user_provided_name.lower():
+            raise ValueError("Confirmation text does not match the database name.")
+        
+        # Now, drop the metadata record
+        meta_svc.drop_database(db_id, user_id=user_id)
+        
+        # And finally, drop the actual MongoDB database using its internal name
+        settings.MONGODB_CLIENT.drop_database(internal_db_name)
 
-        settings.MONGODB_CLIENT.drop_database(db_name)
-
-        return Response({"success": True, "message": f"Database '{db_name}' dropped."}, status=status.HTTP_200_OK)
+        return Response({
+            "success": True,
+            "message": f"Database '{user_provided_name}' was successfully dropped."
+        }, status=status.HTTP_200_OK)
 
 
 class DropCollectionsView(BaseAPIView):
@@ -203,10 +214,7 @@ class ImportDataView(BaseAPIView):
 
     @BaseAPIView.handle_errors
     def post(self, request):
-        # ADDED: Get the authenticated user's ID for all operations.
         user_id = request.user.id
-
-        # 1) validate input
         data = self.validate_serializer(JSonImportSerializer, request.data)
         db_id = data["database_id"]
         coll_name = data.get("collection_name")
@@ -217,16 +225,15 @@ class ImportDataView(BaseAPIView):
             filename = os.path.basename(getattr(json_in, "name", "data.json"))
             coll_name = sanitize_name(os.path.splitext(filename)[0])
 
-        # 3) fetch metadata & ensure user owns the DB
-        # CHANGED: Use the secure user-aware method.
+        # CORRECTED: Fetch metadata to get the internal database name
         meta = meta_svc.get_by_id_for_user(db_id, user_id)
         if not meta:
             raise PermissionError(f"Database '{db_id}' not found or access denied.")
-        db_name = meta["database_name"]
-        db = settings.MONGODB_CLIENT[db_name]
+        internal_db_name = meta["dbName"]
+        db = settings.MONGODB_CLIENT[internal_db_name]
 
         # 4) load JSON payload
-        raw = json_in.read() if hasattr(json_in, "read") else open(json_in).read()
+        raw = json_in.read() if hasattr(json_in, "read") else open(json_in, encoding="utf-8").read()
         docs = json.loads(raw)
         if not isinstance(docs, list):
             docs = [docs]

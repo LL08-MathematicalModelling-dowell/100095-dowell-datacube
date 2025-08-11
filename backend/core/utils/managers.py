@@ -2,7 +2,7 @@ import secrets
 import bcrypt
 from datetime import datetime, timedelta, timezone # Import timezone
 from bson import ObjectId
-from .db import mongo_conn
+from core.utils.db import mongo_conn
 
 class UserManager:
     def __init__(self):
@@ -11,6 +11,9 @@ class UserManager:
     def _hash_password(self, password):
         """Hashes the password with a salt."""
         return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+
+    def hash_pass(self, password):
+        return self._hash_password(password)
 
     def check_password(self, password, hashed_password):
         """Checks a password against a hashed one."""
@@ -81,24 +84,6 @@ class UserManager:
         )
         return user_doc
 
-    # def create_user(self, email, first_name, last_name, password):
-    #     """Creates a new user, hashes the password, and saves to DB."""
-    #     if self.users_collection.find_one({"email": email}):
-    #         raise ValueError("User with this email already exists.")
-
-    #     hashed_password = self._hash_password(password)
-        
-    #     user_data = {
-    #         "email": email,
-    #         "firstName": first_name,
-    #         "lastName": last_name,
-    #         "password": hashed_password,
-    #     }
-        
-    #     result = self.users_collection.insert_one(user_data)
-    #     user_data['_id'] = result.inserted_id
-    #     return user_data
-
     def get_user_by_email(self, email):
         """Finds a user by their email address."""
         return self.users_collection.find_one({"email": email})
@@ -106,6 +91,38 @@ class UserManager:
     def get_user_by_id(self, user_id):
         """Finds a user by their MongoDB ObjectId."""
         return self.users_collection.find_one({"_id": ObjectId(user_id)})
+
+    def generate_password_reset_token(self, user_id):
+        """Generates a secure password reset token and saves its expiry to the user's document."""
+        token = secrets.token_urlsafe(32)
+        expiry = datetime.now(timezone.utc) + timedelta(hours=1)
+
+        self.users_collection.update_one(
+            {"_id": ObjectId(user_id)},
+            {
+                "$set": {
+                    "password_reset_token": token,
+                    "password_reset_expiry": expiry
+                }
+            }
+        )
+        return token
+
+    def verify_password_reset_token(self, token):
+        """Finds a user by their password reset token and checks if it's valid and unexpired."""
+        user_doc = self.users_collection.find_one({
+            "password_reset_token": token,
+            "password_reset_expiry": {"$gt": datetime.now(timezone.utc)}
+        })
+        return user_doc
+
+    def clear_password_reset_token(self, user_id):
+        """Clears the password reset token fields after a successful password change."""
+        self.users_collection.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$unset": {"password_reset_token": "", "password_reset_expiry": ""}}
+        )
+
 
 # Instantiate the manager
 user_manager = UserManager()

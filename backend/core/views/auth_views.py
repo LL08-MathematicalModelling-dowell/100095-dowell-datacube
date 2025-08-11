@@ -7,14 +7,19 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
-from core.serializers import UserRegistrationSerializer, UserSerializer, APIKeySerializer
+from core.serializers import (
+  UserRegistrationSerializer,
+  UserSerializer,
+  APIKeySerializer,
+  PasswordResetRequestSerializer,
+  PasswordResetConfirmSerializer,
+)
 from core.utils.managers import user_manager
 from core.utils.authentication import api_key_manager, MongoUser
 
-from django.core.mail import send_mail # Import send_mail
-from django.template.loader import render_to_string # Import render_to_string
-from django.utils.html import strip_tags # Import strip_tags
-
+from django.core.mail import send_mail
+from django.template.loader import render_to_string
+from django.utils.html import strip_tags
 
 
 # Configures Stripe with secret key
@@ -80,7 +85,6 @@ class RegistrationView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-
 class LoginView(APIView):
     permission_classes = [AllowAny]
 
@@ -108,136 +112,110 @@ class LoginView(APIView):
         })
 
 
-# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-class LogoutView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        # Invalidate the user's token by blacklisting it
-        try:
-            request.auth.blacklist()
-            return Response({"message": "Logged out successfully"}, status=status.HTTP_205_RESET_CONTENT)
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-
-class PasswordResetView(APIView):
+class PasswordResetRequestView(APIView):
+    """
+    Initiates the password reset process by sending an email to the user.
+    """
     permission_classes = [AllowAny]
 
     def post(self, request):
-        email = request.data.get('email')
-        if not email:
-            return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
-
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        email = serializer.validated_data['email']
         user_doc = user_manager.get_user_by_email(email)
-        if not user_doc:
-            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Generate a password reset token
-        token = user_manager.generate_password_reset_token(user_doc['_id'])
-        
-        # Send the reset link via email
-        reset_url = f"http://localhost:8000/api/auth/reset-password/{token}"
-        context = {
-            "reset_url": reset_url,
-            "first_name": user_doc['firstName'],
-        }
-        
-        html_message = render_to_string('core/email/reset_password.html', context)
-        plain_message = strip_tags(html_message)
-        
-        send_mail(
-            subject="Password Reset Request",
-            message=plain_message,
-            from_email=None,  # Uses DEFAULT_FROM_EMAIL from settings
-            recipient_list=[email],
-            html_message=html_message,
-            fail_silently=False, # Set to True in production if needed
-        )
+        # For security, we always return a success message, even if the user doesn't exist.
+        # This prevents attackers from discovering which emails are registered.
+        if user_doc:
+            token = user_manager.generate_password_reset_token(user_doc['_id'])
+            
+            # IMPORTANT: Update this URL to point to your frontend page
+            reset_url = f"http://localhost:8000/core/reset-password/{token}"
+            
+            context = {"reset_url": reset_url, "first_name": user_doc.get('firstName', 'User')}
+            html_message = render_to_string('core/email/reset_password.html', context)
+            
+            send_mail(
+                subject="Your Password Reset Request",
+                message=strip_tags(html_message),
+                from_email=None,
+                recipient_list=[email],
+                html_message=html_message,
+            )
 
-        return Response({"message": "Password reset link sent to your email."}, status=status.HTTP_200_OK)
+        return Response({"message": "If an account with that email exists, a password reset link has been sent."}, status=status.HTTP_200_OK)
 
 
 class PasswordResetConfirmView(APIView):
+    """
+    Completes the password reset process by setting a new password.
+    """
     permission_classes = [AllowAny]
 
     def post(self, request, token):
-        new_password = request.data.get('new_password')
-        if not new_password:
-            return Response({"error": "New password is required"}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         user_doc = user_manager.verify_password_reset_token(token)
         if not user_doc:
-            return Response({"error": "Invalid or expired reset link."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "This password reset link is invalid or has expired."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Update the user's password
-        hashed_password = user_manager.hash_password(new_password)
+        new_password = serializer.validated_data['password']
+        hashed_password = user_manager.hash_pass(new_password)
+        
         user_manager.users_collection.update_one(
             {'_id': user_doc['_id']},
             {'$set': {'password': hashed_password}}
         )
 
-        return Response({"message": "Password reset successfully."}, status=status.HTTP_200_OK)
+        # Clean up the token so it can't be used again
+        user_manager.clear_password_reset_token(user_doc['_id'])
+
+        return Response({"message": "Your password has been reset successfully. You can now log in."}, status=status.HTTP_200_OK)
 
 
 class ResendVerificationEmailView(APIView):
+    """
+    Allows an authenticated but unverified user to request a new verification email.
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        user_doc = request.user  # Assuming the user is authenticated
-        if not user_doc:
-            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        # Generate a new verification token
-        token = user_manager.generate_email_verification_token(user_doc['_id'])
+        # request.user is our MongoUser proxy object
+        user_id_str = request.user.id
         
-        # Send the verification email
+        # We need the full user document from the DB to get email and check status
+        user_doc = user_manager.get_user_by_id(user_id_str)
+        if not user_doc:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if user_doc.get("is_email_verified", False):
+            return Response({"message": "Your email is already verified."}, status=status.HTTP_400_BAD_REQUEST)
+
+        token = user_manager.generate_email_verification_token(user_doc['_id'])
         self._send_verification_email(user_doc, token)
 
-        return Response({"message": "Verification email sent successfully."}, status=status.HTTP_200_OK)
+        return Response({"message": "A new verification email has been sent."}, status=status.HTTP_200_OK)
 
     def _send_verification_email(self, user_doc, token):
-        """Helper method to construct and send the verification email."""
-        verification_url = f"http://localhost:8000/api/auth/verify-email/{token}" 
-        
+        # IMPORTANT: Update this URL to point to your frontend page
+        verification_url = f"http://localhost:8000/core/verify-email/{token}" 
         context = {
-            "first_name": user_doc['firstName'],
+            "first_name": user_doc.get('firstName', 'User'),
             "verification_url": verification_url,
         }
-        
         html_message = render_to_string('core/email/verify_email.html', context)
-        plain_message = strip_tags(html_message)
-        
         send_mail(
             subject="Verify Your Email Address",
-            message=plain_message,
-            from_email=None,  # Uses DEFAULT_FROM_EMAIL from settings
+            message=strip_tags(html_message),
+            from_email=None,
             recipient_list=[user_doc['email']],
             html_message=html_message,
-            fail_silently=False, # Set to True in production if needed
         )
-
-
-# This view handles the generating a new access token for user with a valid refresh token
-class TokenRefreshView(APIView):
-    permission_classes = [AllowAny]
-
-    def post(self, request):
-        refresh_token = request.data.get('refresh_token')
-        if not refresh_token:
-            return Response({"error": "Refresh token is required"}, status=status.HTTP_400_BAD_REQUEST)
-
-        user_doc = user_manager.verify_refresh_token(refresh_token)
-        if not user_doc:
-            return Response({"error": "Invalid or expired refresh token."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Generate a new access token
-        new_access_token = user_manager.generate_access_token(user_doc['_id'])
-
-        return Response({"access_token": new_access_token}, status=status.HTTP_200_OK)
-
-# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 
 class EmailVerificationView(APIView):
@@ -319,17 +297,12 @@ class StripeWebhookView(APIView):
             session = event['data']['object']
             customer_id = session.get('customer')
             subscription_id = session.get('subscription')
-
-            # print(f"Checkout session completed for customer >>>>>>>>>>  : {customer_id}, subscription: {subscription_id}")
             
             # Retrieve the full subscription object to get plan details
             subscription = stripe.Subscription.retrieve(subscription_id)
 
-            # print(f"Retrieved subscription >>>>>>>>>>>  : {subscription}")
-
             price_id = subscription['items']['data'][0]['price']['id']
 
-            # Map your Stripe Price IDs to your internal plan names
             pro_plan_id = os.getenv("PRO_PRICE_ID")
             free_plan_id = os.getenv("FREE_PRICE_ID")
 
@@ -362,6 +335,4 @@ class StripeWebhookView(APIView):
                 }}
             )
         
-        # ... handle other event types as needed
-
         return Response(status=200)
