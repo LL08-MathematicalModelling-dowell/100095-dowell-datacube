@@ -3,15 +3,15 @@ import json
 from pathlib import Path
 from pymongo import MongoClient
 from dotenv import load_dotenv
+from datetime import timedelta
 
-# Load .env file if available
+
 load_dotenv()
 
 # Paths
 BASE_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = BASE_DIR / 'config.json'
 
-# Load external config (e.g., for local development)
 if CONFIG_PATH.exists():
     with open(CONFIG_PATH, encoding='utf-8') as f:
         config = json.load(f)
@@ -19,8 +19,8 @@ else:
     config = {}
 
 # Environment flags
-DEBUG = os.getenv('DEBUG', True)
-# DEBUG=True
+# DEBUG = os.getenv('DEBUG', True)
+DEBUG=True
 SECRET_KEY = os.getenv('SECRET_KEY', config.get('secret_key'))
 
 # MongoDB
@@ -66,6 +66,7 @@ INSTALLED_APPS = [
 
     # Local
     'api',
+    'core',
 ]
 
 SITE_ID = 1
@@ -78,6 +79,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'api.middleware.UsageMeteringMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -122,14 +124,47 @@ STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-MY_BASE_URL = os.getenv('MY_BASE_URL', 'https://datacube.uxlivinglab.online')
+# MY_BASE_URL = os.getenv('MY_BASE_URL', 'https://datacube.uxlivinglab.online')
+
 
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
         "rest_framework.renderers.BrowsableAPIRenderer" if DEBUG else "rest_framework.renderers.JSONRenderer",
     ],
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        # We will create this custom JWT auth class in a moment
+        'core.utils.authentication.CustomJWTAuthentication',
+        'core.utils.authentication.APIKeyAuthentication',    # For service-to-service actions
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
+    'UNAUTHENTICATED_USER': None, # Important for our custom setup
 }
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=7),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=14),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+}
+
+
+
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# In production, you would use something like this:
+# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+# EMAIL_HOST = 'smtp.example.com'
+# EMAIL_PORT = 587
+# EMAIL_USE_TLS = True
+# EMAIL_HOST_USER = 'your-email@example.com'
+# EMAIL_HOST_PASSWORD = 'your-email-password'
+# DEFAULT_FROM_EMAIL = 'noreply@yourdomain.com'
+
+
+
 
 # Logging
 # LOGS_DIR = BASE_DIR / 'logs'

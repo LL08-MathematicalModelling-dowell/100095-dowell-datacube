@@ -1,0 +1,21 @@
+{% extends 'api/base.html' %}
+
+{% block title %}Billing - DataCube{% endblock %}
+
+{% block page_title %}Billing & Subscriptions{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h3>Your Current Plan</h3>
+  <p style="font-size: 1.5rem; font-weight: 700; color: var(--green);">Pro Plan</p>
+  <p style="color: var(--text-muted);">Your subscription renews on November 26, 2027.</p>
+
+  <hr style="border-color: var(--border-color); margin: 1.5rem 0;">
+
+  <h3>Manage Your Subscription</h3>
+  <p style="color: var(--text-muted);">You can manage your payment methods, view invoices, and change or cancel your
+    plan via our secure billing portal, powered by Stripe.</p>
+  <a href="#" class="btn btn-primary" disabled style="margin-top: 1rem; pointer-events: none;opacity: 0.5;">Open Billing
+    Portal</a>
+</div>
+{% endblock %}

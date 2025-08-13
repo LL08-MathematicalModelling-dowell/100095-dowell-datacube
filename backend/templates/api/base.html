@@ -1,0 +1,307 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}DataCube{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    :root {
+      --green-light: #abf7b1;
+      --green: #2ecc71;
+      --green-dark: #25a25a;
+      --bg-dark-1: #111827;
+      --bg-dark-2: #1f2937;
+      --bg-dark-3: #374151;
+      --text-light: #f9fafb;
+      --text-muted: #9ca3af;
+      --border-color: #4b5563;
+      --font-sans: 'Inter', sans-serif;
+      --font-mono: 'Fira Code', monospace;
+      --sidebar-width: 260px;
+    }
+
+    /* --- Global Styles --- */
+    body {
+      background-color: var(--bg-dark-1);
+      color: var(--text-light);
+      font-family: var(--font-sans);
+      margin: 0;
+      display: flex;
+    }
+
+    /* --- Main Layout --- */
+    #sidebar {
+      width: var(--sidebar-width);
+      background-color: var(--bg-dark-2);
+      height: 100vh;
+      position: fixed;
+      top: 0;
+      left: 0;
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .main-content {
+      margin-left: var(--sidebar-width);
+      width: calc(100% - var(--sidebar-width));
+      padding: 2rem;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    /* --- Components --- */
+    .btn {
+      padding: 0.75rem 1.25rem;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .btn-primary {
+      background-color: var(--green);
+      color: var(--bg-dark-1);
+    }
+
+    .btn-primary:hover {
+      background-color: var(--green-dark);
+    }
+
+    .btn-secondary {
+      background-color: var(--bg-dark-3);
+      color: var(--text-light);
+    }
+
+    .btn-secondary:hover {
+      background-color: #4b5563;
+    }
+
+    .btn-danger {
+      background-color: #ef4444;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background-color: #dc2626;
+    }
+
+    .card {
+      background-color: var(--bg-dark-2);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    h1,
+    h2,
+    h3 {
+      color: var(--text-light);
+      font-weight: 600;
+    }
+
+    h1 {
+      font-size: 2rem;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.5rem;
+      margin-top: 2rem;
+    }
+
+    a {
+      color: var(--green);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    pre,
+    code {
+      font-family: var(--font-mono);
+    }
+
+    pre {
+      background-color: #111827;
+      padding: 1rem;
+      border-radius: 6px;
+      overflow-x: auto;
+      position: relative;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: var(--bg-dark-3);
+      border: none;
+      color: var(--text-muted);
+      padding: 5px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .copy-btn:hover {
+      color: var(--text-light);
+    }
+
+    /* --- Table Styles --- */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1.5rem;
+    }
+
+    th,
+    td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    th {
+      background-color: var(--bg-dark-3);
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-size: 0.8rem;
+    }
+
+    /* --- Responsive --- */
+    @media (max-width: 900px) {
+      #sidebar {
+        display: none;
+        /* Simplification for mobile, can be improved with JS toggle */
+      }
+
+      .main-content {
+        margin-left: 0;
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  {% include 'api/partials/_sidebar.html' %}
+
+  <div class="main-content">
+    {% include 'api/partials/_header.html' %}
+
+    <main>
+      {% block content %}
+      <!-- Page-specific content will be injected here -->
+      {% endblock %}
+    </main>
+  </div>
+
+  <script>
+    // Copy to clipboard functionality
+    document.querySelectorAll('.copy-btn').forEach(button => {
+      button.addEventListener('click', () => {
+        const pre = button.parentElement;
+        const code = pre.querySelector('code');
+        navigator.clipboard.writeText(code.innerText).then(() => {
+          button.innerText = 'Copied!';
+          setTimeout(() => { button.innerHTML = '<i class="fa fa-copy"></i>'; }, 2000);
+        });
+      });
+    });
+
+    const authManager = {
+      verifyTokenAndSetupUI: async function () {
+        const accessToken = localStorage.getItem('accessToken');
+
+        // If we are on a page that REQUIRES login and there's no token, redirect immediately.
+        if (!accessToken && this.isProtectedPage()) {
+          this.redirectToLogin();
+          return;
+        }
+
+        // If a token exists, verify it and render the UI.
+        if (accessToken) {
+          try {
+            const response = await fetch("{% url 'core:user_profile' %}", {
+              headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+
+            if (response.ok) {
+              const user = await response.json();
+              this.renderLoggedInUI(user);
+            } else {
+              // Token is invalid/expired.
+              console.warn("Token validation failed. Clearing and redirecting.");
+              this.logout();
+            }
+          } catch (error) {
+            console.error("Network error during auth check:", error);
+          }
+        }
+      },
+
+      renderLoggedInUI: function (user) {
+        // This function remains the same - it populates the header and sidebar
+        const headerControls = document.getElementById('auth-controls');
+        if (headerControls) {
+          const welcomeText = user.firstName ? `Welcome, ${user.firstName}` : 'Welcome';
+          headerControls.innerHTML = `
+                    <span style="color: var(--text-muted); margin-right: 1rem;">${welcomeText}</span>
+                    <button id="logout-btn" class="btn btn-secondary">Log Out</button>
+                `;
+          document.getElementById('logout-btn').addEventListener('click', () => this.logout());
+        }
+
+        const sidebarPlaceholder = document.getElementById('dashboard-links-placeholder');
+        if (sidebarPlaceholder) {
+          sidebarPlaceholder.innerHTML = `
+                    <li style="margin-bottom: 0.5rem; font-weight: 600; color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase;">User Dashboard</li>
+                    <li><a href="{% url 'core:dashboard_overview' %}" style="padding: 0.75rem; display: block; border-radius: 6px;"><i class="fa fa-tachometer-alt fa-fw" style="margin-right: 0.75rem;"></i>Overview</a></li>
+                    <li><a href="{% url 'core:dashboard_api_keys' %}" style="padding: 0.75rem; display: block; border-radius: 6px;"><i class="fa fa-key fa-fw" style="margin-right: 0.75rem;"></i>API Keys</a></li>
+                    <li><a href="{% url 'core:dashboard_billing' %}" style="padding: 0.75rem; display: block; border-radius: 6px;"><i class="fa fa-credit-card fa-fw" style="margin-right: 0.75rem;"></i>Billing</a></li>
+                    <hr style="border-color: var(--border-color); margin: 1.5rem 0;">
+                `;
+        }
+      },
+
+      logout: function () {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        this.redirectToLogin();
+      },
+
+      redirectToLogin: function () {
+        // Redirect to login to get a fresh token.
+        window.location.href = "{% url 'api:login' %}";
+      },
+
+      isProtectedPage: function () {
+        // Define which pages require a user to be logged in.
+        return window.location.pathname.startsWith('/dashboard/');
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      authManager.verifyTokenAndSetupUI();
+    });
+  </script>
+
+</body>
+
+</html>

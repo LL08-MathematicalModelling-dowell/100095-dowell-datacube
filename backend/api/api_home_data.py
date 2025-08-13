@@ -1,725 +1,270 @@
-"""API documentation for a DataCube database management system."""
+"""
+API documentation for the DataCube platform.
+This data is structured for rendering on the API documentation page.
+"""
 
-from django.urls import reverse
+from django.urls import reverse_lazy
 
 apis = [
     {
-        "name": "Health Check",
-        "description": "Verify that the API server is up and responding.",
-        "url": reverse("api:health_check"),
-        "methods": [
+        "group": "Authentication API",
+        "description": "Endpoints for user registration, login, and token management. These endpoints are the entry point for interacting with DataCube.",
+        "endpoints": [
             {
-                "method": "GET",
-                "params": None,
-                "body": None,
-                "response": """
-{
-    "success": true,
-    "message": "Server is up"
-}
-"""
+                "name": "Register User",
+                "description": "Create a new user account. A verification email will be sent upon successful registration.",
+                "auth_required": "No",
+                "url": reverse_lazy("core:register"),
+                "methods": [
+                    {
+                        "method": "POST",
+                        "body": """{
+    "email": "developer@example.com",
+    "firstName": "Alex",
+    "lastName": "Dev",
+    "password": "a-strong-and-secure-password"
+}""",
+                        "response": """{
+    "message": "User registered successfully. Please check your email to verify your account."
+}"""
+                    }
+                ]
+            },
+            {
+                "name": "Login (Get JWT)",
+                "description": "Authenticate with your email and password to receive a short-lived Access Token and a long-lived Refresh Token.",
+                "auth_required": "No",
+                "url": reverse_lazy("core:login"),
+                "methods": [
+                    {
+                        "method": "POST",
+                        "body": """{
+    "email": "developer@example.com",
+    "password": "a-strong-and-secure-password"
+}""",
+                        "response": """{
+    "refresh": "eyJ0eXAiOiJKV1QiLCJhbGciOiJI...",
+    "access": "eyJ0eXAiOiJKV1QiLCJhbGciOiJI..."
+}"""
+                    }
+                ]
             }
         ]
     },
     {
-        "name": "Create Database",
-        "description": "Create a new logical database and its initial collections/fields.",
-        "url": reverse("api:create_database"),
-        "methods": [
+        "group": "Management API",
+        "description": "Endpoints for managing your account, databases, and API keys. All requests to this API group must be authenticated using a JWT Bearer Token obtained from the Login endpoint.",
+        "auth_header": "Authorization: Api-Key <YOUR_API_KEY>",
+        "endpoints": [
             {
-                "method": "POST",
-                "body": """
-{
-    "db_name": "new_database",
+                "name": "Create Database",
+                "description": "Create a new logical database with its initial collections and schema.",
+                "auth_required": "API Key",
+                "url": reverse_lazy("api:create_database"),
+                "methods": [
+                    {
+                        "method": "POST",
+                        "body": """{
+    "db_name": "my_customer_project",
     "collections": [
         {
             "name": "users",
             "fields": [
-                {"name": "username", "type": "string"},
-                {"name": "age", "type": "number"}
+                {"name": "email", "type": "string"},
+                {"name": "signup_date", "type": "date"}
             ]
         }
     ]
-}
-""",
-                "response": """
-{
+}""",
+                        "response": """{
     "success": true,
-    "message": "Database 'new_database' and collections created successfully.",
     "database": {
-        "id": "507f1f77bcf86cd799439011",
-        "name": "new_database"
+        "id": "60c72b2f9b1d8b1a2d3e4567",
+        "name": "my_customer_project"
     },
-    "collections": [
-        {
-            "name": "users",
-            "id": "607e1c72e13c2a3f4a9b1234",
-            "fields": [
-                {"name": "username", "type": "string"},
-                {"name": "age", "type": "number"}
-            ]
-        }
-    ]
-}
-"""
-            }
-        ]
-    },
-    {
-        "name": "Add Collections",
-        "description": "Add new collections (with field definitions) to an existing database.",
-        "url": reverse("api:add_collection"),
-        "methods": [
+    "collections": [ ... ]
+}"""
+                    }
+                ]
+            },
             {
-                "method": "POST",
-                "body": """
-{
-    "database_id": "507f1f77bcf86cd799439011",
-    "collections": [
-        {
-            "name": "orders",
-            "fields": [
-                {"name": "order_id", "type": "string"},
-                {"name": "total", "type": "number"}
-            ]
-        }
-    ]
-}
-""",
-                "response": """
-{
-    "success": true,
-    "message": "Collections 'orders' created successfully.",
-    "collections": [
-        {
-            "name": "orders",
-            "id": "607e1e33a1b2c4d5e6f78901",
-            "fields": [
-                {"name": "order_id", "type": "string"},
-                {"name": "total", "type": "number"}
-            ]
-        }
-    ],
-    "database": {
-        "total_collections": 2,
-        "total_fields": 4
-    }
-}
-"""
-            }
-        ]
-    },
-    {
-        "name": "List Databases",
-        "description": "Page through all databases with optional Mongo-style filter and collection count.",
-        "url": reverse("api:list_databases"),
-        "methods": [
-            {
-                "method": "POST",
-                "body": """
-{
-    "page": 1,
-    "page_size": 10,
-    "filter": {
-        "number_of_collections": { "$gte": 2 },
-        "database_name": { "$regex": "^prod_" }
-    }
-}
-""",
-                "response": """
-{
+                "name": "List Databases",
+                "description": "Retrieve a paginated list of all logical databases you own.",
+                "auth_required": "API Key",
+                "url": reverse_lazy("api:list_databases"),
+                "methods": [
+                    {
+                        "method": "GET",
+                        "params": "page=1&page_size=10&search=customer",
+                        "response": """{
     "success": true,
     "data": [
-        {"id": "507f1f77bcf86cd799439011", "database_name": "prod_users", "num_collections": 5},
-        {"id": "507f1f77bcf86cd799439012", "database_name": "prod_orders", "num_collections": 3}
+        {
+            "id": "60c72b2f9b1d8b1a2d3e4567",
+            "name": "my_customer_project",
+            "num_collections": 1
+        }
     ],
-    "pagination": {
-        "page": 1,
-        "page_size": 10,
-        "total": 2,
-        "total_pages": 1
-    }
-}
-"""
-            }
-        ]
-    },
-    {
-        "name": "List Collections",
-        "description": "Retrieve all collections in a database with document counts.",
-        "url": reverse("api:list_collections"),
-        "methods": [
+    "pagination": { ... }
+}"""
+                    }
+                ]
+            },
             {
-                "method": "GET",
-                "params": {
-                    "database_id": "507f1f77bcf86cd799439011"
-                },
-                "response": """
-{
-    "success": true,
-    "collections": [
-        {"name": "users", "num_documents": 42},
-        {"name": "orders", "num_documents": 128}
-    ]
-}
-"""
-            }
-        ]
-    },
-    {
-        "name": "Get Database Metadata",
-        "description": "Fetch metadata for a database including collections and fields.",
-        "url": reverse("api:get_metadata"),
-        "methods": [
-            {
-                "method": "GET",
-                "params": {
-                    "database_id": "507f1f77bcf86cd799439011"
-                },
-                "response": """
-{
+                "name": "Get Database Metadata",
+                "description": "Fetch the complete metadata document for a single database, including its schema.",
+                "auth_required": "API Key",
+                "url": reverse_lazy("api:get_metadata"),
+                "methods": [
+                    {
+                        "method": "GET",
+                        "params": "database_id=60c72b2f9b1d8b1a2d3e4567",
+                        "response": """{
     "success": true,
     "data": {
-        "_id": "507f1f77bcf86cd799439011",
-        "database_name": "example_db",
-        "number_of_collections": 2,
-        "number_of_fields": 5,
-        "collections": [
-            {
-                "name": "users",
-                "fields": [
-                    {"name": "username", "type": "string"},
-                    {"name": "email", "type": "string"}
+        "_id": "60c72b2f9b1d8b1a2d3e4567",
+        "user_id": "...",
+        "displayName": "my_customer_project",
+        "dbName": "my_customer_project_689547_V2",
+        "collections": [ ... ]
+    }
+}"""
+                    }
                 ]
             },
             {
-                "name": "orders",
-                "fields": [
-                    {"name": "order_id", "type": "string"},
-                    {"name": "total", "type": "number"}
-                ]
-            }
-        ]
-    }
-}
-"""
-            }
-        ]
-    },
-    {
-        "name": "Drop Database",
-        "description": "Delete a database and all collections after confirmation.",
-        "url": reverse("api:drop_database"),
-        "methods": [
-            {
-                "method": "DELETE",
-                "body": """
-{
-    "database_id": "507f1f77bcf86cd799439011",
-    "confirmation": "example_db"
-}
-""",
-                "response": """
-{
+                "name": "List Collections",
+                "description": "Retrieve all collections in a database along with their live document counts.",
+                "auth_required": "API Key",
+                "url": reverse_lazy("api:list_collections"),
+                "methods": [
+                    {
+                        "method": "GET",
+                        "params": "database_id=60c72b2f9b1d8b1a2d3e4567",
+                        "response": """{
     "success": true,
-    "message": "Database 'example_db' and its metadata dropped successfully"
-}
-"""
-            }
-        ]
-    },
-    {
-        "name": "Drop Collections",
-        "description": "Remove one or more collections from a database.",
-        "url": reverse("api:drop_collections"),
-        "methods": [
-            {
-                "method": "DELETE",
-                "body": """
-{
-    "database_id": "507f1f77bcf86cd799439011",
-    "collection_names": ["users", "orders"]
-}
-""",
-                "response": """
-{
-    "success": true,
-    "dropped_collections": ["users", "orders"],
-    "failed_collections": []
-}
-"""
-            }
-        ]
-    },
-    {
-        "name": "CRUD Documents",
-        "description": "Create, read, update, and delete documents in a collection.",
-        "url": reverse("api:crud"),
-        "methods": [
-            {
-                "method": "POST",
-                "body": """
-{
-    "database_id": "507f1f77bcf86cd799439011",
-    "collection_name": "users",
-    "data": [
-        {"username": "alice", "age": 28},
-        {"username": "bob", "age": 34}
+    "collections": [
+        {"name": "users", "num_documents": 152},
+        {"name": "products", "num_documents": 840}
     ]
-}
-""",
-                "response": """
-{
-    "success": true,
-    "inserted_ids": ["60c72b2f9b1d8b1a2d3e4567", "60c72b2f9b1d8b1a2d3e4568"]
-}
-"""
+}"""
+                    }
+                ]
             },
             {
-                "method": "GET",
-                "params": {
-                    "database_id": "507f1f77bcf86cd799439011",
-                    "collection_name": "users",
-                    "filters": "{\"age\": {\"$gt\": 30}}",
-                    "page": "1",
-                    "page_size": "50"
-                },
-                "response": """
-{
+                "name": "Drop Database",
+                "description": "Permanently delete a logical database and all of its collections and documents.",
+                "auth_required": "JWT Bearer Token",
+                "url": reverse_lazy("api:drop_database"),
+                "methods": [
+                    {
+                        "method": "DELETE",
+                        "body": """{
+    "database_id": "60c72b2f9b1d8b1a2d3e4567",
+    "confirmation": "my_customer_project"
+}""",
+                        "response": """{
     "success": true,
-    "data": [
-        {"_id": "60c72b2f9b1d8b1a2d3e4568", "username": "bob", "age": 34}
-    ],
-    "pagination": {
-        "page": 1,
-        "page_size": 50,
-        "total": 1,
-        "total_pages": 1
-    }
-}
-"""
+    "message": "Database 'my_customer_project' was successfully dropped."
+}"""
+                    }
+                ]
             },
             {
-                "method": "PUT",
-                "body": """
-{
-    "database_id": "507f1f77bcf86cd799439011",
-    "collection_name": "users",
-    "filters": {"username": "alice"},
-    "update_data": {"age": 29}
-}
-""",
-                "response": """
-{
+                "name": "Drop Collections",
+                "description": "Permanently delete one or more collections from a database.",
+                "auth_required": "JWT Bearer Token",
+                "url": reverse_lazy("api:drop_collections"),
+                "methods": [
+                    {
+                        "method": "DELETE",
+                        "body": """{
+    "database_id": "60c72b2f9b1d8b1a2d3e4567",
+    "collection_names": ["old_logs", "temporary_users"]
+}""",
+                        "response": """{
     "success": true,
-    "modified_count": 1
-}
-"""
+    "dropped_collections": ["old_logs", "temporary_users"]
+}"""
+                    }
+                ]
             },
             {
-                "method": "DELETE",
-                "body": """
+                "name": "Import Data (File Upload)",
+                "description": "Bulk import documents into a collection from a JSON file.",
+                "auth_required": "JWT Bearer Token",
+                "url": reverse_lazy("api:import_data"),
+                "methods": [
+                    {
+                        "method": "POST",
+                        "body": """# This is a multipart/form-data request
 {
-    "database_id": "507f1f77bcf86cd799439011",
-    "collection_name": "users",
-    "filters": {"age": {"$lt": 20}},
-    "soft_delete": false
-}
-""",
-                "response": """
-{
-    "success": true,
-    "count": 2
-}
-"""
-            }
-        ]
-    },
-    {
-        "name": "Import JSON Data",
-        "description": "Bulk import JSON via file or raw payload. Auto-creates collection if needed.",
-        "url": reverse("api:import_data"),
-        "methods": [
-            {
-                "method": "POST",
-                "body": """
-{
-    "database_id": "507f1f77bcf86cd799439011",
+    "database_id": "60c72b2f9b1d8b1a2d3e4567",
     "collection_name": "events",  # optional
-    "json_file": <uploaded JSON file>
-}
-""",
-                "response": """
-{
+    "json_file": (binary content of your .json file)
+}""",
+                        "response": """{
     "success": true,
     "collection": "events",
-    "inserted_count": 125
-}
-"""
+    "inserted_count": 5210
+}"""
+                    }
+                ]
+            }
+        ]
+    },
+
+    {
+        "group": "Data API",
+        "description": "Endpoints for all programmatic Create, Read, Update, and Delete (CRUD) operations on your documents. All requests to this API group must be authenticated using an API Key.",
+        "auth_header": "Authorization: Api-Key <YOUR_API_KEY>",
+        "how_to_get_key": "API Keys can be generated in your user dashboard after logging in. They are long-lived and designed for use in your backend services, scripts, and applications.",
+        "endpoints": [
+            {
+                "name": "CRUD Documents",
+                "description": "Perform operations on documents within a specific collection.",
+                "auth_required": "API Key",
+                "url": reverse_lazy("api:crud"),
+                "methods": [
+                    {
+                        "method": "POST (Create)",
+                        "body": """{
+    "database_id": "60c72b2f9b1d8b1a2d3e4567",
+    "collection_name": "users",
+    "data": [
+        {"email": "alice@example.com", "signup_date": "2023-10-27T10:00:00Z"},
+        {"email": "bob@example.com", "signup_date": "2023-10-27T11:00:00Z"}
+    ]
+}""",
+                        "response": """{
+    "success": true,
+    "inserted_ids": ["..."]
+}"""
+                    },
+                    {
+                        "method": "GET (Read)",
+                        "params": "database_id=...&collection_name=...&filters={\"email\": \"alice@example.com\"}",
+                        "response": """{
+    "success": true,
+    "data": [ ... ],
+    "pagination": { ... }
+}"""
+                    },
+                    {
+                        "method": "PUT (Update)",
+                        "body": """{
+    "database_id": "60c72b2f9b1d8b1a2d3e4567",
+    "collection_name": "users",
+    "filters": {"email": "alice@example.com"},
+    "update_data": {"newsletter_subscribed": true}
+}""",
+                        "response": """{
+    "success": true,
+    "modified_count": 1
+}"""
+                    }
+                ]
             }
         ]
     }
 ]
-
-
-
-# from django.urls import reverse
-
-# apis = [
-#     {
-#         "name": "Health Check",
-#         "description": "Verify that the API server is up and responding.",
-#         "url": reverse("api:health_check"),
-#         "methods": [
-#             {
-#                 "method": "GET",
-#                 "params": None,
-#                 "body": None,
-#                 "response": """
-# {
-#     "success": true,
-#     "message": "Server is up"
-# }
-# """,
-#             }
-#         ],
-#     },
-#     {
-#         "name": "Create Database",
-#         "description": "Create a new logical database and its initial collections/fields.",
-#         "url": reverse("api:create_database"),
-#         "methods": [
-#             {
-#                 "method": "POST",
-#                 "body": """
-# {
-#     "db_name": "new_database",
-#     "collections": [
-#         {
-#             "name": "users",
-#             "fields": [
-#                 {"name": "username", "type": "string"},
-#                 {"name": "age",      "type": "number"}
-#             ]
-#         }
-#     ]
-# }
-# """,
-#                 "response": """
-# {
-#     "success": true,
-#     "message": "Database 'new_database' and collections created successfully.",
-#     "database": {
-#         "id": "507f1f77bcf86cd799439011",
-#         "name": "new_database"
-#     },
-#     "collections": [
-#         {
-#             "name": "users",
-#             "id": "607e1c72e13c2a3f4a9b1234",
-#             "fields": [
-#                 {"name": "username", "type": "string"},
-#                 {"name": "age",      "type": "number"}
-#             ]
-#         }
-#     ]
-# }
-# """,
-#             }
-#         ],
-#     },
-#     {
-#         "name": "Add Collections",
-#         "description": "Add one or more new collections (with field definitions) to an existing database.",
-#         "url": reverse("api:add_collection"),
-#         "methods": [
-#             {
-#                 "method": "POST",
-#                 "body": """
-# {
-#     "database_id": "507f1f77bcf86cd799439011",
-#     "collections": [
-#         {
-#             "name": "orders",
-#             "fields": [
-#                 {"name": "order_id", "type": "string"},
-#                 {"name": "total",    "type": "number"}
-#             ]
-#         }
-#     ]
-# }
-# """,
-#                 "response": """
-# {
-#     "success": true,
-#     "message": "Collections 'orders' created successfully.",
-#     "collections": [
-#         {
-#             "name": "orders",
-#             "id": "607e1e33a1b2c4d5e6f78901",
-#             "fields": [
-#                 {"name": "order_id", "type": "string"},
-#                 {"name": "total",    "type": "number"}
-#             ]
-#         }
-#     ],
-#     "database": {
-#         "total_collections": 2,
-#         "total_fields": 4
-#     }
-# }
-# """,
-#             }
-#         ],
-#     },
-#     {
-#         "name": "List Databases",
-#         "description": "Page through all databases, with optional MongoDB‐style filter, and get real‐time collection counts.",
-#         "url": reverse("api:list_databases"),
-#         "methods": [
-#             {
-#                 "method": "POST",
-#                 "body": """
-# {
-#     "page": 1,
-#     "page_size": 10,
-#     "filter": {
-#         "number_of_collections": { "$gte": 2 },
-#         "database_name": { "$regex": "^prod_" }
-#     }
-# }
-# """,
-#                 "response": """
-# {
-#     "success": true,
-#     "data": [
-#         {"id": "507f1f77bcf86cd799439011", "database_name": "prod_users", "num_collections": 5},
-#         {"id": "507f1f77bcf86cd799439012", "database_name": "prod_orders","num_collections": 3}
-#     ],
-#     "pagination": {
-#         "page": 1,
-#         "page_size": 10,
-#         "total": 2,
-#         "total_pages": 1
-#     }
-# }
-# """,
-#             }
-#         ],
-#     },
-#     {
-#         "name": "List Collections",
-#         "description": "Retrieve all collections in a given database, with document counts per collection.",
-#         "url": reverse("api:list_collections"),
-#         "methods": [
-#             {
-#                 "method": "GET",
-#                 "params": {
-#                     "database_id": "507f1f77bcf86cd799439011"
-#                 },
-#                 "response": """
-# {
-#     "success": true,
-#     "collections": [
-#         {"name": "users", "num_documents": 42},
-#         {"name": "orders","num_documents": 128}
-#     ]
-# }
-# """,
-#             }
-#         ],
-#     },
-#     {
-#         "name": "Get Database Metadata",
-#         "description": "Fetch the stored metadata document for a database, including all collections and field details.",
-#         "url": reverse("api:get_metadata"),
-#         "methods": [
-#             {
-#                 "method": "GET",
-#                 "params": {
-#                     "database_id": "507f1f77bcf86cd799439011"
-#                 },
-#                 "response": """
-# {
-#     "success": true,
-#     "data": {
-#         "_id": "507f1f77bcf86cd799439011",
-#         "database_name": "example_db",
-#         "number_of_collections": 2,
-#         "number_of_fields": 5,
-#         "collections": [
-#             {
-#                 "name": "users",
-#                 "fields": [
-#                     {"name": "username", "type": "string"},
-#                     {"name": "email",    "type": "string"}
-#                 ]
-#             },
-#             {
-#                 "name": "orders",
-#                 "fields": [
-#                     {"name": "order_id", "type": "string"},
-#                     {"name": "total",    "type": "number"}
-#                 ]
-#             }
-#         ]
-#     }
-# }
-# """,
-#             }
-#         ],
-#     },
-#     {
-#         "name": "Drop Database",
-#         "description": "Permanently delete a database's metadata and all its collections (requires name confirmation).",
-#         "url": reverse("api:drop_database"),
-#         "methods": [
-#             {
-#                 "method": "DELETE",
-#                 "body": """
-# {
-#     "database_id":  "507f1f77bcf86cd799439011",
-#     "confirmation": "example_db"
-# }
-# """,
-#                 "response": """
-# {
-#     "success": true,
-#     "message": "Database 'example_db' and its metadata dropped successfully"
-# }
-# """,
-#             }
-#         ],
-#     },
-#     {
-#         "name": "Drop Collections",
-#         "description": "Remove one or more collections from an existing database (updates metadata and drops actual collections).",
-#         "url": reverse("api:drop_collections"),
-#         "methods": [
-#             {
-#                 "method": "DELETE",
-#                 "body": """
-# {
-#     "database_id":     "507f1f77bcf86cd799439011",
-#     "collection_names":["users","orders"]
-# }
-# """,
-#                 "response": """
-# {
-#     "success": true,
-#     "dropped_collections": ["users","orders"],
-#     "failed_collections":  []
-# }
-# """,
-#             }
-#         ],
-#     },
-#     {
-#         "name": "CRUD Documents",
-#         "description": "Create, read, update, and delete documents in a specific collection using full MongoDB filters.",
-#         "url": reverse("api:crud"),
-#         "methods": [
-#             {
-#                 "method": "POST",
-#                 "body": """
-# {
-#     "database_id":     "507f1f77bcf86cd799439011",
-#     "collection_name": "users",
-#     "data": [
-#         {"username": "alice", "age": 28},
-#         {"username": "bob",   "age": 34}
-#     ]
-# }
-# """,
-#                 "response": """
-# {
-#     "success": true,
-#     "inserted_ids": ["60c72b2f9b1d8b1a2d3e4567", "60c72b2f9b1d8b1a2d3e4568"]
-# }
-# """,
-#             },
-#             {
-#                 "method": "GET",
-#                 "params": {
-#                     "database_id":     "507f1f77bcf86cd799439011",
-#                     "collection_name": "users",
-#                     "filters":         "{\"age\":{\"$gt\":30}}",
-#                     "page":            "1",
-#                     "page_size":       "50"
-#                 },
-#                 "response": """
-# {
-#     "success": true,
-#     "data": [
-#         {"_id":"60c72b2f9b1d8b1a2d3e4568","username":"bob","age":34}
-#     ],
-#     "pagination": {
-#         "page": 1,
-#         "page_size": 50,
-#         "total": 1,
-#         "total_pages": 1
-#     }
-# }
-# """,
-#             },
-#             {
-#                 "method": "PUT",
-#                 "body": """
-# {
-#     "database_id":     "507f1f77bcf86cd799439011",
-#     "collection_name": "users",
-#     "filters":         {"username":"alice"},
-#     "update_data":     {"age":29}
-# }
-# """,
-#                 "response": """
-# {
-#     "success": true,
-#     "modified_count": 1
-# }
-# """,
-#             },
-#             {
-#                 "method": "DELETE",
-#                 "body": """
-# {
-#     "database_id":     "507f1f77bcf86cd799439011",
-#     "collection_name": "users",
-#     "filters":         {"age": {"$lt":20}},
-#     "soft_delete":     false
-# }
-# """,
-#                 "response": """
-# {
-#     "success": true,
-#     "count":  2
-# }
-# """,
-#             }
-#         ],
-#     },
-#     {
-#         "name": "Import JSON Data",
-#         "description": "Bulk-import JSON (file or payload) into a collection.  If the collection does not yet exist, it will be auto-created (with fields inferred).",
-#         "url": reverse("api:import_data"),
-#         "methods": [
-#             {
-#                 "method": "POST",
-#                 "body": """
-# {
-#     "database_id":     "507f1f77bcf86cd799439011",
-#     "collection_name": "events",      # optional
-#     "json_file":       <uploaded JSON file>
-# }
-# """,
-#                 "response": """
-# {
-#     "success":        true,
-#     "collection":     "events",
-#     "inserted_count": 125
-# }
-# """,
-#             }
-#         ],
-#     },
-# ]
