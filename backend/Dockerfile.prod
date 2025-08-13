@@ -64,7 +64,8 @@ USER appuser
 
 # Run collectstatic as the non-root user.
 # This ensures that files created by this command have the correct permissions.
-RUN python manage.py collectstatic --noinput
+# RUN python manage.py collectstatic --noinput
+RUN SECRET_KEY_DUMMY=dummy-for-collectstatic python manage.py collectstatic --noinput
 
 # Expose the application port
 EXPOSE 8000
