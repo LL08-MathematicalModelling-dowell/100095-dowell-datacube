@@ -1,317 +1,134 @@
+"""
+This file contains all serializers used by the API.
+
+It has been cleaned up to remove unused serializers and consolidate logic
+based on the current, secure implementation of the API views.
+"""
+
 import re
-from django.conf import settings
 from rest_framework import serializers
-from typing import List, Union
 from bson import ObjectId
-from rest_framework import serializers
 
 
-class InputGetSerializer(serializers.Serializer):
-    db_name = serializers.CharField(max_length=255, required=True)
-    coll_name = serializers.CharField(max_length=255, required=True)
-    filters = serializers.JSONField(required=False)
-    limit = serializers.IntegerField(required=False)
-    offset = serializers.IntegerField(required=False)
+# --- Reusable Custom Fields & Base Serializers ---
 
-
-class InputPostSerializer(serializers.Serializer):
-    coll_name = serializers.CharField(max_length=255, required=True)
-    db_name = serializers.CharField(max_length=255, required=True)
-    data = serializers.JSONField(required=True)
-
-    def validate_data(self, value):
-        """
-        Ensures `data` is either a dictionary (single document) or a list of dictionaries (multiple documents).
-        """
-        if isinstance(value, dict):
-            # Single document case
-            return [value]  # Wrap in a list for uniform handling in the view
-        elif isinstance(value, list) and all(isinstance(item, dict) for item in value):
-            # Multiple documents case
-            return value
-        else:
-            raise serializers.ValidationError("The `data` field must be a dictionary or a list of dictionaries representing documents to insert.")
-
-
-
-class InputPutSerializer(serializers.Serializer):
-    db_name = serializers.CharField(max_length=100)
-    coll_name = serializers.CharField(max_length=100)
-    operation = serializers.ChoiceField(choices=['update', 'replace'])
-    query = serializers.JSONField(required=True)
-    update_data = serializers.JSONField(required=True)
-
-    def validate(self, data):
-        # Ensure `update_data` is present if `operation` is 'update'
-        if data['operation'] == 'update' and not data.get('update_data'):
-            raise serializers.ValidationError("`update_data` is required for update operations.")
+class ObjectIdField(serializers.CharField):
+    """
+    Custom serializer field to validate a string as a valid MongoDB ObjectId.
+    """
+    def to_internal_value(self, data):
+        # First, validate the format to provide a clear error message.
+        if not isinstance(data, str) or not re.match(r'^[a-fA-F0-9]{24}$', data):
+            raise serializers.ValidationError("Must be a valid 24-character hexadecimal ObjectId.")
+        # If format is valid, it can be used directly in services that call ObjectId().
         return data
 
 
-class InputDeleteSerializer(serializers.Serializer):
-    db_name = serializers.CharField(max_length=100)
-    coll_name = serializers.CharField(max_length=100)
-    operation = serializers.ChoiceField(choices=['delete', 'soft_delete'])
-    query = serializers.JSONField(required=True)
-
-    def validate(self, data):
-        # Ensure that `query` is provided
-        if not data.get('query'):
-            raise serializers.ValidationError("A `query` is required to specify the document(s) to delete.")
-        return data
-
-
-class NotEmptyStringValidator:
-    def __call__(self, value):
-        if value == "":
-            raise serializers.ValidationError("This field cannot be empty.")
-
-
-class NoSpecialCharsValidator:
-    def __call__(self, value):
-        for char in value:
-            if not char.isalnum() and char != ',' and char != '_': # Added '_' to allowed characters
-                raise serializers.ValidationError("This field cannot contain special characters except commas and underscores.")
-
-
-class NoSpacesValidator:
-    def __call__(self, value):
-        if ' ' in value.strip():
-            raise serializers.ValidationError("This field cannot contain spaces.")
-
-
-class GetCollectionsSerializer(serializers.Serializer):
-    # api_key = serializers.CharField(max_length=510, required=True)
-    db_name = serializers.CharField(max_length=100)
-    # payment = serializers.BooleanField(default=True, allow_null=True, required=False)
-
-
-class DropDatabaseSerializer(serializers.Serializer):
-    """
-    Serializer class to validate the database name and confirmation for dropping a database.
-    """
-    db_name = serializers.CharField(max_length=100)
-    confirmation = serializers.CharField(max_length=100)
-
-
-class ListDatabaseSerializer(serializers.Serializer):
-    page = serializers.IntegerField(default=1)
-    page_size = serializers.IntegerField(default=10)
-    filter = serializers.CharField(default='')
-
-
-# =================== Add Collection ===================
-
+# --- Database & Collection Structure Serializers ---
 
 class FieldSerializer(serializers.Serializer):
-    MONGODB_FIELD_TYPES = [
-    "string",       # Textual data
-    "number",       # Numeric data
-    "object",       # Embedded document
-    "array",        # List of values
-    "boolean",      # True/False
-    "date",         # ISO 8601 date
-    "null",         # Null value
-    "binary",       # Binary data
-    "objectid",     # ObjectId
-    "decimal128",   # High-precision decimal
-    "regex",        # Regular expression
-    "timestamp"     # Timestamp
-    ]
-
+    """Serializer for a single field within a collection's schema."""
     name = serializers.CharField(
         max_length=100,
-        required=True,
         help_text="Name of the field. Use only letters, numbers, underscores (_), or hyphens (-)."
     )
     type = serializers.ChoiceField(
-        choices=MONGODB_FIELD_TYPES,
-        required=False,
-        help_text="Type of the field. Optional, defaults to 'string'."
+        choices=[
+            "string", "number", "object", "array", "boolean", "date", "datetime",
+            "null", "binary", "objectid", "decimal128", "regex", "timestamp"
+        ],
+        default="string",
+        help_text="Type of the field. Defaults to 'string'."
     )
 
     def validate_name(self, value):
-        """Validate field name contains only allowed characters."""
         if not re.match(r'^[\w-]+$', value):
             raise serializers.ValidationError("Field name can only contain alphanumeric characters, underscores, or hyphens.")
         return value
 
 
 class CollectionSerializer(serializers.Serializer):
+    """Serializer for a collection's name and its schema of fields."""
     name = serializers.CharField(
         max_length=100,
-        required=True,
-        help_text="Name of the collection to be created. Use only letters, numbers, underscores (_), or hyphens (-)."
+        help_text="Name of the collection. Use only letters, numbers, underscores (_), or hyphens (-)."
     )
     fields = serializers.ListField(
         child=FieldSerializer(),
-        required=True,
+        min_length=1,
         help_text="List of fields with names and optional types for the collection."
     )
 
     def validate_name(self, value):
-        """Validate collection name contains only allowed characters."""
         if not re.match(r'^[\w-]+$', value):
             raise serializers.ValidationError("Collection name can only contain alphanumeric characters, underscores, or hyphens.")
         return value
 
 
 class AddDatabasePOSTSerializer(serializers.Serializer):
-    """ Serializer class to validate the request body for creating a new database. """
+    """Validates the request for creating a new database."""
     db_name = serializers.CharField(
         max_length=100,
-        required=True,
-        help_text="Name of the new database. Must be unique and only contain alphanumeric characters, underscores, or hyphens."
+        help_text="Name of the new database. Must be unique for the user."
     )
     collections = serializers.ListField(
         child=CollectionSerializer(),
-        required=False,
-        help_text="List of collections with names and fields for the new database."
+        min_length=1,
+        help_text="A list of at least one collection to create within the new database."
     )
 
-    def validate(self, data):
-        """Custom validation to make collections optional for 'living lab admin'."""
-        collections = data.get("collections")
-
-        if not collections:
-            raise serializers.ValidationError("At least one collection with fields must be specified.")
-        
-        return data
-
     def validate_db_name(self, value):
-        """Validate that db_name contains only allowed characters."""
         if not re.match(r'^[\w-]+$', value):
             raise serializers.ValidationError("Database name can only contain alphanumeric characters, underscores, or hyphens.")
-        if value.lower() == "admin":
-            raise serializers.ValidationError("The database name 'admin' is reserved and cannot be used.")
+        if value.lower() in ["admin", "local", "config"]:
+            raise serializers.ValidationError(f"The database name '{value}' is reserved and cannot be used.")
         return value
-
 
 
 class AddCollectionPOSTSerializer(serializers.Serializer):
-    database_id = serializers.CharField(
-        max_length=24,
-        required=True,
-        help_text="ID of the existing database where collections will be added"
-    )
+    """Validates the request for adding collections to an existing database."""
+    database_id = ObjectIdField(help_text="ID of the existing database to add collections to.")
     collections = serializers.ListField(
         child=CollectionSerializer(),
-        required=True,
-        help_text="List of collections with names and document fields"
+        min_length=1,
+        help_text="A list of at least one new collection to add."
     )
 
-    def validate_database_id(self, value):
-        """Validate that database_id is a valid MongoDB ObjectId."""
-        if not re.match(r'^[a-fA-F0-9]{24}$', value):
-            raise serializers.ValidationError("Invalid database ID format. Must be a 24-character hexadecimal string.")
-        return value
 
-
-class GetMetadataSerializer(serializers.Serializer):
-    db_name = serializers.CharField(required=True)
-
-
-
-# ====================================== CRUD POST Serializer ==============================
-
-
-class ObjectIdField(serializers.Field):
-    """
-    Custom field to validate MongoDB ObjectId.
-    """
-    def to_internal_value(self, data):
-        try:
-            return ObjectId(data)
-        except Exception:
-            raise serializers.ValidationError(
-                "Invalid ObjectId. Must be a 24-character hexadecimal string."
-            )
-
-    def to_representation(self, value):
-        return str(value)
-
+# --- Data CRUD Operation Serializers ---
 
 class AsyncPostDocumentSerializer(serializers.Serializer):
-    database_id = ObjectIdField(required=True, help_text="ID of the database.")
-    collection_name = serializers.CharField(
-        required=True,
-        max_length=100,
-        help_text="Name of the collection.",
-    )
+    """Validates the request for creating new documents."""
+    database_id = ObjectIdField(help_text="The ID of the target database.")
+    collection_name = serializers.CharField(max_length=100, help_text="The name of the target collection.")
     data = serializers.ListField(
         child=serializers.DictField(),
-        required=True,
-        help_text="List of documents to be inserted.",
+        min_length=1,
+        help_text="A list containing one or more documents (as JSON objects) to insert."
     )
-
-    def validate_data(self, value: Union[List[dict], dict]) -> List[dict]:
-        """
-        Ensure data is a list of dictionaries.
-
-        Args:
-            value (Union[List[dict], dict]): The data input.
-
-        Returns:
-            List[dict]: Validated list of dictionaries.
-
-        Raises:
-            serializers.ValidationError: If data is invalid.
-        """
-        if isinstance(value, dict):
-            value = [value]
-
-        if not all(isinstance(doc, dict) for doc in value):
-            raise serializers.ValidationError(
-                "Each item in data must be a dictionary."
-            )
-
-        return value
-
-    def validate(self, attrs):
-        """
-        Custom validation for MongoDB documents.
-
-        Args:
-            attrs (dict): Serializer attributes.
-
-        Returns:
-            dict: Validated attributes.
-
-        Raises:
-            serializers.ValidationError: If any validation fails.
-        """
-        documents = attrs.get("data")
-
-        # Add any additional validations if needed, such as mandatory fields or data structure checks.
-        for document in documents:
-            if "is_deleted" in document and not isinstance(document["is_deleted"], bool):
-                raise serializers.ValidationError(
-                    "'is_deleted' must be a boolean if provided."
-                )
-            document.setdefault("is_deleted", False)  # Default to False if not provided
-
-        return attrs
-
-class ListDatabasesPOSTSerializer(serializers.Serializer):
-    page      = serializers.IntegerField(default=1, min_value=1)
-    page_size = serializers.IntegerField(default=50, min_value=1)
-    # This allows any valid JSON object as a filter
-    filter    = serializers.JSONField(default=dict)
-
-class JSonImportSerializer(serializers.Serializer):
-    database_id = serializers.CharField()
-    collection_name = serializers.CharField(required=False)
-    json_file = serializers.FileField(required=True)
 
 
 class UpdateDocumentSerializer(serializers.Serializer):
-    database_id = serializers.CharField(required=True)
-    collection_name = serializers.CharField(required=True)
-    filters = serializers.JSONField(required=True)
-    update_data = serializers.JSONField(required=True)
+    """Validates the request for updating documents."""
+    database_id = ObjectIdField(help_text="The ID of the target database.")
+    collection_name = serializers.CharField(max_length=100, help_text="The name of the target collection.")
+    filters = serializers.JSONField(help_text="A MongoDB query object to select which documents to update.")
+    update_data = serializers.JSONField(help_text="A MongoDB update object (e.g., using $set).")
+    update_all_fields = serializers.BooleanField(default=False, help_text="Set to true to use $set, otherwise only existing fields are updated.")
+
 
 class DeleteDocumentSerializer(serializers.Serializer):
-    database_id = serializers.CharField(required=True)
-    collection_name = serializers.CharField(required=True)
-    filters = serializers.JSONField(required=True)
-    soft_delete = serializers.BooleanField(default=True)
+    """Validates the request for deleting documents."""
+    database_id = ObjectIdField(help_text="The ID of the target database.")
+    collection_name = serializers.CharField(max_length=100, help_text="The name of the target collection.")
+    filters = serializers.JSONField(help_text="A MongoDB query object to select which documents to delete.")
+    soft_delete = serializers.BooleanField(default=True, help_text="If true, sets 'is_deleted: true'. If false, permanently removes documents.")
+
+
+# --- Utility Serializers ---
+
+class JSonImportSerializer(serializers.Serializer):
+    """Validates the request for importing data from a JSON file."""
+    database_id = ObjectIdField(help_text="The ID of the database to import data into.")
+    collection_name = serializers.CharField(required=False, help_text="Optional: name of the collection. If omitted, it's derived from the filename.")
+    json_file = serializers.FileField(help_text="The .json file to upload.")

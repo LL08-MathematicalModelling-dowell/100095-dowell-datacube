@@ -1,102 +1,75 @@
-# Stage 1: Builder
-FROM python:3.11-alpine AS builder
+# Dockerfile for DataCube
 
-WORKDIR /usr/src/app
+# --- Stage 1: Builder ---
+# Use the 'slim' variant for better package compatibility and reliability.
+# It uses glibc, ensuring pre-compiled wheels (manylinux) work correctly.
+FROM python:3.11-slim-bullseye AS builder
 
-# Install system dependencies required for building Python packages
-RUN apk add --no-cache gcc musl-dev libffi-dev postgresql-dev
+# Set environment variables for consistent builds
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+# Set a dedicated virtual environment to avoid user/system conflicts
+ENV VIRTUAL_ENV=/opt/venv
+# Add the venv to the path
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Upgrade pip and install dependencies
+# Install system dependencies needed for building Python packages.
+# This keeps the final image clean of build tools.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create the virtual environment
+RUN python -m venv $VIRTUAL_ENV
+
+# Copy only the requirements file to leverage Docker's build cache.
+WORKDIR /app
 COPY requirements.txt .
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir --user -r requirements.txt
 
-# Stage 2: Final Image
-FROM python:3.11-alpine
+# Install Python dependencies into the virtual environment.
+# --no-cache-dir is good, using a venv is better for isolation.
+RUN pip install --no-cache-dir -r requirements.txt
 
-WORKDIR /usr/src/app
 
-# Create a non-root user for security
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# --- Stage 2: Final Image ---
+# Use the same base image for consistency.
+FROM python:3.11-slim-bullseye
 
-# Make installed packages available in global path
-ENV PATH="/usr/local/bin:$PATH"
+# Set the same environment variables
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Copy installed Python packages from builder
-COPY --from=builder /root/.local /usr/local
+# Create a non-root user and group for enhanced security
+RUN addgroup --system appgroup && adduser --system --group appuser
 
-# Copy Django project code
+# Set the working directory
+WORKDIR /app
+
+# Copy the virtual environment from the builder stage.
+# This is the core of the multi-stage build, bringing in dependencies without build tools.
+COPY --from=builder $VIRTUAL_ENV $VIRTUAL_ENV
+
+# Copy the application code
 COPY . .
 
-# Prepare staticfiles directory and assign permissions
-RUN mkdir -p staticfiles && \
-    chown -R appuser:appgroup staticfiles && \
-    chown -R appuser:appgroup .
+# Create the directory for static files and assign ownership to the non-root user.
+# It's better to create the directory first, then chown it.
+RUN mkdir -p /app/staticfiles && \
+    chown -R appuser:appgroup /app
 
-# Collect static files
-RUN python manage.py collectstatic --noinput
-
-# Run as non-root user
+# Switch to the non-root user BEFORE running any application-specific commands
 USER appuser
 
-# Expose application port
+# Run collectstatic as the non-root user.
+# This ensures that files created by this command have the correct permissions.
+RUN python manage.py collectstatic --noinput
+
+# Expose the application port
 EXPOSE 8000
 
-# Start Gunicorn
-CMD ["gunicorn", "--workers=3", "--bind=0.0.0.0:8000", "project.wsgi:application"]
-
-
-
-# # Stage 1: Builder
-# FROM python:3.11-alpine as builder
-
-# WORKDIR /usr/src/app
-
-# # Install build dependencies
-# RUN apk add --no-cache gcc musl-dev libffi-dev postgresql-dev
-
-# # Upgrade pip to the latest version
-# RUN pip install --upgrade pip
-
-# # Copy and install Python dependencies
-# COPY ./requirements.txt /usr/src/app/requirements.txt
-# RUN pip install --no-cache-dir --user -r requirements.txt
-
-# # Stage 2: Final Image
-# FROM python:3.11-alpine
-
-# WORKDIR /usr/src/app
-
-# # Create a non-root user
-# RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-
-# # Add /usr/local/bin to PATH so installed binaries (like gunicorn) are available
-# ENV PATH="/usr/local/bin:$PATH"
-
-# # Copy installed Python packages and application code
-# COPY --from=builder /root/.local /usr/local
-# COPY . /usr/src/app
-
-# # Ensure that static files directory exists and has correct permissions
-# RUN mkdir -p /usr/src/app/staticfiles && chown -R appuser:appgroup /usr/src/app/staticfiles
-
-# # # Ensure the logs directory exists and set proper permissions
-# # RUN mkdir -p /usr/src/app/logs && \
-# #     chown -R appuser:appgroup /usr/src/app/logs && \
-# #     chmod -R 775 /usr/src/app/logs
-
-# # Change ownership to the non-root user
-# RUN chown -R appuser:appgroup /usr/src/app
-
-# # Run collectstatic to gather all static files
-# RUN python manage.py collectstatic --noinput
-
-# # Run the container as the non-root user
-# USER appuser
-
-# # Expose the port that the Django app will run on
-# EXPOSE 8000
-
-# CMD ["gunicorn", "--workers=3", "--bind=0.0.0.0:8000", "project.wsgi:application"]
-
-
+# Start the application using Gunicorn.
+# The number of workers is often set via an environment variable for flexibility.
+# Ensure your project's wsgi file is correctly named ('project' or 'auth_project', etc.)
+CMD ["gunicorn", "--workers=3", "--bind", "0.0.0.0:8000", "project.wsgi:application"]

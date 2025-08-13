@@ -1,0 +1,552 @@
+{% extends 'api/base.html' %}
+
+{% block title %}Dashboard - DataCube{% endblock %}
+
+{% block page_title %}Dashboard Overview{% endblock %}
+
+{% block content %}
+<style>
+  /* --- Modal Styles --- */
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    /* Changed from none to flex */
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+  }
+
+  .modal-overlay.visible {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .modal-content {
+    background: var(--bg-dark-2);
+    padding: 1.5rem 2rem;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 600px;
+    border: 1px solid var(--border-color);
+    transform: scale(0.95);
+    transition: transform 0.3s ease;
+  }
+
+  .modal-overlay.visible .modal-content {
+    transform: scale(1);
+  }
+
+  .modal-header,
+  .modal-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .modal-header {
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .modal-footer {
+    border-top: 1px solid var(--border-color);
+    padding-top: 1rem;
+    margin-top: 1.5rem;
+  }
+
+  .modal-header h3 {
+    margin: 0;
+  }
+
+  .modal-close-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.5rem;
+    cursor: pointer;
+  }
+
+  /* --- Multi-Step Form Styles --- */
+  .modal-step {
+    display: none;
+  }
+
+  .modal-step.active {
+    display: block;
+  }
+
+  .form-group {
+    margin-bottom: 1.25rem;
+  }
+
+  .form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--text-muted);
+  }
+
+  .form-group input,
+  .form-group select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background-color: var(--bg-dark-1);
+    color: var(--text-light);
+    font-size: 1rem;
+  }
+
+  input.is-invalid {
+    border-color: #ef4444;
+  }
+
+  .collection-card {
+    background: var(--bg-dark-3);
+    padding: 1rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+  }
+
+  .collection-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+
+  .field-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.5rem;
+  }
+
+  .field-row input:first-child {
+    flex-grow: 1;
+  }
+
+  .add-item-btn {
+    width: 100%;
+    text-align: center;
+    margin-top: 0.5rem;
+  }
+</style>
+
+<!-- Main Page Content -->
+<div class="card">
+  <!-- (Your existing usage stats content) -->
+  <h3>API Usage</h3>
+  <p style="color: var(--text-muted);">Your usage statistics for the current billing period.</p>
+  <div style="display: flex; flex-wrap: wrap; gap: 2rem; margin-top: 1rem;">
+    <div>
+      <div style="font-size: 0.9rem; color: var(--text-muted);">API Calls This Month</div>
+      <div id="api-calls-count" style="font-size: 2rem; font-weight: 700; color: var(--green);"><i
+          class="fa fa-spinner fa-spin"></i></div>
+    </div>
+    <div>
+      <div style="font-size: 0.9rem; color: var(--text-muted);">Logical Databases</div>
+      <div id="database-count" style="font-size: 2rem; font-weight: 700;"><i class="fa fa-spinner fa-spin"></i></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div style="display: flex; justify-content: space-between; align-items: center;">
+    <h3>Your Databases</h3>
+    <button id="create-db-btn-header" class="btn btn-primary">Create Database</button>
+  </div>
+  <div id="database-list-container">
+    <div id="database-list-message" style="text-align: center; padding: 2rem; color: var(--text-muted);"><i
+        class="fa fa-spinner fa-spin"></i> Loading...</div>
+    <table id="database-table" style="display: none;">
+      <thead>
+        <tr>
+          <th>Database Name</th>
+          <th>Database ID</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="database-table-body"></tbody>
+    </table>
+  </div>
+</div>
+<!-- End Main Page Content -->
+
+
+<!-- Create Database Modal HTML -->
+<div id="create-db-modal" class="modal-overlay">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="modal-title">Create New Database (Step 1 of 2)</h3>
+      <button class="modal-close-btn">&times;</button>
+    </div>
+
+    <div class="modal-body">
+      <!-- Step 1: Database Name -->
+      <div id="step-1" class="modal-step active">
+        <div class="form-group">
+          <label for="db_name">Database Name</label>
+          <input type="text" id="db_name" placeholder="e.g., my_customer_project" required>
+          <small style="color: var(--text-muted);">This name must be unique for your account.</small>
+        </div>
+      </div>
+
+      <!-- Step 2: Collections and Fields -->
+      <div id="step-2" class="modal-step">
+        <p style="color: var(--text-muted); margin-bottom: 1rem;">Define at least one collection and its fields.</p>
+        <div id="collections-container" style="max-height: 40vh; overflow-y: auto; padding-right: 0.5rem;">
+          <!-- Collections will be added here dynamically -->
+        </div>
+        <button id="add-collection-btn" class="btn btn-secondary add-item-btn">
+          <i class="fa fa-plus"></i> Add Another Collection
+        </button>
+      </div>
+
+      <div id="modal-error-message" style="color: #ef4444; text-align: center; margin-top: 1rem; display: none;"></div>
+
+    </div>
+
+    <div class="modal-footer">
+      <button id="modal-back-btn" class="btn btn-secondary" style="visibility: hidden;">Back</button>
+      <button id="modal-next-btn" class="btn btn-primary">Next</button>
+    </div>
+  </div>
+</div>
+<!-- End Modal -->
+
+
+<script>
+  // Main page script (from previous step, with minor adjustments)
+
+  document.addEventListener('DOMContentLoaded', () => {
+    // --- Get DOM Elements ---
+    const apiCallsCountEl = document.getElementById('api-calls-count');
+    const databaseCountEl = document.getElementById('database-count');
+    const table = document.getElementById('database-table');
+    const tableBody = document.getElementById('database-table-body');
+    const messageArea = document.getElementById('database-list-message');
+    const createDbBtnHeader = document.getElementById('create-db-btn-header');
+
+    // --- API Endpoint ---
+    const STATS_API_URL = "{% url 'core:api_dashboard_stats' %}";
+    // NOTE: You'll need a URL for the page that lets users create a database
+    // const CREATE_DB_PAGE_URL = " url 'core:create_database_page' "; 
+
+    // --- Main function to fetch and render data ---
+    async function fetchDashboardData() {
+      const accessToken = localStorage.getItem('accessToken');
+      if (!accessToken) {
+        // This is a safeguard; authManager in base.html should handle this.
+        return;
+      }
+
+      try {
+        const response = await fetch(STATS_API_URL, {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to load dashboard data. Please try again.');
+        }
+
+        const data = await response.json();
+
+        // --- Render the fetched data ---
+        renderUsageStats(data.usage);
+        renderDatabaseList(data.databases);
+
+      } catch (error) {
+        console.error('Dashboard Error:', error);
+        apiCallsCountEl.textContent = 'N/A';
+        databaseCountEl.textContent = 'N/A';
+        messageArea.innerHTML = `<span style="color: #dc2626;">${error.message}</span>`;
+        messageArea.style.display = 'block';
+        table.style.display = 'none';
+      }
+    }
+
+    // --- Helper function to render usage stats ---
+    function renderUsageStats(usage) {
+      const apiCalls = usage.api_calls_current_month || 0;
+      // You can get the limit from a user's plan in the future
+      const apiLimit = 10000;
+      apiCallsCountEl.textContent = `${apiCalls.toLocaleString()} / ${apiLimit.toLocaleString()}`;
+    }
+
+    // --- Helper function to render the database list ---
+    function renderDatabaseList(databases) {
+      const dbCount = databases.length;
+      const dbLimit = 10000; // Example limit
+      databaseCountEl.textContent = `${dbCount.toLocaleString()} / ${dbLimit.toLocaleString()}`;
+
+      if (dbCount === 0) {
+        // Display the "empty state" message and a prominent create button
+        messageArea.innerHTML = `
+                <p style="color: var(--text-muted);">You haven't created any databases yet.</p>
+                <a href="#" class="btn btn-primary" style="margin-top: 1rem;">Create Your First Database</a>
+            `;
+        messageArea.style.display = 'block';
+        table.style.display = 'none';
+        createDbBtnHeader.style.display = 'none';
+      } else {
+        // Populate the table with database rows
+        tableBody.innerHTML = databases.map(db => `
+                <tr>
+                    <td>${escapeHTML(db.name)}</td>
+                    <td>${escapeHTML(db.id)}</td>
+                    <td><a href="/core/dashboard/database/${db.id}/" class="btn btn-secondary btn-sm">Manage</a></td>
+                </tr>
+            `).join('');
+
+        messageArea.style.display = 'none';
+        table.style.display = 'table';
+        createDbBtnHeader.style.display = 'inline-block';
+      }
+    }
+
+    function escapeHTML(str) {
+      return str.replace(/[&<>"']/g, match => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[match]));
+    }
+
+    // --- Initial Load ---
+    fetchDashboardData();
+  });
+
+
+  // --- Create Database Modal Script ---
+  document.addEventListener('DOMContentLoaded', () => {
+    // --- Modal Elements ---
+    const modal = document.getElementById('create-db-modal');
+    const openModalBtn = document.getElementById('create-db-btn-header');
+    const closeModalBtns = document.querySelectorAll('.modal-close-btn');
+    const modalTitle = document.getElementById('modal-title');
+    const backBtn = document.getElementById('modal-back-btn');
+    const nextBtn = document.getElementById('modal-next-btn');
+    const modalErrorMsg = document.getElementById('modal-error-message');
+    const collectionsContainer = document.getElementById('collections-container');
+
+    // --- State Variables ---
+    let currentStep = 1;
+    const totalSteps = 2;
+
+    // --- Event Listeners ---
+    openModalBtn.addEventListener('click', () => modal.classList.add('visible'));
+    closeModalBtns.forEach(btn => btn.addEventListener('click', closeModal));
+    backBtn.addEventListener('click', prevStep);
+    nextBtn.addEventListener('click', nextStep);
+    document.getElementById('add-collection-btn').addEventListener('click', addCollection);
+
+    // Event delegation for dynamic elements
+    collectionsContainer.addEventListener('click', (e) => {
+      if (e.target.classList.contains('add-field-btn')) {
+        addField(e.target);
+      }
+      if (e.target.classList.contains('remove-field-btn')) {
+        e.target.closest('.field-row').remove();
+      }
+      if (e.target.classList.contains('remove-collection-btn')) {
+        e.target.closest('.collection-card').remove();
+      }
+    });
+
+    // --- Core Functions ---
+    function openModal() {
+      resetModal();
+      modal.classList.add('visible');
+    }
+
+    function closeModal() {
+      modal.classList.remove('visible');
+    }
+
+    function resetModal() {
+      currentStep = 1;
+      document.getElementById('db_name').value = '';
+      collectionsContainer.innerHTML = '';
+      addCollection(); // Start with one collection
+      showStep(1);
+      modalErrorMsg.style.display = 'none';
+    }
+
+    function showStep(step) {
+      document.querySelectorAll('.modal-step').forEach(el => el.classList.remove('active'));
+      document.getElementById(`step-${step}`).classList.add('active');
+      modalTitle.textContent = `Create New Database (Step ${step} of ${totalSteps})`;
+      updateNavButtons();
+    }
+
+    function updateNavButtons() {
+      backBtn.style.visibility = (currentStep > 1) ? 'visible' : 'hidden';
+      if (currentStep === totalSteps) {
+        nextBtn.textContent = 'Create Database';
+      } else {
+        nextBtn.textContent = 'Next';
+      }
+    }
+
+    function prevStep() {
+      if (currentStep > 1) {
+        currentStep--;
+        showStep(currentStep);
+      }
+    }
+
+    function nextStep() {
+      if (!validateStep(currentStep)) return;
+
+      if (currentStep < totalSteps) {
+        currentStep++;
+        showStep(currentStep);
+      } else {
+        // Final step: submit the form
+        submitCreateDatabase();
+      }
+    }
+
+    function validateStep(step) {
+      modalErrorMsg.style.display = 'none';
+      let isValid = true;
+      if (step === 1) {
+        const dbNameInput = document.getElementById('db_name');
+        if (dbNameInput.value.trim() === '') {
+          dbNameInput.classList.add('is-invalid');
+          modalErrorMsg.textContent = 'Database name cannot be empty.';
+          modalErrorMsg.style.display = 'block';
+          isValid = false;
+        } else {
+          dbNameInput.classList.remove('is-invalid');
+        }
+      }
+      if (step === 2) {
+        const collectionInputs = collectionsContainer.querySelectorAll('input[name="collection_name"]');
+        if (collectionInputs.length === 0) {
+          modalErrorMsg.textContent = 'You must define at least one collection.';
+          modalErrorMsg.style.display = 'block';
+          return false;
+        }
+        collectionInputs.forEach(input => {
+          if (input.value.trim() === '') {
+            input.classList.add('is-invalid');
+            isValid = false;
+          } else {
+            input.classList.remove('is-invalid');
+          }
+        });
+        if (!isValid) {
+          modalErrorMsg.textContent = 'Collection names cannot be empty.';
+          modalErrorMsg.style.display = 'block';
+        }
+      }
+      return isValid;
+    }
+
+    async function submitCreateDatabase() {
+      const accessToken = localStorage.getItem('accessToken');
+      const csrfToken = '{{ csrf_token }}'; // Assumes this is rendered in base.html
+
+      // Build the request body from the form
+      const requestBody = {
+        db_name: document.getElementById('db_name').value.trim(),
+        collections: []
+      };
+
+      collectionsContainer.querySelectorAll('.collection-card').forEach(card => {
+        const collection = {
+          name: card.querySelector('input[name="collection_name"]').value.trim(),
+          fields: []
+        };
+        card.querySelectorAll('.field-row').forEach(row => {
+          const fieldName = row.querySelector('input[name="field_name"]').value.trim();
+          if (fieldName) { // Only add fields with names
+            collection.fields.push({
+              name: fieldName,
+              type: row.querySelector('select[name="field_type"]').value
+            });
+          }
+        });
+        if (collection.fields.length === 0) { // Add at least one dummy field if none provided
+          collection.fields.push({ name: "default_field", type: "string" });
+        }
+        requestBody.collections.push(collection);
+      });
+
+      nextBtn.disabled = true;
+      nextBtn.textContent = 'Creating...';
+      modalErrorMsg.style.display = 'none';
+
+      try {
+        const response = await fetch("{% url 'api:create_database' %}", {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+            'X-CSRFToken': csrfToken
+          },
+          body: JSON.stringify(requestBody)
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || JSON.stringify(result));
+
+        closeModal();
+        // TODO: Add a success notification/toast on the main page
+        // For now, we just reload the page to show the new database.
+        window.location.reload();
+
+      } catch (error) {
+        modalErrorMsg.textContent = `Error: ${error.message}`;
+        modalErrorMsg.style.display = 'block';
+      } finally {
+        nextBtn.disabled = false;
+        updateNavButtons(); // Reset button text
+      }
+    }
+
+    // --- Dynamic HTML Generation ---
+    function addCollection() {
+      const collectionHTML = `
+            <div class="collection-card">
+              <div class="collection-header">
+                <input type="text" name="collection_name" placeholder="Collection Name" class="form-control" required>
+                <button class="btn btn-danger btn-sm remove-collection-btn">&times;</button>
+              </div>
+              <div class="fields-container">
+                <!-- Fields will be added here -->
+              </div>
+              <button class="btn btn-secondary btn-sm add-field-btn" style="width:100%; margin-top:0.5rem;"><i class="fa fa-plus"></i> Add Field</button>
+            </div>
+        `;
+      collectionsContainer.insertAdjacentHTML('beforeend', collectionHTML);
+    }
+
+    function addField(button) {
+      const fieldsContainer = button.closest('.collection-card').querySelector('.fields-container');
+      const fieldHTML = `
+            <div class="field-row">
+              <input type="text" name="field_name" placeholder="Field Name">
+              <select name="field_type">
+                <option value="string">String</option>
+                <option value="number">Number</option>
+                <option value="boolean">Boolean</option>
+                <option value="date">Date</option>
+                <option value="object">Object</option>
+                <option value="array">Array</option>
+              </select>
+              <button class="btn btn-danger btn-sm remove-field-btn">&times;</button>
+            </div>
+        `;
+      fieldsContainer.insertAdjacentHTML('beforeend', fieldHTML);
+    }
+  });
+</script>
+{% endblock %}

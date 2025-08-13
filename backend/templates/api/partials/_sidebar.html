@@ -1,0 +1,26 @@
+<nav id="sidebar">
+  <div style="padding: 1.5rem; border-bottom: 1px solid var(--border-color);">
+    <a href="/" style="text-decoration: none;">
+      <h1 style="color: var(--green); font-size: 1.75rem; margin: 0; display: flex; align-items: center;">
+        <i class="fa fa-cube" style="margin-right: 0.75rem;"></i>
+        DataCube
+      </h1>
+    </a>
+  </div>
+
+  <ul id="sidebar-nav" style="list-style: none; padding: 1.5rem; margin: 0; flex-grow: 1;">
+    <div id="dashboard-links-placeholder">
+      <!-- This will be empty by default -->
+    </div>
+
+    <li
+      style="margin-bottom: 0.5rem; font-weight: 600; color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase;">
+      Documentation</li>
+    <li><a href="{% url 'api:api_docs' %}" style="padding: 0.75rem; display: block; border-radius: 6px;"><i
+          class="fa fa-book fa-fw" style="margin-right: 0.75rem;"></i>API Reference</a></li>
+  </ul>
+
+  <div style="padding: 1.5rem; border-top: 1px solid var(--border-color); color: var(--text-muted); font-size: 0.9rem;">
+    &copy; 2024 DataCube
+  </div>
+</nav>
