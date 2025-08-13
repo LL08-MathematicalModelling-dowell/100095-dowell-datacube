@@ -25,7 +25,7 @@ else:
 
 # --- Security ---
 # SECRET_KEY will be set in development.py and production.py
-SECRET_KEY = os.getenv('SECRET_KEY')
+SECRET_KEY = os.getenv('SECRET_KEY_DUMMY', os.getenv('SECRET_KEY'))
 
 # --- Application Definition ---
 INSTALLED_APPS = [
