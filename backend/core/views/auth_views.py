@@ -75,11 +75,12 @@ class RegistrationView(APIView):
                 # Decide if registration should fail here. For now, we'll let it pass.
 
             # Generate token and send email
-            token = user_manager.generate_email_verification_token(user_id)
-            self._send_verification_email(user_doc, token)
+            # token = user_manager.generate_email_verification_token(user_id)
+            # self._send_verification_email(user_doc, token)
 
+            # {"message": "Registration successful. Please check your email to verify your account."}, 
             return Response(
-                {"message": "Registration successful. Please check your email to verify your account."}, 
+                {"message": "Registration successful"}, 
                 status=status.HTTP_201_CREATED
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
