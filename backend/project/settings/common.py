@@ -10,11 +10,11 @@ from dotenv import load_dotenv
 
 # --- Core Paths and Config Loading ---
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 
 # Paths
-BASE_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = BASE_DIR / 'config.json'
 
 if CONFIG_PATH.exists():
@@ -82,12 +82,12 @@ TEMPLATES = [
 
 # --- Database ---
 # We keep the default as SQLite. Production will override this.
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-    }
-}
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+#     }
+# }
 
 # --- MongoDB Connection (Centralized and Cleaned) ---
 # Moved client instantiation out of settings to avoid global state issues.
