@@ -124,8 +124,6 @@ STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-# MY_BASE_URL = os.getenv('MY_BASE_URL', 'https://datacube.uxlivinglab.online')
-
 
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
