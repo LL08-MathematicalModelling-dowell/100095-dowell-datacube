@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 # --- Core Paths and Config Loading ---
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-load_dotenv(os.path.join(BASE_DIR, '.env'))
+load_dotenv()
 
 
 # Paths
@@ -40,7 +40,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework',
     'rest_framework_simplejwt',
-    'rest_framework_simplejwt.token_blacklist', # For token rotation
+    # 'rest_framework_simplejwt.token_blacklist', # For token rotation
     # Local Apps
     'api',
     'core',
@@ -101,15 +101,20 @@ TEMPLATES = [
 
 # MongoDB
 MONGODB_URI = os.getenv('MONGODB_URI', config.get('mongo_path'))
+
+
 MONGODB_DATABASE = os.getenv('MONGODB_DATABASE', config.get('database'))
 MONGODB_COLLECTION = os.getenv('MONGODB_COLLECTION', config.get('collection'))
+DATACUBE_V2_AUTH_DB = os.getenv("AUTH_DB_NAME")
 
-if not all([MONGODB_URI, MONGODB_DATABASE, MONGODB_COLLECTION]):
+
+if not all([MONGODB_URI, MONGODB_DATABASE, MONGODB_COLLECTION, DATACUBE_V2_AUTH_DB]):
     raise ValueError("MongoDB settings missing. Please set them in config.json or environment.")
 
 MONGODB_CLIENT = MongoClient(MONGODB_URI)
 METADATA_DB = MONGODB_CLIENT[MONGODB_DATABASE]
 METADATA_COLLECTION = METADATA_DB[MONGODB_COLLECTION]
+
 
 # --- Password Validation ---
 AUTH_PASSWORD_VALIDATORS = [
@@ -123,6 +128,8 @@ AUTH_PASSWORD_VALIDATORS = [
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
+USE_L10N = True
+
 USE_TZ = True
 
 # --- Static Files ---
@@ -148,7 +155,7 @@ REST_FRAMEWORK = {
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(days=7),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=14),
-    "ROTATE_REFRESH_TOKENS": True,
-    "BLACKLIST_AFTER_ROTATION": True,
+    # "ROTATE_REFRESH_TOKENS": True,
+    # "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": True,
 }
