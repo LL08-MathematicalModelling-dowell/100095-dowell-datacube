@@ -89,7 +89,9 @@ class APIKeyAPIView(APIView):
         """Revokes an API key."""
         was_deleted = api_key_manager.revoke_key(key_id, request.user.id)
         if was_deleted:
-            return Response(status=status.HTTP_204_NO_CONTENT)
+            return Response({
+                "message": "API key revoked successfully."
+            }, status=status.HTTP_204_NO_CONTENT)
         else:
             return Response({"error": "Key not found or permission denied."}, status=status.HTTP_404_NOT_FOUND)
         
