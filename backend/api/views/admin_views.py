@@ -170,7 +170,7 @@ class DropCollectionsView(BaseAPIView):
         meta = meta_svc.get_by_id_for_user(db_id, user_id)
         if not meta:
             raise PermissionError(f"Database '{db_id}' not found or access denied.")
-        db_name = meta["database_name"]
+        db_name = meta["dbName"]
 
         # CHANGED: Call the secure method to update metadata.
         dropped_meta = meta_svc.drop_collections(db_id, user_id, names)

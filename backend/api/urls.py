@@ -18,15 +18,15 @@ from api.views.database_views import (
 )
 from api.views.crud_views import DataCrudView
 
-from api.views.docs_views import APIDocsView, LoginView, RegisterView
+# from api.views.docs_views import APIDocsView, LoginView, RegisterView
 
 app_name = "api"
 
 urlpatterns = [
     # API homepage (docs) - GET only, path is fine but re_path is consistent
-    path(r"", APIDocsView.as_view(), name="api_docs"),
-    re_path(r"^login/?$", LoginView.as_view(), name="login"),
-    re_path(r"^register/?$", RegisterView.as_view(), name="register"),
+    # path(r"", APIDocsView.as_view(), name="api_docs"),
+    # # re_path(r"^login/?$", LoginView.as_view(), name="login"),
+    # re_path(r"^register/?$", RegisterView.as_view(), name="register"),
     # re_path(r"^/?$", ApiHomeView.as_view(), name="api_home"),
 
 

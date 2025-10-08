@@ -17,8 +17,8 @@ class APIDocsView(APIView):
     
 
 
-class LoginView(TemplateView):
-    template_name = "api/login.html"
+# class LoginView(TemplateView):
+#     template_name = "api/login.html"
 
 
 class RegisterView(TemplateView):
