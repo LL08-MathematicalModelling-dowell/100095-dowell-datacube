@@ -15,9 +15,7 @@ export async function POST(request: NextRequest) {
   try {
     // Parse and validate the request body
     const body = await request.json();
-    console.log("Request Body:", JSON.stringify(body));
     const validation = schema.safeParse(body);
-    console.log(`Validation >>><<<<     : ${validation.success}`);
 
     if (!validation.success) {
       console.error("Validation errors:", validation.error.errors);

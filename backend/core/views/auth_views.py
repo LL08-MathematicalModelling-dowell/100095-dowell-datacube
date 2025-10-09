@@ -27,6 +27,7 @@ stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
 
 class RegistrationView(APIView):
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def _send_verification_email(self, user_data, token):
@@ -87,6 +88,7 @@ class RegistrationView(APIView):
 
 
 class LoginView(APIView):
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request):

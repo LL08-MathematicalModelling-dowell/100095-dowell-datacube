@@ -1,0 +1,20 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code&display=swap');
+
+:root {
+  --green-light: #abf7b1;
+  --green: #2ecc71;
+  --green-dark: #25a25a;
+  --bg-dark-1: #111827;
+  --bg-dark-2: #1f2937;
+  --bg-dark-3: #374151;
+  --text-light: #f9fafb;
+  --text-muted: #9ca3af;
+  --border-color: #4b5563;
+  --font-sans: 'Inter', sans-serif;
+  --font-mono: 'Fira Code', monospace;
+  --sidebar-width: 260px;
+}
+
+
+@import "tailwindcss";
