@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -311,7 +310,7 @@ interface CollectionFieldsProps {
   errors: any;
 }
 
-const CollectionFields: React.FC<CollectionFieldsProps> = ({ fields, collectionIndex, control, register, errors }) => {
+const CollectionFields: React.FC<CollectionFieldsProps> = ({ collectionIndex, control, register, errors }) => {
   const { fields: fieldArrayFields, append: appendField, remove: removeField } = useFieldArray({
     control,
     name: `collections.${collectionIndex}.fields`,
