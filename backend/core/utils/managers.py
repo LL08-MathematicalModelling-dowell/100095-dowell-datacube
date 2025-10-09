@@ -72,7 +72,7 @@ class UserManager:
         })
 
         if not user_doc:
-            return None # Token is invalid or expired
+            return None
 
         # Mark user as verified and clear the token fields
         self.users_collection.update_one(

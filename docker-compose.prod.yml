@@ -1,19 +1,6 @@
 version: "3.9"
 
 services:
-  # db:
-  #   image: postgres:15
-  #   restart: unless-stopped
-  #   volumes:
-  #     - pgdata:/var/lib/postgresql/data
-  #   env_file:
-  #     - ./backend/.env.db
-  #   healthcheck:
-  #     test: ["CMD","pg_isready","-U","${POSTGRES_USER}"]
-  #     interval: 10s; retries: 5
-  #   networks:
-  #     - app-network
-
   backend:
     build:
       context: ./backend
@@ -23,10 +10,6 @@ services:
       - ./backend/.env
     ports:
       - "8000:8000"
-    # depends_on:
-    #   db:
-    #     condition: service_healthy
-    # entrypoint: ["/usr/src/app/entrypoint.sh"]
     command:
       [
         "gunicorn",
@@ -34,74 +17,37 @@ services:
         "--bind=0.0.0.0:8000",
         "project.wsgi:application",
       ]
-    # healthcheck:
-    #   test: ["CMD","curl","-f","http://localhost:8000/"]
-    #   interval: 30s; retries: 3
     networks:
       - app-network
 
-  frontend:
+  react-app:
     build:
-      context: ./frontend
+      context: ./backend/UI/datacube-UI
       dockerfile: Dockerfile
     restart: unless-stopped
-    env_file:
-      - ./frontend/.env
-      - ./frontend/.env.local
+    container_name: react_app
     ports:
       - "3000:3000"
-    depends_on:
-      - backend
-    # healthcheck:
-    #   test: ["CMD","curl","-f","http://localhost/"]
-    #   interval: 30s; retries: 3
+    environment:
+      - NODE_ENV=production
     networks:
       - app-network
 
-volumes:
-  pgdata:
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   restart: unless-stopped
+  #   env_file:
+  #     - ./frontend/.env
+  #     - ./frontend/.env.local
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     - backend
+  #   networks:
+  #     - app-network
 
 networks:
   app-network:
     external: true
-# version: "3.9"
-
-# services:
-#   backend:
-#     build:
-#       context: ./backend
-#       dockerfile: Dockerfile.prod
-#     container_name: backend_prod
-#     ports:
-#       - "8000:8000"
-#     volumes:
-#       - ./backend:/usr/src/app
-#     restart: always
-#     networks:
-#       - app-network
-#     env_file:
-#       - ./backend/.env.prod
-#     command: >
-#       sh -c "python manage.py migrate &&
-#              gunicorn --workers=3 --bind=0.0.0.0:8000 project.wsgi:application"
-
-#   frontend:
-#     build:
-#       context: ./frontend
-#       dockerfile: Dockerfile
-#     container_name: frontend_prod
-#     ports:
-#       - "80:80"
-#     restart: always
-#     volumes:
-#       - ./frontend:/usr/src/app
-#     networks:
-#       - app-network
-#     env_file:
-#       - ./frontend/.env
-#       - ./frontend/.env.local
-
-# networks:
-#   app-network:
-#     external: true # Use the external network created manually
-
