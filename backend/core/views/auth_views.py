@@ -112,6 +112,8 @@ class LoginView(APIView):
         return Response({
             'refresh': str(refresh),
             'access': str(refresh.access_token),
+            'firstName': user_doc.get('firstName', ''),
+            'lastName': user_doc.get('lastName', ''),
         })
 
 
