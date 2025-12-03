@@ -16,15 +16,19 @@ const MainLayout = () => {
       api
         .get('/core/profile')
         .catch((err) => {
-          console.warn('Token validation failed:', err.message);
-          logout();
-          navigate('/login', { replace: true });
-        });
+          if (err.message.includes('401')) {
+            console.warn('Access token invalid, attempting to refresh...');
+          }
+          throw err;
+        })
+        .then(() => {
+          console.log('Token validation succeeded');
+        })
     } else if (accessToken && !refreshToken) {
       // Edge case: only access token exists → probably corrupted state
       // logout();
       // navigate('/login', { replace: true });
-      c
+      console.warn('No refresh token found, logging out for safety.');
     }
   }, [accessToken, refreshToken, logout, navigate]);
 
