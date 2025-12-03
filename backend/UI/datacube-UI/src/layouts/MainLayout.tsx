@@ -22,8 +22,9 @@ const MainLayout = () => {
         });
     } else if (accessToken && !refreshToken) {
       // Edge case: only access token exists → probably corrupted state
-      logout();
-      navigate('/login', { replace: true });
+      // logout();
+      // navigate('/login', { replace: true });
+      c
     }
   }, [accessToken, refreshToken, logout, navigate]);
 
