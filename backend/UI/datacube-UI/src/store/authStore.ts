@@ -8,6 +8,7 @@ interface AuthState {
 
   setAuth: (access: string, refresh: string, firstName: string) => void;
   updateAccessToken: (access: string) => void;
+  setFirstName: (firstName: string) => void;
   logout: () => void;
 }
 
@@ -28,6 +29,7 @@ const useAuthStore = create<AuthState>((set) => ({
     localStorage.setItem("accessToken", access);
     set({ accessToken: access });
   },
+  setFirstName: (firstName) => set(() => ({ firstName })),
 
   logout: () => {
     localStorage.removeItem("accessToken");
