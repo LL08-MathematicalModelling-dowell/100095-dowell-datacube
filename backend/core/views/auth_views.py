@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 from core.serializers import (
   UserRegistrationSerializer,
   UserSerializer,
@@ -115,6 +116,31 @@ class LoginView(APIView):
             'firstName': user_doc.get('firstName', ''),
             'lastName': user_doc.get('lastName', ''),
         })
+
+
+class TokenRefreshView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        refresh_token = request.data.get('refresh')
+
+        if not refresh_token:
+            return Response({"error": "Refresh token required"}, status=400)
+
+        try:
+            refresh = RefreshToken(refresh_token)
+            access_token = str(refresh.access_token)
+
+            # Optional: blacklist old refresh token and issue new one
+            # refresh.blacklist()  # Uncomment if using token blacklisting
+
+            return Response({
+                "access": access_token,
+                "refresh": str(refresh),  # Optional: rotate refresh token
+            })
+        except TokenError:
+            return Response({"error": "Invalid or expired refresh token"}, status=401)
+
 
 
 class PasswordResetRequestView(APIView):
