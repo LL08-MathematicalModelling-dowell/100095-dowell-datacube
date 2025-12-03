@@ -40,11 +40,11 @@ import useAuthStore from '../store/authStore.ts';
 // );
 
 interface FormData { email: string; password: string; }
-interface LoginResponse {
-  access: string;
-  firstName: string;
-  refresh: string;
-}
+// interface LoginResponse {
+//   access: string;
+//   firstName: string;
+//   refresh: string;
+// }
 
 const Login = () => {
   const { register, handleSubmit } = useForm<FormData>();

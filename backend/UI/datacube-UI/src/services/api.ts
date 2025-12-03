@@ -1,110 +1,138 @@
+import axios, { AxiosError } from "axios";
+import type { AxiosRequestConfig } from "axios";
 import useAuthStore from "../store/authStore";
 
+const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
 
-// const API_BASE = "https://datacube.uxlivinglab.online";
+const api = axios.create({
+  baseURL: API_BASE,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
 
-
-const API_BASE = "http://127.0.0.1:8000";
-
+// State for handling concurrency
 let isRefreshing = false;
 let failedQueue: any[] = [];
 
+// Helper: Process the queue logic
 const processQueue = (error: any, token: string | null = null) => {
   failedQueue.forEach((prom) => {
-    if (error) prom.reject(error);
-    else prom.resolve(token);
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
   });
   failedQueue = [];
 };
 
-const api = {
-  async request(url: string, options: RequestInit = {}) {
-    const { accessToken, refreshToken, updateAccessToken, logout } = useAuthStore.getState();
+// REQUEST INTERCEPTOR
+// Automatically attaches the Access Token to every outgoing request
+api.interceptors.request.use(
+  (config) => {
+    const { accessToken } = useAuthStore.getState();
+    if (accessToken) {
+      config.headers.Authorization = `Bearer ${accessToken}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
-    const fetchWithToken = async (token: string) =>
-      fetch(`${API_BASE}${url}`, {
-        ...options,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          ...options.headers,
-        },
-      });
+// RESPONSE INTERCEPTOR
+// Handles global errors, specifically 401 Unauthorized (Token Refresh)
+api.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
+    
+    // Prevent infinite loops: check if we already tried to refresh for this request
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      
+      // If a refresh is already happening, queue this request
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({
+            resolve: (token: string) => {
+              if (originalRequest.headers) {
+                originalRequest.headers.Authorization = `Bearer ${token}`;
+              }
+              resolve(api(originalRequest));
+            },
+            reject: (err: any) => reject(err),
+          });
+        });
+      }
 
-    let res = await fetchWithToken(accessToken!);
-
-    // If 401 → try to refresh token
-    if (res.status === 401 && refreshToken && !isRefreshing) {
+      originalRequest._retry = true;
       isRefreshing = true;
-      console.log("<<<<<<<<<<<<<<<<<<<<<<<<<<<<< REFRESHING ACCESS TOKEN  --OK-- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 
+      const { refreshToken, updateAccessToken, logout } = useAuthStore.getState();
+
+      if (!refreshToken) {
+        logout();
+        return Promise.reject(error);
+      }
 
       try {
-        console.log("<<<<<<<<<<<<<<<<<<<<<<<<<<<<< REFRESHING ACCESS TOKEN >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-        const refreshRes = await fetch(`${API_BASE}/core/auth/token/refresh/`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refresh: refreshToken }),
+        // Perform the refresh call (using a fresh axios instance or fetch to avoid interceptor loops)
+        const response = await axios.post(`${API_BASE}/core/auth/token/refresh/`, {
+          refresh: refreshToken,
         });
 
-        if (refreshRes.ok) {
-          console.log("<<<<<<<<<<<<<<<<<<<<<<<<<<<<< REFRESHING ACCESS TOKEN  SUCCESS >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-          const data = await refreshRes.json();
-          updateAccessToken(data.access);
-          processQueue(null, data.access);
+        const newAccessToken = response.data.access;
 
-          // Retry original request with new token
-          res = await fetchWithToken(data.access);
-        } else {
-          logout();
-          window.location.href = "/login";
-          throw new Error("Refresh failed");
+        // 1. Update the store
+        updateAccessToken(newAccessToken);
 
+        // 2. Update the header for the failed request
+        if (originalRequest.headers) {
+            originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         }
-      } catch (err) {
-        processQueue(err, null);
-        // logout();
-        // window.location.href = "/login";
-        return Promise.reject(new Error("Session expired"));
+        
+        // 3. Process the queue of other requests waiting for this token
+        processQueue(null, newAccessToken);
+
+        // 4. Retry the original failed request
+        return api(originalRequest);
+
+      } catch (refreshError) {
+        // If refresh fails, kill the session
+        processQueue(refreshError, null);
+        logout();
+        window.location.href = "/login";
+        return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
       }
-    } else if (res.status === 401) {
-      // Refresh failed or no refresh token
-      // logout();
-      // window.location.href = "/login";
-      return Promise.reject(new Error("Unauthorized"));
     }
 
-    if (!res.ok) {
-      let errorMsg = "Request failed";
-      try {
-        const data = await res.json();
-        errorMsg = data.error || data.message || errorMsg;
-      } catch { }
-      throw new Error(errorMsg);
-    }
+    // Return other errors
+    return Promise.reject(error);
+  }
+);
 
-    return res.ok && res.status !== 204 ? res.json() : null;
+// EXPORTED API WRAPPER
+const apiWrapper = {
+  get: async (url: string, config?: AxiosRequestConfig) => {
+    const response = await api.get(url, config);
+    return response.data;
   },
-
-  get(url: string) {
-    return this.request(url, { method: "GET" });
+  post: async (url: string, data?: any, config?: AxiosRequestConfig) => {
+    const response = await api.post(url, data, config);
+    return response.data;
   },
-
-  post(url: string, data?: any) {
-    return this.request(url, {
-      method: "POST",
-      body: data ? JSON.stringify(data) : undefined,
-    });
+  put: async (url: string, data?: any, config?: AxiosRequestConfig) => {
+    const response = await api.put(url, data, config);
+    return response.data;
   },
-
-  delete(url: string, data?: any) {
-    return this.request(url, {
-      method: "DELETE",
-      body: data ? JSON.stringify(data) : undefined,
-    });
+  delete: async (url: string, config?: AxiosRequestConfig) => {
+    const response = await api.delete(url, config);
+    return response.data;
   },
+  // Exposed raw axios instance for advanced use cases
+  raw: api 
 };
 
-export default api;
+export default apiWrapper;
