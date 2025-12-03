@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone # Import timezone
 from bson import ObjectId
 from core.utils.db import mongo_conn
 
+
 class UserManager:
     def __init__(self):
         self.users_collection = mongo_conn.get_collection('users')
