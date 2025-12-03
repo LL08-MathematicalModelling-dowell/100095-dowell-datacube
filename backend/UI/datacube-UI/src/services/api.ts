@@ -36,8 +36,11 @@ const api = {
     // If 401 → try to refresh token
     if (res.status === 401 && refreshToken && !isRefreshing) {
       isRefreshing = true;
+      console.log("<<<<<<<<<<<<<<<<<<<<<<<<<<<<< REFRESHING ACCESS TOKEN  --OK-- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+
 
       try {
+        console.log("<<<<<<<<<<<<<<<<<<<<<<<<<<<<< REFRESHING ACCESS TOKEN >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
         const refreshRes = await fetch(`${API_BASE}/core/auth/token/refresh/`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -45,6 +48,7 @@ const api = {
         });
 
         if (refreshRes.ok) {
+          console.log("<<<<<<<<<<<<<<<<<<<<<<<<<<<<< REFRESHING ACCESS TOKEN  SUCCESS >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
           const data = await refreshRes.json();
           updateAccessToken(data.access);
           processQueue(null, data.access);

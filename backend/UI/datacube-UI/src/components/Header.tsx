@@ -32,9 +32,9 @@ const Header = () => {
             <span className="text-slate-400 text-sm hidden sm:block">Loading...</span>
           ) : (
             <>
-              {user.firstName && (
+              {user?.firstName && (
                 <span className="text-slate-400 text-sm hidden sm:block">
-                  Welcome, <span className="font-semibold text-slate-200">{user.firstName}</span>
+                  Welcome, <span className="font-semibold text-slate-200">{user?.firstName}</span>
                 </span>
               )}
               <span className="text-slate-400 text-sm hidden sm:block">|</span>
