@@ -58,9 +58,9 @@ const Login = () => {
   const mutation = useMutation({
     mutationFn: (data: FormData) => api.post('/core/login', data),
 
-    onSuccess: (response: LoginResponse) => {
-      setAuth(response.access, response.firstName);
-      // 3. Redirect
+
+    onSuccess: (response: { access: string; refresh: string; firstName: string }) => {
+      setAuth(response.access, response.refresh, response.firstName);
       navigate('/overview');
     },
 

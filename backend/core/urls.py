@@ -1,5 +1,5 @@
 from django.urls import path, re_path
-from rest_framework_simplejwt.views import TokenRefreshView
+# from rest_framework_simplejwt.views import TokenRefreshView
 
 # Import page rendering views
 # from .views.page_views import (
@@ -24,7 +24,8 @@ from .views.auth_views import (
     LoginView,
     ResendVerificationEmailView,
     UserProfileView,
-    EmailVerificationView
+    EmailVerificationView,
+    TokenRefreshView,
 )
 
 app_name = "core"
@@ -33,7 +34,9 @@ urlpatterns = [
     # --- Authentication API Endpoints ---
     re_path(r'^register/?$', RegistrationView.as_view(), name='register'),
     re_path(r'^login/?$', LoginView.as_view(), name='login'),
-    re_path(r'^token/refresh/?$', TokenRefreshView.as_view(), name='token_refresh'),
+    # urls.py
+    # path('api/v1/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    re_path(r'^auth/token/refresh/?$', TokenRefreshView.as_view(), name='token_refresh'),
     re_path(r'^verify-email/(?P<token>[^/]+)/?$', EmailVerificationView.as_view(), name='email-verify'),
     re_path(r'^profile/?$', UserProfileView.as_view(), name='user_profile'),
 
