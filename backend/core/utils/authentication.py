@@ -90,6 +90,7 @@ class APIKeyAuthentication(BaseAuthentication):
 
 
 class APIKeyManager:
+    """Manager class for handling API Key creation, retrieval, and revocation."""
     def __init__(self):
         self.collection = mongo_conn.get_collection('api_keys')
         
