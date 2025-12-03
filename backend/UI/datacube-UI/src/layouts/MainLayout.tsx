@@ -1,37 +1,37 @@
-// layouts/MainLayout.tsx
 import { useEffect } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import Header from '../components/Header.tsx';
 import Sidebar from '../components/Sidebar.tsx';
 import api from '../services/api.ts';
 import useAuthStore from '../store/authStore.ts';
 
 const MainLayout = () => {
-  const navigate = useNavigate();
   const { accessToken, refreshToken, logout } = useAuthStore();
 
   useEffect(() => {
-    // If we have tokens, validate them silently on app start
-    if (accessToken && refreshToken) {
-      api
-        .get('/core/profile')
-        .catch((err) => {
-          if (err.message.includes('401')) {
-            console.warn('Access token invalid, attempting to refresh...');
-          }
-          throw err;
-        })
-        .then(() => {
-          console.log('Token validation succeeded');
-        })
-    } else if (accessToken && !refreshToken) {
-      // Edge case: only access token exists → probably corrupted state
-      // logout();
-      // navigate('/login', { replace: true });
-      console.warn('No refresh token found, logging out for safety.');
+    if (accessToken && !refreshToken) {
+      console.warn(
+        'Authentication token mismatch: Access token present without Refresh token. Clearing session.'
+      );
+      logout();
+      return;
     }
-  }, [accessToken, refreshToken, logout, navigate]);
 
+    // If both tokens exist, silently validate the session
+    if (accessToken && refreshToken) {
+      api.get('/core/profile')
+        .then(() => {
+          console.log('Session validated successfully.');
+        })
+        .catch((error) => {
+          console.error('Initial profile validation failed. Session is expired.', error);
+
+          // The interceptor *should* handle logout/redirect, but this ensures a clean slate
+          // in case of other unhandled network errors or non-401 failures.
+          // logout();
+        });
+    }
+  }, [accessToken, refreshToken]);
   return (
     <div className="flex h-screen bg-[var(--bg-dark-1)] text-[var(--text-light)] font-[var(--font-sans)]">
       {/* Sidebar */}
