@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import api from "../services/api";
 
 interface Document {
@@ -23,14 +23,14 @@ const CRUD_URL = "/api/crud/";
 const CollectionDocuments = () => {
     // === All hooks at the top — NEVER after conditional returns ===
     const { dbId, collName } = useParams<{ dbId: string; collName: string }>();
-    const navigate = useNavigate();
+    // const navigate = useNavigate();
     const queryClient = useQueryClient();
 
     const [page, setPage] = useState(1);
-    const [search, setSearch] = useState("");
+    const [search, ] = useState("");
     const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
     const [isEditing, setIsEditing] = useState(false);
-    const [editValue, setEditValue] = useState("");
+    const [, setEditValue] = useState("");
     const [showDiff, setShowDiff] = useState(false);
     const [isValidJson, setIsValidJson] = useState(true);
     const [editorContent, setEditorContent] = useState("");
