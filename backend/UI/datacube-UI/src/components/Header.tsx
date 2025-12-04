@@ -6,6 +6,11 @@ const Header = () => {
   const { isAuthenticated, logout } = useAuthStore();
   const { user, isLoading } = useUser();
 
+  //  check the current url path
+  const currentPath = window.location.pathname;
+  // if dashboard in the path, do not show "dashboard" link
+  const isDashboardPath = currentPath.includes('/dashboard');
+
   return (
     <header className="bg-slate-900 border-b border-slate-800 text-slate-300 p-4 sm:px-6 flex items-center justify-between shadow-lg relative z-10">
       {/* Logo/App Name - Clickable to Dashboard/Home */}
@@ -36,21 +41,14 @@ const Header = () => {
 
             <nav className="hidden sm:block">
               <ul className="flex items-center space-x-4">
+                {/* button to /dashboard */}
+                {!isDashboardPath && (
                 <li>
-                  <Link to="/api-keys" className="text-slate-400 hover:text-cyan-400 transition-colors text-sm font-medium">
-                    API Keys
+                  <Link to="/dashboard" className="text-slate-200 hover:text-cyan-400 transition-colors text-sm font-medium bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md shadow-md">
+                    Dashboard
                   </Link>
                 </li>
-                <li>
-                  <Link to="/billing" className="text-slate-400 hover:text-cyan-400 transition-colors text-sm font-medium">
-                    Billing
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/overview" className="text-slate-400 hover:text-cyan-400 transition-colors text-sm font-medium">
-                    Databases
-                  </Link>
-                </li>
+                )}
               </ul>
             </nav>
 

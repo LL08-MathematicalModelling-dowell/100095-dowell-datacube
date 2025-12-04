@@ -116,7 +116,7 @@ const NotFound = () => {
             {isAuthenticated && (
               <>
                 <IconLink
-                  href="/api-keys"
+                  href="/dashboard/api-keys"
                   title="Manage API Keys"
                   subtitle="Your access codes to the galaxy."
                   icon={
@@ -124,7 +124,7 @@ const NotFound = () => {
                   }
                 />
                 <IconLink
-                  href="/billing"
+                  href="/dashboard/billing"
                   title="Billing & Subscriptions"
                   subtitle="Refuel your journey here."
                   icon={
