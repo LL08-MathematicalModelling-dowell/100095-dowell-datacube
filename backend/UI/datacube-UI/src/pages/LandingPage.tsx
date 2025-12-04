@@ -1,6 +1,6 @@
 import { format } from "date-fns";
 import { motion } from "framer-motion";
-import { ArrowRight, Check, Github, Mail, Menu, Rocket, Shield, Star, X, Zap } from "lucide-react";
+import { ArrowRight, Check, Github, Mail, Rocket, Shield, Star, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -65,7 +65,7 @@ const LandingPage = () => {
   const githubStars = 2847;
   // const [githubStars, setGithubStars] = useState(2847);
   const [email, setEmail] = useState("");
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // useEffect(() => {
   //   const interval = setInterval(() => {
@@ -92,22 +92,6 @@ const LandingPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[var(--bg-dark-1)] via-[var(--bg-dark-2)] to-[var(--bg-dark-1)] text-[var(--text-light)]  overflow-x-hidden">
-      {/* Dark Mode Toggle */}
-      {/* <button
-        onClick={() => setIsDark(!isDark)}
-        className="fixed top-14 right-6 z-50 p-3 rounded-full bg-[var(--bg-dark-3)] border border-[var(--border-color)] hover:border-[var(--green-dark)] transition-all"
-        aria-label="Toggle dark mode"
-      >
-        {isDark ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}
-      </button> */}
-
-      {/* Mobile Menu Button */}
-      {/* <button
-        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        className="fixed top-6 left-6 z-50 p-3 rounded-full bg-[var(--bg-dark-3)] border border-[var(--border-color)] lg:hidden"
-      >
-        {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-      </button> */}
 
       {/* Hero */}
       <section className="relative pt-40 pb-32 px-6 text-center overflow-hidden">
