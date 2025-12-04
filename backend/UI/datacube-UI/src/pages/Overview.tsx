@@ -161,7 +161,7 @@ const Overview = () => {
                       <td className="p-3 font-mono text-sm text-slate-400">{db.id}</td>
                       <td className="p-3">
                         <Link
-                          to={`/database/${db.id}`}
+                          to={`/dashboard/database/${db.id}`}
                           className="text-cyan-500 hover:text-cyan-400 font-medium transition-colors"
                         >
                           View Details

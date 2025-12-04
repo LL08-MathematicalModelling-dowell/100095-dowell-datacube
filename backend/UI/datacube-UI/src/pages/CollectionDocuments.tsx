@@ -191,7 +191,7 @@ const CollectionDocuments = () => {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <Link
-                        to={`/database/${dbId}`}
+                        to={`/dashboard/database/${dbId}`}
                         className="text-[var(--green-dark)] hover:underline flex items-center gap-2 mb-2"
                     >
                         ← Back to Database

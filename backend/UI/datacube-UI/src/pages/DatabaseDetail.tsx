@@ -203,7 +203,7 @@ const DatabaseDetail = () => {
                         <td className="p-3 text-slate-400">{collection.num_documents}</td>
                         <td className="p-3">
                           <Link
-                            to={`/database/${dbId}/collection/${collection.name}`}
+                            to={`/dashboard/database/${dbId}/collection/${collection.name}`}
                             className="text-cyan-400 hover:text-cyan-300 font-medium transition-colors mr-6"
                           >
                             View Documents
