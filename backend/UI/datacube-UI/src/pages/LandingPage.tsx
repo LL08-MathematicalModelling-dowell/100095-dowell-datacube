@@ -102,12 +102,12 @@ const LandingPage = () => {
       </button> */}
 
       {/* Mobile Menu Button */}
-      <button
+      {/* <button
         onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
         className="fixed top-6 left-6 z-50 p-3 rounded-full bg-[var(--bg-dark-3)] border border-[var(--border-color)] lg:hidden"
       >
         {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-      </button>
+      </button> */}
 
       {/* Hero */}
       <section className="relative pt-40 pb-32 px-6 text-center overflow-hidden">

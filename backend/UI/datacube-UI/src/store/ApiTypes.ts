@@ -190,30 +190,6 @@ export const apiDocs: ApiGroup[] = [
         ],
       },
       {
-        name: "List Collections",
-        description:
-          "Retrieve all collections in a database along with their live document counts.",
-        auth_required: "API Key",
-        url: "/api/list_collections",
-        methods: [
-          {
-            method: "GET",
-            params: "database_id=60c72b2f9b1d8b1a2d3e4567",
-            response: JSON.stringify(
-              {
-                success: true,
-                collections: [
-                  { name: "users", num_documents: 152 },
-                  { name: "products", num_documents: 840 },
-                ],
-              },
-              null,
-              2
-            ),
-          },
-        ],
-      },
-      {
         name: "Drop Database",
         description:
           "Permanently delete a logical database and all of its collections and documents.",
@@ -242,6 +218,75 @@ export const apiDocs: ApiGroup[] = [
           },
         ],
       },
+      {
+        name: "Add Collections",
+        description:
+          "Add one or more new collections to an existing database.",
+        auth_required: "API Key",
+        url: "/api/add_collection",
+        methods: [
+          {
+            method: "POST",
+            body: JSON.stringify(
+              {
+                database_id: "60c72b2f9b1d8b1a2d3e4567",
+                collections: [
+                  {
+                    name: "products",
+                    fields: [
+                      { name: "name", type: "string" },
+                      { name: "price", type: "number" },
+                    ],
+                  },
+                ],
+              },
+              null,
+              2
+            ),
+            response: JSON.stringify(
+              {
+                success: true,
+                collections: [
+                  {
+                    name: "products",
+                    fields: [
+                      { name: "name", type: "string" },
+                      { name: "price", type: "number" },
+                    ],
+                  },
+                ],
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      },
+      {
+        name: "List Collections",
+        description:
+          "Retrieve all collections in a database along with their live document counts.",
+        auth_required: "API Key",
+        url: "/api/list_collections",
+        methods: [
+          {
+            method: "GET",
+            params: "database_id=60c72b2f9b1d8b1a2d3e4567",
+            response: JSON.stringify(
+              {
+                success: true,
+                collections: [
+                  { name: "users", num_documents: 152 },
+                  { name: "products", num_documents: 840 },
+                ],
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      },
+      
       {
         name: "Drop Collections",
         description:
