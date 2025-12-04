@@ -1,7 +1,13 @@
 import type { Monaco } from "@monaco-editor/react";
 import Editor from "@monaco-editor/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Copy, Edit2, FileJson, GitCompare, Loader2, Save, Trash2, XCircle } from "lucide-react";
+import { 
+    AlertCircle, CheckCircle,
+    ChevronLeft, ChevronRight,
+    Copy, Edit2, FileJson,
+    GitCompare, Loader2,
+    Save, Trash2, XCircle 
+} from "lucide-react";
 import { useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -27,7 +33,7 @@ const CollectionDocuments = () => {
     const [editValue, setEditValue] = useState("");
     const [showDiff, setShowDiff] = useState(false);
     const [isValidJson, setIsValidJson] = useState(true);
-    const [editorContent, setEditorContent] = useState(""); // ← This is the source of truth
+    const [editorContent, setEditorContent] = useState("");
 
 
     const originalJson = useRef<string>("");
