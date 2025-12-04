@@ -1,7 +1,6 @@
-// pages/LandingPage.tsx
 import { format } from "date-fns";
 import { motion } from "framer-motion";
-import { ArrowRight, Check, Github, Mail, Menu, Moon, Rocket, Shield, Star, Sun, X, Zap } from "lucide-react";
+import { ArrowRight, Check, Github, Mail, Menu, Rocket, Shield, Star, X, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
