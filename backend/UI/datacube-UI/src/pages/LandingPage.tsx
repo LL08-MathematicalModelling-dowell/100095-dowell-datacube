@@ -4,11 +4,11 @@ import { ArrowRight, Check, Github, Mail, Menu, Rocket, Shield, Star, X, Zap } f
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
-const testimonials = [
-  { name: "Alex Chen", role: "CTO @ Stealth Startup", text: "DataCube saved us 3 months of infra work. We shipped in 2 weeks.", avatar: "AC" },
-  { name: "Sarah Kim", role: "Full-Stack @ Fintech", text: "Best dev experience I've had with a database. Period.", avatar: "SK" },
-  { name: "Marcus Johnson", role: "Indie Hacker", text: "From zero to 10k users in a weekend. Thank you DataCube.", avatar: "MJ" },
-];
+// const testimonials = [
+//   { name: "Alex Chen", role: "CTO @ Stealth Startup", text: "DataCube saved us 3 months of infra work. We shipped in 2 weeks.", avatar: "AC" },
+//   { name: "Sarah Kim", role: "Full-Stack @ Fintech", text: "Best dev experience I've had with a database. Period.", avatar: "SK" },
+//   { name: "Marcus Johnson", role: "Indie Hacker", text: "From zero to 10k users in a weekend. Thank you DataCube.", avatar: "MJ" },
+// ];
 
 const blogPosts = [
   { title: "Why We Built DataCube", date: "2025-03-20", excerpt: "The story behind replacing MongoDB Atlas with something simpler.", readTime: "4 min" },
@@ -59,19 +59,20 @@ const PricingTier = ({ title, price, yearlyPrice, features, popular, cta }: any)
 );
 
 const LandingPage = () => {
-  const [isDark, setIsDark] = useState(true);
-  const [currentTestimonial, setCurrentTestimonial] = useState(0);
+  // const [isDark, setIsDark] = useState(true);
+  // const [currentTestimonial, setCurrentTestimonial] = useState(0);
   const [visitors, setVisitors] = useState(12487);
-  const [githubStars, setGithubStars] = useState(2847);
+  const githubStars = 2847;
+  // const [githubStars, setGithubStars] = useState(2847);
   const [email, setEmail] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentTestimonial((i) => (i + 1) % testimonials.length);
-    }, 6000);
-    return () => clearInterval(interval);
-  }, []);
+  // useEffect(() => {
+  //   const interval = setInterval(() => {
+  //     setCurrentTestimonial((i) => (i + 1) % testimonials.length);
+  //   }, 6000);
+  //   return () => clearInterval(interval);
+  // }, []);
 
   // Simulate live visitors
   useEffect(() => {
