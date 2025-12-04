@@ -11,7 +11,45 @@ const Sidebar = () => {
 
       <nav>
         <ul className="space-y-2">
-          {/* Always visible: API Reference */}
+          {/* Conditional links for authenticated users */}
+          {isAuthenticated && (
+            <>
+              <li>
+                <Link
+                  to="/dashboard/api-keys"
+                  className={`block text-sm px-3 py-1.5 rounded-md transition-colors ${location.pathname === '/dashboard/api-keys'
+                    ? 'bg-cyan-500/10 text-cyan-400 font-semibold'
+                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+                    }`}
+                >
+                  API Keys
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/dashboard/billing"
+                  className={`block text-sm px-3 py-1.5 rounded-md transition-colors ${location.pathname === '/dashboard/billing'
+                    ? 'bg-cyan-500/10 text-cyan-400 font-semibold'
+                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+                    }`}
+                >
+                  Billing
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/dashboard/overview"
+                  className={`block text-sm px-3 py-1.5 rounded-md transition-colors ${location.pathname === '/dashboard/overview'
+                    ? 'bg-cyan-500/10 text-cyan-400 font-semibold'
+                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+                    }`}
+                >
+                  Databases
+                </Link>
+              </li>
+            </>
+          )}
+            {/* Always visible: API Reference */}
           <li>
             <Link
               to="/api-docs"
@@ -23,45 +61,6 @@ const Sidebar = () => {
               API Reference
             </Link>
           </li>
-
-          {/* Conditional links for authenticated users */}
-          {isAuthenticated && (
-            <>
-              <li>
-                <Link
-                  to="/api-keys"
-                  className={`block text-sm px-3 py-1.5 rounded-md transition-colors ${location.pathname === '/api-keys'
-                    ? 'bg-cyan-500/10 text-cyan-400 font-semibold'
-                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
-                    }`}
-                >
-                  API Keys
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/billing"
-                  className={`block text-sm px-3 py-1.5 rounded-md transition-colors ${location.pathname === '/billing'
-                    ? 'bg-cyan-500/10 text-cyan-400 font-semibold'
-                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
-                    }`}
-                >
-                  Billing
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/overview"
-                  className={`block text-sm px-3 py-1.5 rounded-md transition-colors ${location.pathname === '/overview'
-                    ? 'bg-cyan-500/10 text-cyan-400 font-semibold'
-                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
-                    }`}
-                >
-                  Databases
-                </Link>
-              </li>
-            </>
-          )}
         </ul>
       </nav>
 

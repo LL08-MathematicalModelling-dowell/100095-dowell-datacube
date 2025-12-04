@@ -20,7 +20,7 @@ const ProtectedRoute = () => {
 
 const UnauthenticatedRoute = () => {
   const { isAuthenticated } = useAuthStore();
-  return !isAuthenticated ? <Outlet /> : <Navigate to="/overview" />;
+  return !isAuthenticated ? <Outlet /> : <Navigate to="/dashboard/overview" />;
 }
 
 function App() {
@@ -38,11 +38,12 @@ function App() {
 
       <Route element={<ProtectedRoute />}>
         <Route element={<DashboardLayout />}>
-          <Route path="/api-keys" element={<ApiKeys />} />
-          <Route path="/billing" element={<Billing />} />
-          <Route path="/overview" element={<Overview />} />
-          <Route path="/database/:dbId" element={<DatabaseDetail />} />
-          <Route path="/database/:dbId/collection/:collName" element={<CollectionDocuments />} />
+          <Route path="/dashboard/api-keys" element={<ApiKeys />} />
+          <Route path="/dashboard/billing" element={<Billing />} />
+          <Route path="/dashboard/overview" element={<Overview />} />
+          <Route path="/dashboard/database/:dbId" element={<DatabaseDetail />} />
+          <Route path="/dashboard/database/:dbId/collection/:collName" element={<CollectionDocuments />} />
+          <Route path="/dashboard" element={<Navigate to="/dashboard/overview" />} />
         </Route>
       </Route>
       <Route path="*" element={<NotFound />} />

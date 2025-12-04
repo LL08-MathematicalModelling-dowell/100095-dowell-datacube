@@ -47,7 +47,7 @@ const Register = () => {
       if (response.access) {
         setAuth(response.access,response.refresh, response.firstName);
         setSuccessMessage(response.message || "Registration successful! Redirecting...");
-        setTimeout(() => navigate('/overview'), 1500);
+        setTimeout(() => navigate('/dashboard/overview'), 1500);
       } else {
         const finalMessage = response.message || "Registration successful! Please log in.";
         setSuccessMessage(finalMessage);

@@ -61,7 +61,7 @@ const Login = () => {
 
     onSuccess: (response: { access: string; refresh: string; firstName: string }) => {
       setAuth(response.access, response.refresh, response.firstName);
-      navigate('/overview');
+      navigate('/dashboard/overview');
     },
 
     onError: (error: unknown) => {

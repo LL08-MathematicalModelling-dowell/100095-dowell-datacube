@@ -383,7 +383,7 @@ const CollectionDocuments = () => {
                                         {/* Current Editor - _id is read-only */}
                                         <div className={showDiff ? "w-1/2 p-4" : "w-full p-4"}>
                                             <h3 className="text-sm font-semibold text-[var(--text-muted)] mb-2">
-                                                {showDiff ? "Current" : "Document"}
+                                                {showDiff ? "New Document" : "Current"}
                                             </h3>
                                             <div className="h-full flex flex-col">
                                                 {/* Read-only _id field */}
@@ -443,9 +443,10 @@ const CollectionDocuments = () => {
                                         </div>
 
                                         {/* Current */}
+                                        {showDiff && (
                                         <div className={showDiff ? "w-1/2 p-4" : "w-full p-4"}>
                                             <h3 className="text-sm font-semibold text-[var(--text-muted)] mb-2">
-                                                {showDiff ? "Current" : "Document"}
+                                                Current
                                             </h3>
                                             <Editor
                                                 height="100%"
@@ -471,6 +472,7 @@ const CollectionDocuments = () => {
                                                 }}
                                             />
                                         </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
