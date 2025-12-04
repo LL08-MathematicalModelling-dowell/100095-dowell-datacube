@@ -68,9 +68,9 @@ class AddCollectionView(BaseAPIView):
     def post(self, request):
         current_user_id = request.user.id
 
-        data    = self.validate_serializer(AddCollectionPOSTSerializer, request.data)
-        db_id   = data["database_id"]
-        new_cols= data["collections"]
+        data = self.validate_serializer(AddCollectionPOSTSerializer, request.data)
+        db_id = data["database_id"]
+        new_cols = data["collections"]
 
         # validate names & fields
         for c in new_cols:
