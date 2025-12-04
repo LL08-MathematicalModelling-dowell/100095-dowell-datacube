@@ -3,20 +3,13 @@ import useAuthStore from '../store/authStore';
 import useUser from '../store/useUser';
 
 const Header = () => {
-  // const { logout, firstName, isAuthenticated } = useAuthStore();
   const { isAuthenticated, logout } = useAuthStore();
   const { user, isLoading } = useUser();
-  // const navigate = useNavigate();
-
-  // const handleLogout = () => {
-  //   logout();
-  //   navigate('/login');
-  // };
 
   return (
     <header className="bg-slate-900 border-b border-slate-800 text-slate-300 p-4 sm:px-6 flex items-center justify-between shadow-lg relative z-10">
       {/* Logo/App Name - Clickable to Dashboard/Home */}
-      <Link to={isAuthenticated ? "/api-docs" : "/"} className="flex items-center group">
+      <Link to={"/"} className="flex items-center group">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-cyan-400 group-hover:text-cyan-300 transition-colors mr-2">
           <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
         </svg>

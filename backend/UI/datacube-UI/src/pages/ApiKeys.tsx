@@ -12,7 +12,6 @@ interface ApiKey {
   key_display: string;
 }
 
-
 interface NewKeyResponse {
   id: string;
   name: string;
@@ -20,7 +19,6 @@ interface NewKeyResponse {
   key: string;
 }
 
-// Reusing the CopyButton component from your API docs if possible, otherwise styled here.
 const CopyButton: React.FC<{ text: string }> = ({ text }) => {
   const [isCopied, setIsCopied] = useState(false);
   const handleCopy = () => {
@@ -51,7 +49,7 @@ const CopyButton: React.FC<{ text: string }> = ({ text }) => {
 };
 
 const ApiKeys = () => {
-  const { token } = useAuthStore();
+  const { accessToken } = useAuthStore();
   const queryClient = useQueryClient();
   const [newKey, setNewKey] = useState<NewKeyResponse | null>(null);
   const [keyName, setKeyName] = useState('');
@@ -63,7 +61,7 @@ const ApiKeys = () => {
       const response = await api.get('/core/api/v1/keys/');
       return response;
     },
-    enabled: !!token, // Only fetch if authenticated
+    enabled: !!accessToken, // Only fetch if authenticated
   });
 
   // Generate new API key

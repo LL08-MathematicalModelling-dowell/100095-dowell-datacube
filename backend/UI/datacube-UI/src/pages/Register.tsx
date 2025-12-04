@@ -8,7 +8,6 @@ import { z } from 'zod';
 import api from '../services/api';
 import useAuthStore from '../store/authStore.ts';
 
-// Define validation schema with Zod
 const registerSchema = z.object({
   firstName: z.string().min(2, 'First name must be at least 2 characters').trim(),
   lastName: z.string().min(2, 'Last name must be at least 2 characters').trim(),
@@ -28,12 +27,9 @@ const Register = () => {
   const { setAuth } = useAuthStore();
   const navigate = useNavigate();
 
-  // State for success message after successful registration
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  // State for displaying user-friendly error messages
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Form setup with react-hook-form
   const {
     register,
     handleSubmit,
@@ -43,39 +39,29 @@ const Register = () => {
   });
 
   const mutation = useMutation({
-    // mutationFn uses the inlined api.post
     mutationFn: (data: RegisterForm) => api.post('/core/register', data),
 
-    // This is only called if api.post successfully resolves (HTTP 2xx status)
-    onSuccess: (response: { message: string; access: string; firstName: string }) => {
+    onSuccess: (response: { message: string; access: string; refresh:string, firstName: string }) => {
       setErrorMessage(null);
 
       if (response.access) {
-        // Case 1: Tokens returned (instant login)
-        setAuth(response.access, response.firstName);
+        setAuth(response.access,response.refresh, response.firstName);
         setSuccessMessage(response.message || "Registration successful! Redirecting...");
         setTimeout(() => navigate('/overview'), 1500);
       } else {
-        // Case 2: No tokens returned (email verification required or manual login needed)
-
-        // Show success message briefly, and then navigate to login
         const finalMessage = response.message || "Registration successful! Please log in.";
         setSuccessMessage(finalMessage);
 
-        // **ACTION:** Navigate to login automatically after a delay
         setTimeout(() => navigate('/login'), 2500);
       }
     },
 
-    // This is called if api.post throws an error (HTTP non-2xx status or network failure)
     onError: (error: unknown) => {
-      // Catch the error thrown by the inlined api.post (which contains the detailed message)
       const message =
         error instanceof Error
           ? error.message
           : 'Registration failed. Please try again.';
 
-      // Set the error message to display in the UI
       setErrorMessage(message);
     },
   });
