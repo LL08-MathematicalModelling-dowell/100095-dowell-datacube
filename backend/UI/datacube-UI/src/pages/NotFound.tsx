@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import useAuthStore from '../store/authStore';
 
 // Main NotFound Component
 const NotFound = () => {
   // --- STATE ---
   // State to control the fade-in and slide-up animation on load
   const [isMounted, setIsMounted] = useState(false);
+  const { isAuthenticated } = useAuthStore();
 
   // --- EFFECTS ---
   // On component mount, trigger the animation and log a fun message to the console
@@ -111,22 +113,27 @@ const NotFound = () => {
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v11.494m-9-5.747h18" /></svg>
               }
             />
-            <IconLink
-              href="/api-keys"
-              title="Manage API Keys"
-              subtitle="Your access codes to the galaxy."
-              icon={
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7h3a5 5 0 015 5 5 5 0 01-5 5h-3m-6 0H6a5 5 0 01-5-5 5 5 0 015-5h3" /></svg>
-              }
-            />
-            <IconLink
-              href="/billing"
-              title="Billing & Subscriptions"
-              subtitle="Refuel your journey here."
-              icon={
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
-              }
-            />
+            {isAuthenticated && (
+              <>
+                <IconLink
+                  href="/api-keys"
+                  title="Manage API Keys"
+                  subtitle="Your access codes to the galaxy."
+                  icon={
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7h3a5 5 0 015 5 5 5 0 01-5 5h-3m-6 0H6a5 5 0 01-5-5 5 5 0 015-5h3" /></svg>
+                  }
+                />
+                <IconLink
+                  href="/billing"
+                  title="Billing & Subscriptions"
+                  subtitle="Refuel your journey here."
+                  icon={
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                  }
+                />
+              </>)
+            }
+
           </div>
         </div>
       </main>

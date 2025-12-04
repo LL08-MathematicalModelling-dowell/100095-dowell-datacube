@@ -15,7 +15,6 @@ Key Changes:
 
 from rest_framework import status
 from rest_framework.response import Response
-# ADDED: Import IsAuthenticated for view protection.
 from rest_framework.permissions import IsAuthenticated
 
 from api.views.base import BaseAPIView
@@ -81,6 +80,10 @@ class DataCrudView(BaseAPIView):
         try:
             # CHANGED: Pass user_id to the service layer for ownership verification.
             total, docs = await self.doc_svc.list_docs(db_id, coll_name, user_id, filt, page, page_size)
+
+            # filter out documents with "is_deleted": true
+            docs = [doc for doc in docs if not doc.get("is_deleted", False)]
+            total = len(docs)
             return Response({
                 "success": True,
                 "data": jsonify_object_ids(docs),

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { Control, FieldErrors, UseFormRegister } from 'react-hook-form';
 import { useFieldArray, useForm } from 'react-hook-form';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { z } from 'zod';
 import api from '../services/api';
 import useAuthStore from '../store/authStore';
@@ -48,29 +48,29 @@ interface Database {
 }
 
 const DatabaseDetail = () => {
-  const { id } = useParams<{ id: string }>();
+  const { dbId } = useParams<{ dbId: string }>();
   const queryClient = useQueryClient();
-  const { token } = useAuthStore();
+  const { refreshToken } = useAuthStore();
   const [isCreateCollectionModalOpen, setIsCreateCollectionModalOpen] = useState(false);
 
   // Fetch database details
   const { data, isLoading, error } = useQuery<Database>({
-    queryKey: ['database', id],
+    queryKey: ['database', dbId],
     queryFn: async () => {
-      const response = await api.get(`/core/api/v1/database/${id}`);
+      const response = await api.get(`/core/api/v1/database/${dbId}`);
       return response;
     },
-    enabled: !!token && !!id,
+    enabled: !!refreshToken && !!dbId,
   });
 
   // Delete collection mutation
   const deleteMutation = useMutation({
     mutationFn: async ({ collection_name }: { collection_name: string }) => {
       if (!data) return;
-      await api.delete('/api/drop_collections/', { database_id: id, collection_names: [collection_name] });
+      await api.delete('/api/drop_collections/', { database_id: dbId, collection_names: [collection_name] });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['database', id] }); // Invalidate specific database to refetch collections
+      queryClient.invalidateQueries({ queryKey: ['database', dbId] }); // Invalidate specific database to refetch collections
       alert('Collection deleted successfully!');
     },
     onError: (err) => {
@@ -99,9 +99,9 @@ const DatabaseDetail = () => {
   // Create collections mutation
   const createCollectionsMutation = useMutation({
     mutationFn: async (formData: CreateCollectionForm) => {
-      if (!id) throw new Error('Database ID is missing.');
+      if (!dbId) throw new Error('Database ID is missing.');
       const payload = {
-        database_id: id,
+        database_id: dbId,
         collections: formData.collections.map(col => ({
           name: col.name,
           fields: col.fields.map(field => ({
@@ -114,7 +114,7 @@ const DatabaseDetail = () => {
       return response;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['database', id] });
+      queryClient.invalidateQueries({ queryKey: ['database', dbId] });
       setIsCreateCollectionModalOpen(false);
       reset();
       alert('Collections created successfully!');
@@ -190,7 +190,7 @@ const DatabaseDetail = () => {
                   <tr className="bg-slate-700/60">
                     <th className="p-3 text-left text-sm font-semibold text-slate-200 rounded-tl-lg">Collection Name</th>
                     <th className="p-3 text-left text-sm font-semibold text-slate-200">Fields Defined</th>
-                    <th className="p-3 text-left text-sm font-semibold text-slate-200">Documents Stored</th>
+                    <th className="p-3 text-left text-sm font-semibold text-slate-200">Documents Created</th>
                     <th className="p-3 text-left text-sm font-semibold text-slate-200 rounded-tr-lg">Actions</th>
                   </tr>
                 </thead>
@@ -202,12 +202,12 @@ const DatabaseDetail = () => {
                         <td className="p-3 text-slate-400">{collection.field_count}</td>
                         <td className="p-3 text-slate-400">{collection.num_documents}</td>
                         <td className="p-3">
-                          <button className="text-cyan-500 hover:text-cyan-400 font-medium transition-colors mr-4
-                          disabled:opacity-50 disabled:cursor-not-allowed"
-                            disabled={true} // Re-enable when view functionality is implemented
+                          <Link
+                            to={`/database/${dbId}/collection/${collection.name}`}
+                            className="text-cyan-400 hover:text-cyan-300 font-medium transition-colors mr-6"
                           >
-                            View
-                          </button>
+                            View Documents
+                          </Link>
                           <button
                             onClick={() => handleDelete({ collection_name: collection.name })}
                             className="text-red-500 hover:text-red-400 font-medium transition-colors border-l border-slate-700/60 pl-4">

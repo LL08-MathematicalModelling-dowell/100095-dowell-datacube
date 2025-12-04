@@ -5,7 +5,7 @@ import Sidebar from '../components/Sidebar.tsx';
 import api from '../services/api.ts';
 import useAuthStore from '../store/authStore.ts';
 
-const MainLayout = () => {
+const DashboardLayout = () => {
   const { accessToken, refreshToken, logout } = useAuthStore();
 
   useEffect(() => {
@@ -25,10 +25,6 @@ const MainLayout = () => {
         })
         .catch((error) => {
           console.error('Initial profile validation failed. Session is expired.', error);
-
-          // The interceptor *should* handle logout/redirect, but this ensures a clean slate
-          // in case of other unhandled network errors or non-401 failures.
-          // logout();
         });
     }
   }, [accessToken, refreshToken]);
@@ -50,4 +46,4 @@ const MainLayout = () => {
   );
 };
 
-export default MainLayout;
+export default DashboardLayout;

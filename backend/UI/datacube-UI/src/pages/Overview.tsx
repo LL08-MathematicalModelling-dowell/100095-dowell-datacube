@@ -33,7 +33,7 @@ interface Database {
 
 const Overview = () => {
   const queryClient = useQueryClient();
-  const { token } = useAuthStore();
+  const { refreshToken } = useAuthStore();
   const [isFormOpen, setIsFormOpen] = useState(false);
 
   // Fetch databases and usage stats
@@ -43,7 +43,7 @@ const Overview = () => {
       const response = await api.get('/core/api/v1/dashboard/stats/');
       return response.databases;
     },
-    enabled: !!token,
+    enabled: !!refreshToken,
   });
 
   // Create database mutation

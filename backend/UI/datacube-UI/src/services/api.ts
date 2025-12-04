@@ -127,8 +127,14 @@ const apiWrapper = {
     const response = await api.put(url, data, config);
     return response.data;
   },
-  delete: async (url: string, config?: AxiosRequestConfig) => {
-    const response = await api.delete(url, config);
+  delete: async (url: string, data?: any, config?: AxiosRequestConfig) => {
+    const deleteConfig: AxiosRequestConfig = { ...config };
+
+    if (data) {
+        deleteConfig.data = data;
+    }
+    
+    const response = await api.delete(url, deleteConfig);
     return response.data;
   },
   // Exposed raw axios instance for advanced use cases
