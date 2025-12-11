@@ -94,9 +94,6 @@ class AddCollectionPOSTSerializer(serializers.Serializer):
         help_text="A list of at least one new collection to add."
     )
 
-
-# --- Data CRUD Operation Serializers ---
-
 class AsyncPostDocumentSerializer(serializers.Serializer):
     """Validates the request for creating new documents."""
     database_id = ObjectIdField(help_text="The ID of the target database.")

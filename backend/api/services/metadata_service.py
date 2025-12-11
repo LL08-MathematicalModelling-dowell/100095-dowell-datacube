@@ -4,6 +4,9 @@
 """
 
 from bson import ObjectId
+import collections
+import datetime
+from typing import Any
 from django.conf import settings
 from pymongo import ReturnDocument
 # from api.utils.decorators import with_transaction
@@ -35,15 +38,14 @@ class MetadataService:
             "user_id": ObjectId(user_id)
         }, session=session))
 
-    # This method is for listing, so we should return the user-friendly name
     def list_databases_for_user(self, user_id: str) -> list[dict]:
+        """Lists all databases for a specific user."""
         user_filter = {"user_id": ObjectId(user_id)}
         # Fetch both the id and the user-friendly name
         projection = {"_id": 1, "displayName": 1}
         docs = list(self._coll.find(user_filter, projection))
         # Use the displayName for the 'name' field in the response
         return [{"id": str(d["_id"]), "name": d["displayName"]} for d in docs]
-
 
     def create_db_meta(
         self,
@@ -158,7 +160,7 @@ class MetadataService:
         return names
 
     def list_databases_paginated_for_user(
-        self, user_id: str, page: int, page_size: int, search_term: str = None
+        self, user_id: str, page: int, page_size: int, search_term: str | None = None
     ) -> tuple[int, list[dict]]:
         """
         Lists databases for a specific user with pagination and optional search.
@@ -256,3 +258,63 @@ class MetadataService:
             return [] # Return an empty list on error
             
         return collections_with_counts
+
+    def _infer_type(self, value: Any) -> str:
+        if isinstance(value, str): return "string"
+        if isinstance(value, bool): return "boolean"
+        if isinstance(value, int): return "integer"
+        if isinstance(value, float): return "float"
+        if isinstance(value, datetime.datetime): return "date"
+        if isinstance(value, ObjectId): return "objectid"
+        if isinstance(value, list): 
+            return f"array<{self._infer_type(value[0]) if value else ''}>".rstrip("<>")
+        if isinstance(value, dict): return "object"
+        if value is None: return "null"
+        return "unknown"
+
+    def _fields_from_docs(self, docs: list[dict]) -> dict[str, str]:
+        fields = collections.defaultdict(set)
+        for doc in docs:
+            for k, v in doc.items():
+                if not k.startswith("_"):
+                    fields[k].add(self._infer_type(v))
+        return {k: ", ".join(sorted(v)) for k, v in fields.items()}
+
+    def update_collection_fields(self, db_id: str, user_id: str, coll_name: str, docs: list[dict]):
+        new_fields = self._fields_from_docs(docs)
+        if not new_fields:
+            return
+
+        meta = self.get_by_id_for_user(db_id, user_id)
+        if not meta:
+            raise ValueError("Database not found or access denied.")
+
+        coll = next((c for c in meta.get("collections", []) if c["name"] == coll_name), None)
+        if not coll:
+            raise ValueError("Collection not found in metadata.")
+
+        existing = {f["name"]: f["type"] for f in coll.get("fields", [])}
+        updated = False
+
+        for name, types in new_fields.items():
+            if name not in existing:
+                existing[name] = types
+                updated = True
+            else:
+                cur = set(existing[name].split(", "))
+                new = set(types.split(", "))
+                merged = ", ".join(sorted(cur | new))
+                if merged != existing[name]:
+                    existing[name] = merged
+                    updated = True
+
+        if updated:
+            new_fields_list = [{"name": n, "type": t} for n, t in existing.items()]
+            self._coll.update_one(
+                {
+                    "_id": ObjectId(db_id),
+                    "user_id": ObjectId(user_id),
+                    "collections.name": coll_name
+                },
+                {"$set": {"collections.$.fields": new_fields_list}}
+            )

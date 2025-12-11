@@ -125,22 +125,6 @@ const CollectionDocuments = () => {
     };
 
 
-    // const handleEditorChange = (value: string | undefined) => {
-    //     if (!value) {
-    //         setIsValidJson(false);
-    //         return;
-    //     }
-    //     try {
-    //         JSON.parse(value);
-    //         setIsValidJson(true);
-    //         if (editorRef.current) {
-    //             editorRef.current.getAction("editor.action.formatDocument")?.run();
-    //         }
-    //     } catch {
-    //         setIsValidJson(false);
-    //     }
-    // };
-
     const handleEditorChange = (value: string | undefined) => {
         const newValue = value || "";
         setEditorContent(newValue); // ← This is what gets saved
@@ -255,7 +239,34 @@ const CollectionDocuments = () => {
                                         </td>
                                         <td className="px-6 py-4">
                                             <pre className="text-xs text-[var(--text-muted)] font-mono truncate max-w-2xl">
-                                                {JSON.stringify({ ...doc, _id: undefined }, null, 2)}
+                                                {/* {JSON.stringify({ ...doc, _id: undefined }, null, 2)} */}
+                                                {/* use uneditatble  Editor from "@monaco-editor/react";*/}
+                                                <Editor
+                                                    height="100px"
+                                                    defaultLanguage="json"
+                                                    value={JSON.stringify(
+                                                        Object.fromEntries(
+                                                            Object.entries(doc).filter(([key]) => key !== "_id")
+                                                        ),
+                                                        null,
+                                                        2
+                                                    )}
+                                                    theme="datacube-dark"
+                                                    options={{
+                                                        minimap: { enabled: false },
+                                                        scrollBeyondLastLine: false,
+                                                        fontSize: 12,
+                                                        wordWrap: "on",
+                                                        automaticLayout: true,
+                                                        folding: true,
+                                                        renderValidationDecorations: "off",
+                                                        readOnly: true,
+                                                        lineNumbers: "off",
+                                                        glyphMargin: false,
+                                                        lineDecorationsWidth: 0,
+                                                        overviewRulerLanes: 0,
+                                                    }}
+                                                />
                                             </pre>
                                         </td>
                                         <td className="px-6 py-4 text-right">

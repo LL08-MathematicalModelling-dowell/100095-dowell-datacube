@@ -79,7 +79,11 @@ class DocumentService:
         """Insert multiple documents into a collection."""
         try:
             svc = await self.get_collection(db_id, coll_name, user_id)
-            return await svc.insert_many(coll_name, docs)
+            insert_output = await svc.insert_many(coll_name, docs)
+    
+            if docs:
+                self.meta.update_collection_fields(db_id, user_id, coll_name, docs)
+            return insert_output
         except (ValueError, PyMongoError, PermissionError) as e:
             raise RuntimeError(f"Failed to create documents: {e}")
 

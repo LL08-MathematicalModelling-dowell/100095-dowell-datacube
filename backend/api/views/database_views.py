@@ -62,6 +62,7 @@ class CreateDatabaseView(BaseAPIView):
 
 
 class AddCollectionView(BaseAPIView):
+    """View for adding new collections to an existing database."""
     permission_classes = [IsAuthenticated]
 
     @BaseAPIView.handle_errors
