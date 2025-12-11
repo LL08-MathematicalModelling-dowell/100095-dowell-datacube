@@ -101,7 +101,7 @@ class DataCrudView(BaseAPIView):
     @BaseAPIView.handle_errors
     async def put(self, request):
         """Update documents by filter in a user-owned collection."""
-        # ADDED: Get authenticated user's ID.
+        # Get authenticated user's ID.
         user_id = request.user.id
         payload = self.validate_serializer(UpdateDocumentSerializer, request.data)
 
