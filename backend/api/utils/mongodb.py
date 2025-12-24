@@ -14,10 +14,23 @@ def to_object_id(oid):
 def jsonify_object_ids(docs):
     """
     Convert any ObjectId in `_id` to string for JSON serialization.
+    Works recursively on nested dicts and lists.
     """
-    for d in docs:
-        if "_id" in d:
-            d["_id"] = str(d["_id"])
+    # check if docs is a list
+    if isinstance(docs, list):
+        return [jsonify_object_ids(doc) for doc in docs]
+
+    # otherwise assume it's a dict
+    for key, value in docs.items():
+        if isinstance(value, ObjectId):
+            docs[key] = str(value)
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    jsonify_object_ids(item)
+        elif isinstance(value, dict):
+            jsonify_object_ids(value)
+
     return docs
 
 def safe_load_filters(f):

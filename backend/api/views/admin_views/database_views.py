@@ -1,0 +1,18 @@
+# views/internal.py  (protected by IP or secret key)
+from api.services.metadata_service import MetadataService
+from api.views.base import BaseAPIView
+from rest_framework.response import Response
+from api.permissions import IsAdminUserOrInternalIP
+
+
+class PruneFieldsView(BaseAPIView):
+    permission_classes = [IsAdminUserOrInternalIP]
+
+    def post(self, request):
+        db_id = request.data["database_id"]
+        dry_run = request.data.get("dry_run", True)
+        result = MetadataService(user_id=request.user.id).prune_inactive_fields(
+            db_id=db_id,
+            dry_run=dry_run
+        )
+        return Response(result, status=200)

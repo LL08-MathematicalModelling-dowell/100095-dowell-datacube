@@ -13,12 +13,16 @@ class DashboardOverviewView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
+    @property
+    def meta_svc(self):
+        """ Lazy initialization of MetadataService """
+        return MetadataService(user_id=str(self.request.user.pk))
+
     def get(self, request, *args, **kwargs):
         user_id = request.user.id
         
         # Fetch data for the dashboard
-        meta_svc = MetadataService()
-        databases = meta_svc.list_databases_for_user(user_id)
+        databases = self.meta_svc.list_databases_paginated()
         
         # You can enrich this data further if needed
         # For example, getting collection counts for each DB
@@ -76,6 +80,5 @@ class DashboardBillingView(APIView):
     def get(self, request, *args, **kwargs):
         context = {
             'user': request.user
-            # You can add more context like subscription details here
         }
         return render(request, 'dashboard/billing.html', context)

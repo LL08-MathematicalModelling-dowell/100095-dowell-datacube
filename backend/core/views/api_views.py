@@ -6,10 +6,10 @@ from rest_framework.permissions import IsAuthenticated
 from core.utils.managers import user_manager
 from core.utils.authentication import api_key_manager
 from api.services.metadata_service import MetadataService
-from bson import ObjectId # Import ObjectId to check its type
-from datetime import datetime # Import datetime to check its type
+from bson import ObjectId
+from datetime import datetime
 
-# --- A Reusable Helper Function for JSON Conversion ---
+
 def serialize_mongo_document(doc):
     """
     Recursively converts ObjectId and datetime objects in a document to strings.
@@ -44,10 +44,9 @@ class UserStatsAPIView(APIView):
         if not user_doc:
             return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        meta_svc = MetadataService()
-        databases = meta_svc.list_databases_for_user(user_id)
+        meta_svc = MetadataService(request.user.id)
+        databases = meta_svc.list_databases_paginated(page=1, page_size=1000)[1]
         
-        # **FIX:** Use the helper function to ensure all data is serializable
         response_data = {
             "usage": user_doc.get("usage", {}),
             "databases": serialize_mongo_document(databases)
@@ -66,12 +65,10 @@ class APIKeyAPIView(APIView):
         user_id = request.user.id
         keys = api_key_manager.get_keys_for_user(user_id)
         
-        # **FIX:** Use the helper function to serialize the list of key documents
         serialized_keys = serialize_mongo_document(keys)
 
         return Response(serialized_keys)
 
-    # ... (post and delete methods remain the same as they don't return complex documents) ...
     def post(self, request, *args, **kwargs):
         """Creates a new API key."""
         key_name = request.data.get('name')
@@ -104,14 +101,14 @@ class DatabaseDetailAPIView(APIView):
 
     def get(self, request, db_id, *args, **kwargs):
         user_id = request.user.id
-        meta_svc = MetadataService()
+        meta_svc = MetadataService(user_id)
 
-        database_meta = meta_svc.get_by_id_for_user(db_id, user_id)
+        database_meta = meta_svc.get_db(db_id)
         if not database_meta:
             return Response({"error": "Database not found or permission denied."}, status=status.HTTP_404_NOT_FOUND)
 
         # This list contains actual collections with document counts
-        live_collections = meta_svc.list_collections_for_user(db_id, user_id)
+        live_collections = meta_svc.list_collections_with_live_counts(db_id)
 
         # 1. Get the schema definitions from the metadata
         schema_collections = {c['name']: c for c in database_meta.get('collections', [])}
@@ -130,16 +127,16 @@ class DatabaseDetailAPIView(APIView):
         # exclude the collections field from the database_meta dictionary
         database_data = serialize_mongo_document(database_meta)
         database_info = {
-            "_id": database_data.get("_id"),
-            "user_id": database_data.get("user_id"),
-            "displayName": database_data.get("displayName"),
-            "dbName": database_data.get("dbName")
+            "_id": database_data.get("_id"), # type: ignore
+            "user_id": database_data.get("user_id"), # type: ignore
+            "displayName": database_data.get("displayName"), # type: ignore
+            "dbName": database_data.get("dbName") # type: ignore
         }
         
         response_data = {
             'database': database_info,
             'collections': serialize_mongo_document(live_collections),
-            'stats': stats # Add the new stats object to the response
+            'stats': stats
         }
         
         return Response(response_data)
