@@ -1,3 +1,5 @@
+celery_setup.md
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -56,3 +58,19 @@ venv/
 .vscode/
 .env
 .env*
+
+api_test.http
+api_test.http*
+*.http
+*.rest
+*.sqlite3
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+instance/
+.webassets-cache
+.pytest_cache/
+celerybeat-schedule
+celerybeat.pid

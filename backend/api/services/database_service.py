@@ -3,84 +3,121 @@ This service orchestrates the creation of databases and collections by coordinat
 between the MetadataService (for metadata) and CollectionService (for actual
 database operations).
 
-This file has been updated to integrate with the custom authentication system.
-Key Changes:
-1.  User-Aware Methods: All public methods now require a `user_id` parameter,
-    which they receive from the authenticated view.
-2.  Secure Service Calls: The `user_id` is passed down to every call made to
-    `MetadataService` to ensure metadata operations are correctly scoped to
-    the user.
-3.  Secure Service Instantiation: When creating an instance of `CollectionService`,
-    both the `db_name` and the `user_id` are passed to its constructor. This
-    ensures that all subsequent collection operations are only performed on
-    a database the user has been verified to own.
+Refactored to bind all operations to a specific user_id at instantiation, ensuring
+that every action respects user boundaries.:
+1.  Stateful Identity: Scoped to a specific user_id at instantiation.
+2.  Clean Delegation: Directly leverages the scoped MetadataService.
+3.  Error Integrity: Uses specific exceptions for permission vs. logic errors.
 """
 
+from typing import List, Dict, Tuple, Optional
 from api.utils.naming import generate_db_name
 from api.services.metadata_service import MetadataService
 from api.services.collection_service import CollectionService
-# from api.utils.decorators import with_transaction
 
 
 class DatabaseService:
-    def __init__(self):
-        self.meta_svc = MetadataService()
+    """Service for managing virtual databases and their collections."""
+    def __init__(self, user_id: str):
+        """
+        Initialize the service for a specific user.
+        All operations will be scoped to this user_id.
+        """
+        if not user_id:
+            raise ValueError("DatabaseService requires a valid user_id.")
+            
+        self.user_id = user_id
+        # Instantiate MetadataService with the same user context
+        self.meta_svc = MetadataService(user_id=user_id)
 
-    # @with_transaction
     def create_database_with_collections(
         self,
-        user_provided_name: str, # <-- Renamed for clarity
-        collections: list[dict],
-        user_id: str,
+        user_provided_name: str,
+        collections: List[Dict],
         session=None
-    ) -> tuple[dict, list[dict]]:
+    ) -> Tuple[Dict, List[Dict]]:
+        """
+        High-level orchestration:
+        1. Checks for naming collisions.
+        2. Generates a unique internal namespace.
+        3. Persists metadata record.
+        4. Provisions physical MongoDB collections.
+        """
         
-        # **STEP 1: Generate the internal database name**
-        internal_db_name = generate_db_name(user_provided_name, user_id)
-        
-        # **STEP 2: Use the internal name for all backend operations**
-        # The metadata service will store both names.
-        meta = self.meta_svc.create_db_meta(
-            user_provided_name,
-            internal_db_name, # Pass the new name
-            collections,
-            user_id,
-            # session=session
-        )
+        # Guard: Check existence before generating names or starting transactions
+        if self.meta_svc.exists_db(user_provided_name, session=session):
+            raise ValueError(f"A database named '{user_provided_name}' already exists.")
 
-        # The collection service operates on the actual, internal database name.
-        coll_svc  = CollectionService(internal_db_name, user_id=user_id)
-        names     = [c["name"] for c in collections]
+        # Step 1: Generate the secure internal database name
+        internal_db_name = generate_db_name(user_provided_name, self.user_id)
+
+        # Step 2: Provision physical collections via CollectionService
+        coll_svc = CollectionService(
+            db_name=user_provided_name,
+            user_id=self.user_id,
+            internal_db_name=internal_db_name,
+            new_db=True
+        )
+        names = [c["name"] for c in collections]
+        
+        # Step 3: Create physical collections
         coll_info = coll_svc.create(names, session=session)
 
-        return meta, coll_info
-
-    # @with_transaction
-    def add_collections_with_creation(
-        self,
-        database_id: str,
-        new_cols: list[dict],
-        user_id: str,
-        session=None
-    ) -> list[dict]:
-        """
-        1) Verify user ownership of the database.
-        2) Append new_cols to metadata.
-        3) Create the new MongoDB collections.
-        """
-        meta = self.meta_svc.get_by_id_for_user(database_id, user_id)
-        if not meta:
-            raise PermissionError(f"Database '{database_id}' not found or access denied.")
-        
-        db_name = meta["dbName"]
-
-        self.meta_svc.add_collections(
-            database_id,
-            user_id=user_id,
-            new_collections=new_cols,
+        # Step 4: Create metadata entry
+        meta = self.meta_svc.create_db_meta(
+            user_provided_name=user_provided_name,
+            internal_db_name=internal_db_name,
+            collections=collections,
             session=session
         )
 
-        coll_svc   = CollectionService(db_name, user_id=user_id)
-        names      = [c["name"] for c in new_cols]
-        return coll_svc.create(names, session=session)
+        return meta, coll_info # type: ignore
+
+    def add_collections_with_creation(
+        self,
+        database_id: str,
+        new_cols: List[Dict],
+        session=None
+    ) -> List[Dict]:
+        """
+        Adds new collections to an existing database.
+        Verified: Only proceeds if the bound user owns the target database.
+        """
+        # Step 1: Verification & Data Retrieval
+        meta = self.meta_svc.get_db(database_id)
+        if not meta:
+            raise PermissionError("Database not found or access denied.")
+        
+        # internal_db_name = meta["dbName"]
+        display_db_name = meta["displayName"]
+
+        # Step 2: Physical Creation
+        coll_svc = CollectionService(display_db_name, user_id=self.user_id)
+        names = [c["name"] for c in new_cols]
+
+        # Step 3: Create physical collections        
+        result = coll_svc.create(names, session=session)
+
+        # Step 4: Metadata Update only after successful physical creation
+        # Filter only successfully created collections
+        created_cols = [col for col in new_cols if any(res["name"] == col["name"] and res["created"] for res in result)]
+        if created_cols:
+            self.meta_svc.add_collections(
+                db_id=database_id,
+                new_collections=created_cols,
+                session=session
+            )
+        # Prepare formatted collection info for return
+        formatted_cols = []
+        for res in result:
+            col_meta = next((col for col in new_cols if col["name"] == res["name"]), {})
+            formatted_col = {
+                "name": res["name"],
+                "created": res["created"],
+                "exists": res["exists"],
+                "error": res["error"],
+                "fields": col_meta.get("fields", [])
+            }
+            formatted_cols.append(formatted_col)  
+
+        return formatted_cols

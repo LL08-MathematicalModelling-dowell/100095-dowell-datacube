@@ -3,318 +3,380 @@
 # Service for managing metadata documents in a MongoDB collection.
 """
 
-from bson import ObjectId
 import collections
-import datetime
-from typing import Any
+from datetime import datetime, timezone, timedelta
+from typing import List, Dict, Optional, Any, Tuple
 from django.conf import settings
+from bson import ObjectId
 from pymongo import ReturnDocument
-# from api.utils.decorators import with_transaction
 
 
 class MetadataService:
-    """Service for managing metadata documents in a MongoDB collection."""
-    def __init__(self):
+    """
+    Centralized Metadata Service.
+    Scoped to a specific user at instantiation to ensure data isolation.
+    """
+    
+    def __init__(self, user_id: str):
+        if not user_id:
+            raise ValueError("MetadataService requires a valid user_id for operations.")
+        
+        self.user_id = ObjectId(user_id)
         self._coll = settings.METADATA_COLLECTION
+        self._client = settings.MONGODB_CLIENT
 
-    def get_by_id_for_user(self, db_id: str, user_id: str) -> dict | None:
-        """Gets a database by its ID, ensuring it belongs to the user."""
-        return self._coll.find_one({
-            "_id": ObjectId(db_id),
-            "user_id": ObjectId(user_id)
-        })
+    def _format_collection_schema(self, collections: List[Dict]) -> List[Dict]:
+        """Ensures all collection metadata follows a consistent structure."""
+        return [
+            {
+                "name": coll["name"],
+                "created_at": datetime.now(timezone.utc),
+                "fields": [
+                    {"name": f["name"], "type": f.get("type", "string")}
+                    for f in coll.get("fields", [])
+                ]
+            }
+            for coll in collections
+        ]
+        
+    def _get_user_filter(self, db_id: Optional[str] = None) -> Dict:
+        """Helper to consistently scope queries to the current user."""
+        query = {"user_id": self.user_id}
+        if db_id:
+            query["_id"] = ObjectId(db_id)
+        return query
 
-    def exists_db(self, user_provided_name: str, user_id: str, *, session=None) -> bool:
-        """Checks if a database with that display name exists for a specific user."""
-        return bool(self._coll.find_one({
-            "displayName": user_provided_name, # <-- Check against the display name
-            "user_id": ObjectId(user_id)
-        }, session=session))
+    def get_db(self, db_id: str) -> Optional[Dict]:
+        """Fetches a database document strictly scoped to the bound user."""
+        return self._coll.find_one(self._get_user_filter(db_id))
 
-    def exists_db_by_internal_name(self, internal_name: str, user_id: str, *, session=None) -> bool:
-        """Checks if a database with that INTERNAL name exists for a specific user."""
-        return bool(self._coll.find_one({
-            "dbName": internal_name, # <-- QUERIES THE CORRECT FIELD
-            "user_id": ObjectId(user_id)
-        }, session=session))
+    def exists_db(self, display_name: str, *, session=None) -> bool:
+        """Checks display name uniqueness within the user's scope."""
+        query = self._get_user_filter()
+        query["displayName"] = display_name.lower().strip()
+        return self._coll.count_documents(query, limit=1, session=session) > 0
 
-    def list_databases_for_user(self, user_id: str) -> list[dict]:
-        """Lists all databases for a specific user."""
-        user_filter = {"user_id": ObjectId(user_id)}
-        # Fetch both the id and the user-friendly name
-        projection = {"_id": 1, "displayName": 1}
-        docs = list(self._coll.find(user_filter, projection))
-        # Use the displayName for the 'name' field in the response
-        return [{"id": str(d["_id"]), "name": d["displayName"]} for d in docs]
+    def get_meta_internal_db_name(self, display_name: str) -> Optional[str]:
+        """Retrieves the internal DB name for a given display name."""
+        query = self._get_user_filter()
+        query["displayName"] = display_name.lower().strip()
+        doc = self._coll.find_one(query, {"dbName": 1})
+        return doc["dbName"] if doc else None
 
     def create_db_meta(
         self,
         user_provided_name: str,
-        internal_db_name: str, # <-- Added internal name
-        collections: list[dict],
-        user_id: str,
+        internal_db_name: str,
+        collections: List[Dict],
         *,
         session=None
-    ) -> dict:
-        """
-        Inserts a new metadata document, storing both the user-friendly name
-        and the unique internal name.
-        """
+    ) -> Dict:
+        now = datetime.now(timezone.utc)
         meta = {
-            "user_id": ObjectId(user_id),
-            "displayName": user_provided_name, # <-- User-friendly name for display
-            "dbName": internal_db_name,       # <-- Unique internal name for operations
-            "collections": [
-                {
-                    "name": coll["name"],
-                    "fields": [
-                        {"name": f["name"], "type": f.get("type", "string")}
-                        for f in coll["fields"]
-                    ]
-                }
-                for coll in collections
-            ],
-            # ... other fields
+            "user_id": self.user_id,  # Uses centralized ID
+            "displayName": user_provided_name.strip(),
+            "dbName": internal_db_name,
+            "created_at": now,
+            "updated_at": now,
+            "collections": self._format_collection_schema(collections),
         }
         result = self._coll.insert_one(meta, session=session)
         meta["_id"] = result.inserted_id
         return meta
 
-    # @with_transaction
-    def add_collections(
-        self, database_id: str, user_id: str, new_collections: list[dict], *, session=None
-    ) -> list[dict]:
-        """
-        Append new collections, ensuring the database belongs to the user.
-        """
-        # ... (same logic for creating `docs` from new_collections) ...
-        docs = [
-            {
-                "name": coll["name"],
-                "fields": [
-                    {"name": f["name"], "type": f.get("type", "string")}
-                    for f in coll["fields"]
-                ]
-            }
-            for coll in new_collections
-        ]
-
-        # Filter by both _id and user_id to ensure ownership
-        filter_doc = {"_id": ObjectId(database_id), "user_id": ObjectId(user_id)}
-
+    def add_collections(self, db_id: str, new_collections: List[Dict], *, session=None) -> List[Dict]:
+        formatted_docs = self._format_collection_schema(new_collections)
+        
+        # update_one using centralized user filter
         updated = self._coll.find_one_and_update(
-            filter_doc,
-            {"$addToSet": {"collections": {"$each": docs}}},
-            # ... other update operations ...
+            self._get_user_filter(db_id),
+            {
+                "$push": {"collections": {"$each": formatted_docs}},
+                "$set": {"updated_at": datetime.now(timezone.utc)}
+            },
             return_document=ReturnDocument.AFTER,
             session=session
         )
+        
         if not updated:
-            raise ValueError(f"Database '{database_id}' not found or access denied.")
-        return docs
+            raise PermissionError("Access denied or Database not found.")
+        return formatted_docs
 
-    # @with_transaction
-    def drop_database(self, db_id: str, user_id: str, *, session=None) -> dict:
+    def drop_collections(self, db_id: str, names: List[str], *, session=None) -> List[str]:
         """
-        Deletes a database's metadata, ensuring it belongs to the specified user.
+        Removes specific collections from metadata and physically drops them 
+        from the internal database.
         """
-        filter_doc = {
-            "_id": ObjectId(db_id),
-            "user_id": ObjectId(user_id)
-        }
-        meta = self._coll.find_one_and_delete(filter_doc, session=session)
-
+        meta = self.get_db(db_id)
         if not meta:
-            raise ValueError(f"Database '{db_id}' not found or you do not have permission to delete it.")
-        
-        # Drop the actual database from MongoDB here.
-        settings.MONGODB_CLIENT.drop_database(meta['displayName'])
-        
-        return meta
+            raise ValueError("Database not found or permission denied.")
 
-    # @with_transaction
-    def drop_collections(self, db_id: str, user_id: str, names: list[str], *, session=None) -> list[str]:
-        """
-        Removes collections from a database's metadata, ensuring the database belongs to the user.
-        """
-        meta = self.get_by_id_for_user(db_id, user_id)
-        if not meta:
-            raise ValueError(f"Database '{db_id}' not found or you do not have permission to access it.")
-
-        existing = {c["name"] for c in meta.get("collections", [])}
-        invalid  = set(names) - existing
+        internal_db_name = meta["dbName"]
+        existing_names = {c["name"] for c in meta.get("collections", [])}
+        
+        # Check if requested collections actually exist
+        invalid = set(names) - existing_names
         if invalid:
-            raise ValueError(f"Collections not in metadata: {', '.join(invalid)}")
+            raise ValueError(f"Collections not found in metadata: {', '.join(invalid)}")
 
+        # 1. Update Metadata
         self._coll.update_one(
-            {"_id": ObjectId(db_id), "user_id": ObjectId(user_id)},
-            {"$pull": {"collections": {"name": {"$in": names}}}},
+            {"_id": ObjectId(db_id), "user_id": self.user_id},
+            {
+                "$pull": {"collections": {"name": {"$in": names}}},
+                "$set": {"updated_at": datetime.now(timezone.utc)}
+            },
             session=session
         )
 
-        # Drop the actual collections from the database.
-        db = settings.MONGODB_CLIENT[meta['displayName']]
+        # 2. Drop Physical Collections
+        db_instance = settings.MONGODB_CLIENT[internal_db_name]
         for name in names:
-            db.drop_collection(name)
+            db_instance.drop_collection(name)
  
         return names
 
-    def list_databases_paginated_for_user(
-        self, user_id: str, page: int, page_size: int, search_term: str | None = None
-    ) -> tuple[int, list[dict]]:
-        """
-        Lists databases for a specific user with pagination and optional search.
+    def drop_database(self, db_id: str, *, session=None) -> Dict:
+        """Drops metadata and physical DB using bound identity."""
+        meta = self._coll.find_one_and_delete(self._get_user_filter(db_id), session=session)
+        if not meta:
+            raise PermissionError("Access denied or Database not found.")
+        
+        # Physical drop using internal name retrieved from secure metadata
+        settings.MONGODB_CLIENT.drop_database(meta['dbName'])
+        return meta
 
-        This method is now enriched to include the live collection count for each
-        database, making it suitable for direct use by the dashboard UI.
+    def list_databases_paginated(
+        self, page: int = 1, page_size: int = 50, search_term: str | None = None
+    ) -> Tuple[int, List[Dict]]:
         """
-        # --- Step 1: Build the filter for the metadata query ---
-        filter_doc = {"user_id": ObjectId(user_id)}
+        Lists databases with pagination. Optimized to show collection counts 
+        from metadata to avoid redundant network round-trips to every DB.
+        """
+        query = self._get_user_filter()
         if search_term:
-            # Searching is performed on the user-friendly displayName
-            filter_doc["displayName"] = {"$regex": search_term, "$options": "i"}
+            query["displayName"] = {"$regex": search_term.strip(), "$options": "i"}
 
-        # --- Step 2: Get the total count for pagination ---
-        total = self._coll.count_documents(filter_doc)
+        total = self._coll.count_documents(query)
         skip = (page - 1) * page_size
 
-        # --- Step 3: Fetch the paginated metadata documents ---
-        # IMPORTANT: We must include 'dbName' in the projection to connect to the live DB.
-        projection = {"_id": 1, "displayName": 1, "dbName": 1}
+        # We sort by 'displayName' for consistent UI listing
         cursor = (
-            self._coll
-                .find(filter_doc, projection)
-                .sort("displayName", 1)
-                .skip(skip)
-                .limit(page_size)
+            self._coll.find(query, {"_id": 1, "displayName": 1, "collections": 1})
+            .sort("displayName", 1)
+            .skip(skip)
+            .limit(page_size)
         )
 
-        # --- Step 4: Enrich the results with live data ---
         results = []
-        client = settings.MONGODB_CLIENT
         for doc in cursor:
-            internal_db_name = doc.get("dbName")
-            num_collections = 0 # Default to 0
-
-            if internal_db_name:
-                try:
-                    # Connect to the actual database and count its collections
-                    db = client[internal_db_name]
-                    num_collections = len(db.list_collection_names())
-                except Exception as e:
-                    # If the DB connection fails for any reason, log it and default to 0
-                    print(f"Warning: Could not list collections for {internal_db_name}. Error: {e}")
-                    num_collections = 0
-            
+            # We count the collections stored in the metadata array 
+            # rather than pinging the physical DB in a loop (Performance Fix)
             results.append({
                 "id": str(doc["_id"]),
-                "name": doc["displayName"], # 'name' is the user-friendly key for the API response
-                "num_collections": num_collections
+                "name": doc["displayName"],
+                "num_collections": len(doc.get("collections", []))
             })
 
         return total, results
 
-    def get_collections_for_user(self, db_id: str, user_id: str) -> list[dict]:
+    def list_collections_with_live_counts(self, db_id: str, *, session=None) -> List[Dict]:
         """
-        Retrieves collections for a specific database, ensuring it belongs to the user.
+        Returns collections with their live document counts from the physical DB.
         """
-        meta = self.get_by_id_for_user(db_id, user_id)
+        meta = self.get_db(db_id)
         if not meta:
-            raise ValueError(f"Database '{db_id}' not found or you do not have permission to access it.")
+            raise PermissionError("Database not found or access denied.")
 
-        return meta.get("collections", [])
+        internal_name = meta.get("dbName")
+        db = self._client[internal_name]
 
-    def list_collections_for_user(self, db_id: str, user_id: str, *, session=None) -> list[dict]:
-        """
-        Lists all collections for a given database ID, but only if the user owns it.
-        Crucially, it also queries the database to get the live document count for each collection.
-        """
-        # 1. Security: First, verify ownership and get the metadata document.
-        meta = self.get_by_id_for_user(db_id, user_id)
-        if not meta:
-            raise PermissionError("Database not found or permission denied.")
-
-        # 2. Get the actual internal database name from the metadata.
-        internal_db_name = meta.get("dbName")
-        if not internal_db_name:
-            raise ValueError(f"Internal database name not found for metadata ID {db_id}.")
-        
-        # 3. Connect to the live user database.
-        db = settings.MONGODB_CLIENT[internal_db_name]
-
-        # 4. List collection names and get the document count for each one.
-        collections_with_counts = []
-        try:
-            collection_names = db.list_collection_names(session=session)
-            for name in collection_names:
-                count = db[name].count_documents({}, session=session)
-                collections_with_counts.append({
-                    "name": name,
-                    "num_documents": count
+        # Use metadata as the source of truth for which collections SHOULD exist
+        results = []
+        for col_meta in meta.get("collections", []):
+            col_name = col_meta["name"]
+            try:
+                # count_documents is safer than estimated_document_count for small/filtered sets
+                count = db[col_name].count_documents({}, session=session)
+                results.append({
+                    "name": col_name,
+                    "num_documents": count,
+                    "fields": col_meta.get("fields", [])
                 })
-        except Exception as e:
-            # Handle cases where the DB connection might fail
-            print(f"Error listing collections for {internal_db_name}: {e}")
-            return [] # Return an empty list on error
-            
-        return collections_with_counts
+            except Exception:
+                results.append({"name": col_name, "num_documents": 0, "error": "Unreachable"})
+        
+        return results
 
     def _infer_type(self, value: Any) -> str:
-        if isinstance(value, str): return "string"
-        if isinstance(value, bool): return "boolean"
+        """Determines the 2025-standard string representation of a Python/BSON type."""
+        if value is None: return "null"
+        if isinstance(value, bool): return "boolean"  # Check bool before int (bool is a subclass of int)
         if isinstance(value, int): return "integer"
         if isinstance(value, float): return "float"
-        if isinstance(value, datetime.datetime): return "date"
+        if isinstance(value, str): return "string"
+        if isinstance(value, datetime): return "date"
         if isinstance(value, ObjectId): return "objectid"
-        if isinstance(value, list): 
-            return f"array<{self._infer_type(value[0]) if value else ''}>".rstrip("<>")
+        if isinstance(value, list):
+            inner_type = self._infer_type(value[0]) if value else "any"
+            return f"array<{inner_type}>"
         if isinstance(value, dict): return "object"
-        if value is None: return "null"
         return "unknown"
 
-    def _fields_from_docs(self, docs: list[dict]) -> dict[str, str]:
-        fields = collections.defaultdict(set)
+    def _generate_schema_from_docs(self, docs: List[Dict]) -> Dict[str, str]:
+        """Analyzes a batch of documents to find all field names and their observed types."""
+        field_map = collections.defaultdict(set)
         for doc in docs:
-            for k, v in doc.items():
-                if not k.startswith("_"):
-                    fields[k].add(self._infer_type(v))
-        return {k: ", ".join(sorted(v)) for k, v in fields.items()}
+            for key, val in doc.items():
+                if key.startswith("_"): continue  # Skip internal MongoDB keys
+                field_map[key].add(self._infer_type(val))
+        
+        # Merge multiple types into a single string (e.g., "string, null")
+        return {k: ", ".join(sorted(v)) for k, v in field_map.items()}
 
-    def update_collection_fields(self, db_id: str, user_id: str, coll_name: str, docs: list[dict]):
-        new_fields = self._fields_from_docs(docs)
-        if not new_fields:
+    def update_collection_schema_inference(self, db_id: str, coll_name: str, sample_docs: List[Dict]):
+        """
+        Learns the schema from new data and updates metadata if new fields 
+        or new types are discovered.
+        """
+        new_schema = self._generate_schema_from_docs(sample_docs)
+        if not new_schema:
             return
 
-        meta = self.get_by_id_for_user(db_id, user_id)
+        meta = self.get_db(db_id)
         if not meta:
-            raise ValueError("Database not found or access denied.")
+            raise PermissionError("Access denied.")
 
-        coll = next((c for c in meta.get("collections", []) if c["name"] == coll_name), None)
-        if not coll:
-            raise ValueError("Collection not found in metadata.")
+        # Find the specific collection in the metadata array
+        all_collections = meta.get("collections", [])
+        target_col = next((c for c in all_collections if c["name"] == coll_name), None)
+        
+        if not target_col:
+            raise ValueError(f"Collection '{coll_name}' not found in metadata.")
 
-        existing = {f["name"]: f["type"] for f in coll.get("fields", [])}
-        updated = False
+        existing_fields = {f["name"]: f["type"] for f in target_col.get("fields", [])}
+        has_changed = False
 
-        for name, types in new_fields.items():
-            if name not in existing:
-                existing[name] = types
-                updated = True
+        for field_name, inferred_types in new_schema.items():
+            if field_name not in existing_fields:
+                existing_fields[field_name] = inferred_types
+                has_changed = True
             else:
-                cur = set(existing[name].split(", "))
-                new = set(types.split(", "))
-                merged = ", ".join(sorted(cur | new))
-                if merged != existing[name]:
-                    existing[name] = merged
-                    updated = True
+                # Merge logic: if a field was "string" and now we see "integer", it becomes "integer, string"
+                current_types = set(existing_fields[field_name].split(", "))
+                incoming_types = set(inferred_types.split(", "))
+                merged = ", ".join(sorted(current_types | incoming_types))
+                
+                if merged != existing_fields[field_name]:
+                    existing_fields[field_name] = merged
+                    has_changed = True
 
-        if updated:
-            new_fields_list = [{"name": n, "type": t} for n, t in existing.items()]
+        if has_changed:
+            updated_fields_list = [{"name": n, "type": t} for n, t in existing_fields.items()]
             self._coll.update_one(
                 {
-                    "_id": ObjectId(db_id),
-                    "user_id": ObjectId(user_id),
+                    "_id": ObjectId(db_id), 
+                    "user_id": self.user_id,
                     "collections.name": coll_name
                 },
-                {"$set": {"collections.$.fields": new_fields_list}}
+                {"$set": {"collections.$.fields": updated_fields_list, "updated_at": datetime.now()}}
             )
+
+    def prune_inactive_fields(self, db_id: str, dry_run: bool = True) -> Dict[str, Any]:
+        """
+        Maintenance task: Removes field metadata for fields that have not 
+        appeared in any documents since the configured 'inactive_days' threshold.
+        
+        This keeps the schema 'clean' for users by hiding fields from old 
+        schema versions that are no longer being sent to the API.
+        """
+        # 1. Fetch metadata using centralized user context
+        meta = self.get_db(db_id)
+        if not meta:
+            raise PermissionError("Database not found or access denied.")
+
+        pruning_cfg = meta.get("pruning", {})
+        if not pruning_cfg.get("enabled", False):
+            return {"status": "skipped", "reason": "pruning_disabled_for_database"}
+
+        # 2. Setup Thresholds
+        days_threshold = pruning_cfg.get("inactive_days", 90)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_threshold)
+        
+        # Performance trick: Generate an ObjectId representing the cutoff time
+        # This allows us to query the _id index directly for time-based filtering
+        cutoff_oid = ObjectId.from_datetime(cutoff_date)
+        
+        internal_db_name = meta["dbName"]
+        db = self._client[internal_db_name]
+
+        report = {
+            "status": "completed",
+            "dry_run": dry_run,
+            "cutoff_date": cutoff_date.isoformat(),
+            "collections_processed": []
+        }
+        total_removed = 0
+
+        # 3. Process each collection defined in metadata
+        for coll_meta in meta.get("collections", []):
+            coll_name = coll_meta["name"]
+            
+            # AGGREGATION: Identify which fields are currently 'active'
+            # We look at all docs newer than the cutoff and extract unique keys
+            pipeline = [
+                {"$match": {"_id": {"$gte": cutoff_oid}}},
+                {"$project": {"fields": {"$objectToArray": "$$ROOT"}}},
+                {"$unwind": "$fields"},
+                # Filter out MongoDB internals and the ID
+                {"$match": {"fields.k": {"$not": {"$regex": "^_"}}}}, 
+                {"$group": {"_id": None, "active_keys": {"$addToSet": "$fields.k"}}}
+            ]
+            
+            try:
+                agg_result = list(db[coll_name].aggregate(pipeline))
+                active_fields = set(agg_result[0]["active_keys"] if agg_result else [])
+                
+                current_metadata_fields = {f["name"] for f in coll_meta.get("fields", [])}
+                
+                # Fields in metadata that were NOT found in the recent document scan
+                inactive_fields = current_metadata_fields - active_fields
+
+                if inactive_fields:
+                    if not dry_run:
+                        self._perform_prune_update(db_id, coll_name, list(inactive_fields))
+                    
+                    total_removed += len(inactive_fields)
+                    report["collections_processed"].append({
+                        "name": coll_name,
+                        "removed_count": len(inactive_fields),
+                        "fields": list(inactive_fields)
+                    })
+            except Exception as e:
+                # Log error for specific collection but continue pruning others
+                report["collections_processed"].append({
+                    "name": coll_name, 
+                    "error": str(e)
+                })
+
+        report["total_removed_count"] = total_removed
+        return report
+
+    def _perform_prune_update(self, db_id: str, coll_name: str, fields_to_remove: list):
+        """Internal helper to execute the $pull operation on metadata."""
+        self._coll.update_one(
+            {
+                "_id": ObjectId(db_id),
+                "user_id": self.user_id,
+                "collections.name": coll_name
+            },
+            {
+                "$pull": {
+                    "collections.$.fields": {"name": {"$in": fields_to_remove}}
+                },
+                "$set": {
+                    "pruning.last_pruned_at": datetime.now(timezone.utc),
+                    "updated_at": datetime.now(timezone.utc)
+                }
+            }
+        )

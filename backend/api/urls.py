@@ -3,7 +3,6 @@
 from django.urls import path, re_path
 
 from api.views.admin_views import (
-    # ApiHomeView,
     ListDatabasesView,
     ListCollectionsView,
     DropDatabaseView,
@@ -18,20 +17,10 @@ from api.views.database_views import (
 )
 from api.views.crud_views import DataCrudView
 
-# from api.views.docs_views import APIDocsView, LoginView, RegisterView
 
 app_name = "api"
 
 urlpatterns = [
-    # API homepage (docs) - GET only, path is fine but re_path is consistent
-    # path(r"", APIDocsView.as_view(), name="api_docs"),
-    # # re_path(r"^login/?$", LoginView.as_view(), name="login"),
-    # re_path(r"^register/?$", RegisterView.as_view(), name="register"),
-    # re_path(r"^/?$", ApiHomeView.as_view(), name="api_home"),
-
-
-    # Database management
-    # Using re_path for all endpoints that handle POST or DELETE
     re_path(r"^api/create_database/?$", CreateDatabaseView.as_view(), name="create_database"),
     re_path(r"^api/add_collection/?$",   AddCollectionView.as_view(),    name="add_collection"),
     re_path(r"^api/list_databases/?$",   ListDatabasesView.as_view(),    name="list_databases"),

@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from datetime import timedelta
 from pymongo import MongoClient
+# from celery.schedules import crontab
 from dotenv import load_dotenv
 
 # --- Core Paths and Config Loading ---
@@ -159,3 +160,13 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": True,
 }
+
+
+
+# CELERY_BEAT_SCHEDULE = {
+#     "prune-inactive-fields-daily": {
+#         "task": "api.tasks.run_pruning_for_all_databases",
+#         "schedule": crontab(hour=3, minute=0),  # 3 AM daily
+#         "args": (False,)  # Set dry_run=False in production
+#     },
+# }

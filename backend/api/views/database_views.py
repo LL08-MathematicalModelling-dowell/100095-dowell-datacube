@@ -9,6 +9,7 @@ Key Changes:
 3.  Secure Service Calls: The `user_id` is passed down to the service layer
     (DatabaseService, MetadataService) to ensure all operations are scoped
     to that specific user, preventing data leaks or unauthorized access.
+
 """
 
 from rest_framework import status
@@ -18,74 +19,119 @@ from rest_framework.permissions import IsAuthenticated
 from api.views.base import BaseAPIView
 from api.serializers import AddDatabasePOSTSerializer, AddCollectionPOSTSerializer
 from api.services.database_service import DatabaseService
-from api.utils.validators import validate_collection_name, validate_unique_fields
 from api.services.metadata_service import MetadataService
 
 
 class CreateDatabaseView(BaseAPIView):
+    """
+    Handles the creation of a new virtual database and its initial collections.
+    """
     permission_classes = [IsAuthenticated]
+
+    @property
+    def db_svc(self):
+        """
+        Instantiates the service with the current request's user_id.
+        This is called only when a request is made.
+        """
+        return DatabaseService(user_id=str(self.request.user.pk))
+
+    @property
+    def meta_svc(self):
+        """
+        Instantiates MetadataService with the current request's user_id.
+        """
+        return MetadataService(user_id=str(self.request.user.pk))
 
     @BaseAPIView.handle_errors
     def post(self, request):
-        current_user_id = request.user.id
-
+        # 1. Input Validation
         data = self.validate_serializer(AddDatabasePOSTSerializer, request.data)
-        # This is the name the user provided, e.g., "my_project"
-        user_provided_name = data["db_name"].lower() 
-        cols = data["collections"]
+        if not data:
+            return Response(
+                {"success": False, "error": "Invalid input data"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user_provided_name = data.get("db_name", "").lower().strip() # type: ignore
+        if not user_provided_name:
+            return Response(
+                {"success": False, "error": "Database name is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
-        # ... validation ...
-        if not cols:
-            raise ValueError("At least one collection must be provided")
+        # 2. Initialize Scoped Services
+        meta_svc = self.meta_svc
+        db_svc = self.db_svc
+        
+        # 3. Business Logic: Check for naming collisions
+        if meta_svc.exists_db(user_provided_name):
+            return Response(
+                {"success": False, "error": f"Database '{user_provided_name}' already exists."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        # validate
-        for c in cols:
-            validate_collection_name(c["name"])
-            validate_unique_fields(c["fields"])
-
-        meta_svc = MetadataService()
-        if meta_svc.exists_db(user_provided_name, user_id=current_user_id):
-            raise ValueError("A database with this name already exists for your account.")
-
-        db_svc = DatabaseService()
+        # 4. Execution: Create the database and physical collections
+        collections = data.get("collections", []) # type: ignore
+        if not collections:
+            return Response(
+                {"success": False, "error": "At least one collection is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         meta, coll_info = db_svc.create_database_with_collections(
-            user_provided_name,
-            cols,
-            user_id=current_user_id
+            user_provided_name=user_provided_name,
+            collections=collections
         )
 
         return Response({
-            "success":     True,
-            "database":    {"id": str(meta["_id"]), "name": meta["displayName"]},
+            "success": True,
+            "database": {
+                "id": str(meta["_id"]), 
+                "name": meta["displayName"]
+            },
             "collections": coll_info
         }, status=status.HTTP_201_CREATED)
 
 
 class AddCollectionView(BaseAPIView):
-    """View for adding new collections to an existing database."""
+    """
+    View for adding new collections to an existing database.
+    Ensures the user owns the target database before provisioning.
+    """
     permission_classes = [IsAuthenticated]
+
+    @property
+    def db_svc(self):
+        """
+        Instantiates the service with the current request's user_id.
+        This is called only when a request is made.
+        """
+        return DatabaseService(user_id=str(self.request.user.pk))
 
     @BaseAPIView.handle_errors
     def post(self, request):
-        current_user_id = request.user.id
-
+        # 1. Input Validation
         data = self.validate_serializer(AddCollectionPOSTSerializer, request.data)
-        db_id = data["database_id"]
-        new_cols = data["collections"]
+        if data is None or not data:
+            return Response(
+                {"success": False, "error": "Invalid input data"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        # validate names & fields
-        for c in new_cols:
-            validate_collection_name(c["name"])
-            validate_unique_fields(c["fields"])
-
-        db_svc = DatabaseService()
-        coll_info = db_svc.add_collections_with_creation(
-            db_id,
-            new_cols,
-            user_id=current_user_id
-        )
-
-        return Response({
-            "success":     True,
-            "collections": coll_info
-        }, status=status.HTTP_201_CREATED)
+        # 3. Execution
+        try:
+            coll_info = self.db_svc.add_collections_with_creation(
+                database_id=data.get("database_id"), # type: ignore
+                new_cols=data.get("collections") # type: ignore
+            )
+            
+            return Response({
+                "success": True,
+                "collections": coll_info
+            }, status=status.HTTP_201_CREATED)
+            
+        except PermissionError as e:
+            return Response({"success": False, "error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+        except ValueError as e:
+            return Response({"success": False, "error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

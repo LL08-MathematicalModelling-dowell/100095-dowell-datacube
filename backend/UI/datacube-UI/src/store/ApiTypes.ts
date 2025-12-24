@@ -361,7 +361,7 @@ export const apiDocs: ApiGroup[] = [
               {
                 database_id: "60c72b2f9b1d8b1a2d3e4567",
                 collection_name: "users",
-                data: [
+                documents: [
                   {
                     email: "alice@example.com",
                     signup_date: "2023-10-27T10:00:00Z",
