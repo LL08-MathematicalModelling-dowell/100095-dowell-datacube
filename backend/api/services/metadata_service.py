@@ -380,3 +380,22 @@ class MetadataService:
                 }
             }
         )
+
+
+    # api/services/metadata_service.py update
+    def check_quota_is_exceeded(self, user_id):
+        """
+        Decision Gate: Returns True if the user has reached their 2025 storage limit.
+        """
+        stats_db = settings.MONGODB_CLIENT["platform_ops"]
+        # Get the latest snapshot for all user's databases
+        latest_stat = stats_db["storage_snapshots"].find_one(
+            {"user_id": user_id},
+            sort=[("timestamp", -1)]
+        )
+        
+        if not latest_stat:
+            return False
+            
+        TOTAL_LIMIT_BYTES = 1024 * 1024 * 500  # 500MB Limit for 2025 Free Tier
+        return latest_stat["total_size"] > TOTAL_LIMIT_BYTES

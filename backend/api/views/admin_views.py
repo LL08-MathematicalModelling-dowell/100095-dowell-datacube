@@ -6,6 +6,7 @@ import os
 import json
 from datetime import datetime
 from django.conf import settings
+from api.services.analytics_service import AnalyticsService
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -16,7 +17,6 @@ from api.utils.validators import sanitize_name
 from api.utils.mongodb import jsonify_object_ids
 from api.serializers import JSonImportSerializer, ListQuerySerializer
 
-from django.shortcuts import render
 
 from api.serializers import (
     DocumentQuerySerializer,
@@ -24,28 +24,18 @@ from api.serializers import (
     CollectionDropSerializer,
 )
 
-class ApiHomeView(BaseAPIView):
-    """Renders the API documentation homepage."""
-    permission_classes = [AllowAny]
-
-    def get(self, request):
-        """GET /api/home - Serving the internal documentation portal."""
-        from api.api_home_data import apis
-        return render(request, "api_home.html", {"apis": apis})
+from api.signals import post_import_signal
 
 
-from django.conf import settings
-from django.shortcuts import render
-from rest_framework import status
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
+# class ApiHomeView(BaseAPIView):
+#     """Renders the API documentation homepage."""
+#     permission_classes = [AllowAny]
 
-from api.views.base import BaseAPIView
-from api.services.metadata_service import MetadataService
-from api.serializers import (
-    DatabaseDropSerializer, 
-    CollectionDropSerializer
-)
+#     def get(self, request):
+#         """GET /api/home - Serving the internal documentation portal."""
+#         from api.api_home_data import apis
+#         return render(request, "api_home.html", {"apis": apis})
+
 
 class ListDatabasesView(BaseAPIView):
     """List databases owned by the authenticated user."""
@@ -245,11 +235,46 @@ class ImportDataView(BaseAPIView):
         # 6. Bulk Insert
         result = db[coll_name].insert_many(docs)
 
+       
+        # Fire and forget! The user gets their response immediately.
+        post_import_signal.send(
+            sender=self.__class__,
+            user_id=request.user.id,
+            db_id=db_id,
+            count=len(result.inserted_ids)
+        )
+
+
         return Response({
             "success": True,
             "collection": coll_name,
             "inserted_count": len(result.inserted_ids)
         }, status=status.HTTP_201_CREATED)
+
+
+class AnalyticsTelemetryView(BaseAPIView):
+    permission_classes = [IsAuthenticated]
+
+    @BaseAPIView.handle_errors
+    async def get(self, request):
+        user_id = request.user.id
+        db_id = request.query_params.get("database_id")
+        days = int(request.query_params.get("days", 7))
+        
+        svc = AnalyticsService(user_id=user_id)
+        # Fetch the trend data
+        data = await svc.get_usage_trends(db_id, days=days)
+        
+        # Format specifically for Recharts/Chart.js
+        formatted_data = []
+        for entry in data:
+            formatted_data.append({
+                "time": entry["_id"].strftime("%Y-%m-%d %H:%M"),
+                "ops": entry["total_ops"],
+                "latency": round(entry["avg_latency"], 2)
+            })
+            
+        return Response({"success": True, "chart_data": formatted_data})
 
 
 class HealthCheck(BaseAPIView):
