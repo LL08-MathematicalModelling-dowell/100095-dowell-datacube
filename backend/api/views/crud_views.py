@@ -45,6 +45,12 @@ class DataCrudView(BaseAPIView):
         user_id = request.user.id
         payload = self.validate_serializer(AsyncPostDocumentSerializer, request.data)
 
+        if self.metadata_svc.check_quota_is_exceeded(request.user.id):
+            return Response({
+                "success": False, 
+                "message": "Storage quota exceeded. Please upgrade your plan."
+            }, status=403)
+
         result = self.doc_svc.create_docs(
             db_id=payload["database_id"],
             coll_name=payload["collection_name"],
