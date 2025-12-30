@@ -40,12 +40,11 @@ class DataCrudView(BaseAPIView):
         return DocumentService(user_id=str(self.request.user.pk))
 
     @BaseAPIView.handle_errors
-    def post(self, request):
+    async def post(self, request):
         """Create new documents with automatic ownership verification."""
-        user_id = request.user.id
         payload = self.validate_serializer(AsyncPostDocumentSerializer, request.data)
 
-        result = self.doc_svc.create_docs(
+        result = await self.doc_svc.create_docs(
             db_id=payload["database_id"],
             coll_name=payload["collection_name"],
             docs=payload["documents"]
@@ -57,7 +56,7 @@ class DataCrudView(BaseAPIView):
         }, status=status.HTTP_201_CREATED)
 
     @BaseAPIView.handle_errors
-    def get(self, request):
+    async def get(self, request):
         """Read documents with structured query validation and paging."""
         user_id = request.user.id
         
@@ -72,8 +71,9 @@ class DataCrudView(BaseAPIView):
         # 2. Process filters safely
         filt = safe_load_filters(params.get("filters", "{}"))
 
+            
         # 3. Service call
-        total, docs = self.doc_svc.list_docs(
+        total, docs = await self.doc_svc.list_docs(
             db_id, coll_name, filt, page, page_size
         )
         
@@ -89,15 +89,14 @@ class DataCrudView(BaseAPIView):
         }, status=status.HTTP_200_OK)
 
     @BaseAPIView.handle_errors
-    def put(self, request):
+    async def put(self, request):
         """Update documents using normalized ID filtering."""
-        user_id = request.user.id
         payload = self.validate_serializer(UpdateDocumentSerializer, request.data)
 
         raw_filters = safe_load_filters(payload.get("filters", {}))
         filt = normalize_id_filter(raw_filters)
 
-        result = self.doc_svc.update_docs(
+        result = await self.doc_svc.update_docs(
             db_id=payload["database_id"],
             coll_name=payload["collection_name"],
             filt=filt,
@@ -111,7 +110,7 @@ class DataCrudView(BaseAPIView):
         }, status=status.HTTP_200_OK)
 
     @BaseAPIView.handle_errors
-    def delete(self, request):
+    async def delete(self, request):
         """Handle soft or hard deletions with unified response count."""
         user_id = request.user.id
         payload = self.validate_serializer(DeleteDocumentSerializer, request.data)
@@ -120,7 +119,7 @@ class DataCrudView(BaseAPIView):
         filt = normalize_id_filter(raw_filters)
         soft_delete = payload.get("soft_delete", True)
 
-        result = self.doc_svc.delete_docs(
+        result = await self.doc_svc.delete_docs(
             db_id=payload["database_id"],
             coll_name=payload["collection_name"],
             filt=filt,

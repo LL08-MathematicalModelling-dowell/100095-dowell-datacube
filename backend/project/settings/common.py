@@ -5,7 +5,7 @@ import os
 import json
 from pathlib import Path
 from datetime import timedelta
-from pymongo import MongoClient
+from pymongo import AsyncMongoClient
 # from celery.schedules import crontab
 from dotenv import load_dotenv
 
@@ -112,7 +112,7 @@ DATACUBE_V2_AUTH_DB = os.getenv("AUTH_DB_NAME")
 if not all([MONGODB_URI, MONGODB_DATABASE, MONGODB_COLLECTION, DATACUBE_V2_AUTH_DB]):
     raise ValueError("MongoDB settings missing. Please set them in config.json or environment.")
 
-MONGODB_CLIENT = MongoClient(MONGODB_URI)
+MONGODB_CLIENT = AsyncMongoClient(MONGODB_URI)
 METADATA_DB = MONGODB_CLIENT[MONGODB_DATABASE]
 METADATA_COLLECTION = METADATA_DB[MONGODB_COLLECTION]
 

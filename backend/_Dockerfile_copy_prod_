@@ -1,0 +1,76 @@
+# --- Stage 1: Builder ---
+# Use the 'slim' variant for better package compatibility and reliability.
+# It uses glibc, ensuring pre-compiled wheels (manylinux) work correctly.
+FROM python:3.11-slim-bullseye AS builder
+
+# Set environment variables for consistent builds
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+# Set a dedicated virtual environment to avoid user/system conflicts
+ENV VIRTUAL_ENV=/opt/venv
+# Add the venv to the path
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# Install system dependencies needed for building Python packages.
+# This keeps the final image clean of build tools.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create the virtual environment
+RUN python -m venv $VIRTUAL_ENV
+
+# Copy only the requirements file to leverage Docker's build cache.
+WORKDIR /app
+COPY requirements.txt .
+
+# Install Python dependencies into the virtual environment.
+# --no-cache-dir is good, using a venv is better for isolation.
+RUN pip install --no-cache-dir -r requirements.txt
+
+
+# --- Stage 2: Final Image ---
+# Use the same base image for consistency.
+FROM python:3.11-slim-bullseye
+
+# Set the same environment variables
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# Create a non-root user and group for enhanced security
+RUN addgroup --system appgroup && adduser --system --group appuser
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the virtual environment from the builder stage.
+# This is the core of the multi-stage build, bringing in dependencies without build tools.
+COPY --from=builder $VIRTUAL_ENV $VIRTUAL_ENV
+
+# Copy the application code
+COPY . .
+
+# Create the directory for static files and assign ownership to the non-root user.
+# It's better to create the directory first, then chown it.
+RUN mkdir -p /app/staticfiles && \
+    chown -R appuser:appgroup /app
+
+# Switch to the non-root user BEFORE running any application-specific commands
+USER appuser
+
+# Run collectstatic as the non-root user.
+# This ensures that files created by this command have the correct permissions.
+# RUN python manage.py collectstatic --noinput
+RUN SECRET_KEY_DUMMY=dummy-for-collectstatic python manage.py collectstatic --noinput
+
+# Expose the application port
+EXPOSE 8000
+RUN for i in 1 2 3; do \
+    pip install --no-cache-dir -r requirements.txt && break || sleep 10; \
+    done
+# Start the application using Gunicorn.
+# The number of workers is often set via an environment variable for flexibility.
+# Ensure your project's wsgi file is correctly named ('project' or 'auth_project', etc.)
+CMD ["gunicorn", "--workers=3", "--bind", "0.0.0.0:8000", "project.wsgi:application"]
