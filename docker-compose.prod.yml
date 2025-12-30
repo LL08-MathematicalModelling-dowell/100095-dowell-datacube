@@ -11,18 +11,18 @@ services:
     ports:
       - "8000:8000"
     command:
-      [
-        "gunicorn",
-        "--workers=3",
-        "--bind=0.0.0.0:8000",
-        "project.wsgi:application",
-      ]
+      ["gunicorn", \
+     "project.asgi:application", \
+     "--bind", "0.0.0.0:8000", \
+     "--workers", "3", \
+     "--worker-class", "uvicorn_worker.UvicornWorker", \
+     "--log-level", "info"]
     networks:
       - app-network
 
   react-app:
     build:
-      context: ./backend/UI/datacube-UI
+      context: ./UI/datacube-UI
       dockerfile: Dockerfile
     restart: unless-stopped
     container_name: react_app
@@ -32,21 +32,6 @@ services:
       - NODE_ENV=production
     networks:
       - app-network
-
-  # frontend:
-  #   build:
-  #     context: ./frontend
-  #     dockerfile: Dockerfile
-  #   restart: unless-stopped
-  #   env_file:
-  #     - ./frontend/.env
-  #     - ./frontend/.env.local
-  #   ports:
-  #     - "3000:3000"
-  #   depends_on:
-  #     - backend
-  #   networks:
-  #     - app-network
 
 networks:
   app-network:

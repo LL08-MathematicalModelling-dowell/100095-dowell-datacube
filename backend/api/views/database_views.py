@@ -1,16 +1,7 @@
 """
 Service for managing database and collection creation.
-
-This file has been updated to integrate with the custom authentication system.
-Key Changes:
-1.  Permission Classes: Both views now require the user to be authenticated
-    (using JWT or an API Key) via `permission_classes = [IsAuthenticated]`.
-2.  User Ownership: The authenticated user's ID is retrieved from `request.user.id`.
-3.  Secure Service Calls: The `user_id` is passed down to the service layer
-    (DatabaseService, MetadataService) to ensure all operations are scoped
-    to that specific user, preventing data leaks or unauthorized access.
-
 """
+
 
 from rest_framework import status
 from rest_framework.response import Response

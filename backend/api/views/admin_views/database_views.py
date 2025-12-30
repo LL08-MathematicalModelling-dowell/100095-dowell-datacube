@@ -1,7 +1,7 @@
-from api.services.metadata_service import MetadataService
-from api.views.base import BaseAPIView
 from rest_framework.response import Response
+from api.views.base import BaseAPIView
 from api.permissions import IsAdminUserOrInternalIP
+from api.services.metadata_service import MetadataService
 
 
 class PruneFieldsView(BaseAPIView):
