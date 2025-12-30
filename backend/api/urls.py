@@ -1,6 +1,6 @@
 """URL configuration for the 'api' app, updated to handle optional trailing slashes."""
 
-from django.urls import path, re_path
+from django.urls import re_path
 
 from api.views.admin_views import (
     ListDatabasesView,

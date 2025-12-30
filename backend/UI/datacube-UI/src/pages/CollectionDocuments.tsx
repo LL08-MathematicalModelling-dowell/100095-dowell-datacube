@@ -75,7 +75,7 @@ const CollectionDocuments = () => {
                 collection_name: collName,
                 filters: { _id: doc._id },
                 update_data: doc,
-                update_all_fields: true,
+                update_all_fields: false,
             }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["documents"] });

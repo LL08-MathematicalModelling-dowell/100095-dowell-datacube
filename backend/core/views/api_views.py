@@ -1,3 +1,4 @@
+from api.views.base import BaseAPIView
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -32,24 +33,31 @@ def serialize_mongo_document(doc):
     return doc
 
 
-class UserStatsAPIView(APIView):
+class UserStatsAPIView(BaseAPIView):
     """
     Provides statistics and data for the dashboard overview.
     """
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, *args, **kwargs):
+    @property
+    def metadata_svc(self):
+        return MetadataService(user_id=str(self.request.user.pk))
+
+    @BaseAPIView.handle_errors
+    async def get(self, request):
         user_id = request.user.id
+
         user_doc = user_manager.get_user_by_id(user_id)
         if not user_doc:
             return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        meta_svc = MetadataService(request.user.id)
-        databases = meta_svc.list_databases_paginated(page=1, page_size=1000)[1]
-        
+        databases = await self.metadata_svc.list_databases_paginated(
+            page=1,
+            page_size=1000
+        )
         response_data = {
             "usage": user_doc.get("usage", {}),
-            "databases": serialize_mongo_document(databases)
+            "databases": serialize_mongo_document(databases[1])
         }
         return Response(response_data)
 
@@ -93,22 +101,23 @@ class APIKeyAPIView(APIView):
             return Response({"error": "Key not found or permission denied."}, status=status.HTTP_404_NOT_FOUND)
         
 
-class DatabaseDetailAPIView(APIView):
+class DatabaseDetailAPIView(BaseAPIView):
     """
     Provides detailed information and aggregated stats for a single database as JSON.
     """
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, db_id, *args, **kwargs):
+    @BaseAPIView.handle_errors
+    async def get(self, request, db_id, *args, **kwargs):
         user_id = request.user.id
         meta_svc = MetadataService(user_id)
 
-        database_meta = meta_svc.get_db(db_id)
+        database_meta = await meta_svc.get_db(db_id)
         if not database_meta:
             return Response({"error": "Database not found or permission denied."}, status=status.HTTP_404_NOT_FOUND)
 
         # This list contains actual collections with document counts
-        live_collections = meta_svc.list_collections_with_live_counts(db_id)
+        live_collections = await meta_svc.list_collections_with_live_counts(db_id)
 
         # 1. Get the schema definitions from the metadata
         schema_collections = {c['name']: c for c in database_meta.get('collections', [])}

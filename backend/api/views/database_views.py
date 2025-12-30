@@ -44,7 +44,7 @@ class CreateDatabaseView(BaseAPIView):
         return MetadataService(user_id=str(self.request.user.pk))
 
     @BaseAPIView.handle_errors
-    def post(self, request):
+    async def post(self, request):
         # 1. Input Validation
         data = self.validate_serializer(AddDatabasePOSTSerializer, request.data)
         if not data:
@@ -65,7 +65,7 @@ class CreateDatabaseView(BaseAPIView):
         db_svc = self.db_svc
         
         # 3. Business Logic: Check for naming collisions
-        if meta_svc.exists_db(user_provided_name):
+        if await meta_svc.exists_db(user_provided_name):
             return Response(
                 {"success": False, "error": f"Database '{user_provided_name}' already exists."},
                 status=status.HTTP_400_BAD_REQUEST
@@ -78,8 +78,8 @@ class CreateDatabaseView(BaseAPIView):
                 {"success": False, "error": "At least one collection is required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        meta, coll_info = db_svc.create_database_with_collections(
+
+        meta, coll_info = await db_svc.create_database_with_collections(
             user_provided_name=user_provided_name,
             collections=collections
         )
@@ -110,7 +110,7 @@ class AddCollectionView(BaseAPIView):
         return DatabaseService(user_id=str(self.request.user.pk))
 
     @BaseAPIView.handle_errors
-    def post(self, request):
+    async def post(self, request):
         # 1. Input Validation
         data = self.validate_serializer(AddCollectionPOSTSerializer, request.data)
         if data is None or not data:
@@ -121,7 +121,7 @@ class AddCollectionView(BaseAPIView):
 
         # 3. Execution
         try:
-            coll_info = self.db_svc.add_collections_with_creation(
+            coll_info = await self.db_svc.add_collections_with_creation(
                 database_id=data.get("database_id"), # type: ignore
                 new_cols=data.get("collections") # type: ignore
             )

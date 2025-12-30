@@ -14,38 +14,14 @@ from api.views.base import BaseAPIView
 from api.services.metadata_service import MetadataService
 from api.utils.validators import sanitize_name
 from api.utils.mongodb import jsonify_object_ids
-from api.serializers import JSonImportSerializer, ListQuerySerializer
-
-from django.shortcuts import render
 
 from api.serializers import (
-    DocumentQuerySerializer,
     DatabaseDropSerializer,
     CollectionDropSerializer,
+    JsonImportSerializer,
+    ListQuerySerializer,
 )
 
-class ApiHomeView(BaseAPIView):
-    """Renders the API documentation homepage."""
-    permission_classes = [AllowAny]
-
-    def get(self, request):
-        """GET /api/home - Serving the internal documentation portal."""
-        from api.api_home_data import apis
-        return render(request, "api_home.html", {"apis": apis})
-
-
-from django.conf import settings
-from django.shortcuts import render
-from rest_framework import status
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
-
-from api.views.base import BaseAPIView
-from api.services.metadata_service import MetadataService
-from api.serializers import (
-    DatabaseDropSerializer, 
-    CollectionDropSerializer
-)
 
 class ListDatabasesView(BaseAPIView):
     """List databases owned by the authenticated user."""
@@ -60,10 +36,10 @@ class ListDatabasesView(BaseAPIView):
         return MetadataService(user_id=str(self.request.user.pk))
 
     @BaseAPIView.handle_errors
-    def get(self, request):
+    async def get(self, request):
         params = self.validate_serializer(ListQuerySerializer, request.query_params)
         
-        total, db_list = self.metadata_svc.list_databases_paginated(
+        total, db_list = await self.metadata_svc.list_databases_paginated(
             page=params['page'],
             page_size=params['page_size'],
             search_term=request.query_params.get('search')
@@ -89,13 +65,13 @@ class ListCollectionsView(BaseAPIView):
         return MetadataService(user_id=str(self.request.user.pk))
 
     @BaseAPIView.handle_errors
-    def get(self, request):
+    async def get(self, request):
         db_id = request.query_params.get("database_id", "").strip()
         if not db_id:
             return Response({"error": "database_id is required"}, status=400)
 
         # Service already knows the user_id from __init__
-        cols = self.metadata_svc.list_collections_with_live_counts(db_id)
+        cols = await self.metadata_svc.list_collections_with_live_counts(db_id)
         
         return Response({"success": True, "collections": cols}, status=200)
 
@@ -109,12 +85,12 @@ class DropDatabaseView(BaseAPIView):
         return MetadataService(user_id=str(self.request.user.pk))
 
     @BaseAPIView.handle_errors
-    def delete(self, request):
+    async def delete(self, request):
         payload = self.validate_serializer(DatabaseDropSerializer, request.data)
         db_id = payload["database_id"]
 
         # 1. Fetch metadata (ownership verified by user_id in service state)
-        meta = self.metadata_svc.get_db(db_id)
+        meta = await self.metadata_svc.get_db(db_id)
         if not meta:
             return Response({"error": "Unauthorized or not found"}, status=403)
 
@@ -123,8 +99,8 @@ class DropDatabaseView(BaseAPIView):
             return Response({"error": "Confirmation mismatch"}, status=400)
         
         # 3. Drop calls
-        self.metadata_svc.drop_database(db_id)
-        settings.MONGODB_CLIENT.drop_database(meta["dbName"])
+        await self.metadata_svc.drop_database(db_id)
+        await settings.MONGODB_CLIENT.drop_database(meta["dbName"])
 
         return Response({"success": True, "message": "Dropped."}, status=200)
 
@@ -138,20 +114,20 @@ class DropCollectionsView(BaseAPIView):
         return MetadataService(user_id=str(self.request.user.pk))
 
     @BaseAPIView.handle_errors
-    def delete(self, request):
+    async def delete(self, request):
         payload = self.validate_serializer(CollectionDropSerializer, request.data)
         db_id = payload["database_id"]
 
-        meta = self.metadata_svc.get_db(db_id)
+        meta = await self.metadata_svc.get_db(db_id)
         if not meta:
             return Response({"error": "Forbidden"}, status=403)
 
         # Perform the drop
-        dropped_names = self.metadata_svc.drop_collections(db_id, payload["collection_names"])
+        dropped_names = await self.metadata_svc.drop_collections(db_id, payload["collection_names"])
 
-        db = settings.MONGODB_CLIENT[meta["dbName"]]
+        db = await settings.MONGODB_CLIENT[meta["dbName"]]
         for name in dropped_names:
-            db.drop_collection(name)
+            await db.drop_collection(name)
 
         return Response({"success": True, "dropped": dropped_names}, status=200)
 
@@ -166,13 +142,13 @@ class GetMetadataView(BaseAPIView):
         return MetadataService(user_id=str(self.request.user.pk))
 
     @BaseAPIView.handle_errors
-    def get(self, request):
+    async def get(self, request):
         """GET /api/v1/database/metadata"""
         db_id = request.query_params.get("database_id", "").strip()
         if not db_id:
             return Response({"error": "database_id is required"}, status=400)
 
-        meta = self.metadata_svc.get_db(db_id)
+        meta = await self.metadata_svc.get_db(db_id)
         if not meta:
             return Response({
                 "success": False, 
@@ -195,21 +171,21 @@ class ImportDataView(BaseAPIView):
         return MetadataService(user_id=str(self.request.user.pk))
 
     @BaseAPIView.handle_errors
-    def post(self, request):
+    async def post(self, request):
         """POST /api/v1/database/import"""
         # 1. Validate payload via Serializer
-        data = self.validate_serializer(JSonImportSerializer, request.data)
+        data = self.validate_serializer(JsonImportSerializer, request.data)
         db_id = data["database_id"]
         coll_name = data.get("collection_name")
         json_file = data["json_file"]
 
         # 2. Securely resolve database metadata
-        meta = self.metadata_svc.get_db(db_id)
+        meta = await self.metadata_svc.get_db(db_id)
         if not meta:
             return Response({"error": "Unauthorized database access."}, status=403)
         
         internal_db_name = meta["dbName"]
-        db = settings.MONGODB_CLIENT[internal_db_name]
+        db = await settings.MONGODB_CLIENT[internal_db_name]
 
         # 3. Handle Collection Naming logic
         if not coll_name:
@@ -237,7 +213,7 @@ class ImportDataView(BaseAPIView):
             fields = [{"name": name, "type": "string"} for name in sorted(field_names)]
 
             # Service handles the update to the metadata catalog
-            self.metadata_svc.add_collections(
+            await self.metadata_svc.add_collections(
                 db_id=db_id,
                 new_collections=[{"name": coll_name, "fields": fields}]
             )

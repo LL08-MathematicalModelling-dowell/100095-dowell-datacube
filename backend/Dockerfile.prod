@@ -1,76 +1,81 @@
 # --- Stage 1: Builder ---
-# Use the 'slim' variant for better package compatibility and reliability.
-# It uses glibc, ensuring pre-compiled wheels (manylinux) work correctly.
 FROM python:3.11-slim-bullseye AS builder
 
-# Set environment variables for consistent builds
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
-# Set a dedicated virtual environment to avoid user/system conflicts
+# Prevent Python from writing pyc files and buffer output
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Install build dependencies (needed for some packages like psycopg2, cryptography, etc.)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        gcc \
+        build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create and activate virtual environment
 ENV VIRTUAL_ENV=/opt/venv
-# Add the venv to the path
+RUN python -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Install system dependencies needed for building Python packages.
-# This keeps the final image clean of build tools.
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc build-essential && \
-    rm -rf /var/lib/apt/lists/*
-
-# Create the virtual environment
-RUN python -m venv $VIRTUAL_ENV
-
-# Copy only the requirements file to leverage Docker's build cache.
+# Set work directory
 WORKDIR /app
+
+# Copy only requirements first to leverage Docker layer caching
 COPY requirements.txt .
 
-# Install Python dependencies into the virtual environment.
-# --no-cache-dir is good, using a venv is better for isolation.
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-
-# --- Stage 2: Final Image ---
-# Use the same base image for consistency.
+# --- Stage 2: Final Runtime Image ---
 FROM python:3.11-slim-bullseye
 
-# Set the same environment variables
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-# Create a non-root user and group for enhanced security
-RUN addgroup --system appgroup && adduser --system --group appuser
+# Install runtime system dependencies (if needed, e.g., for PostgreSQL client)
+# Uncomment if you're using PostgreSQL
+# RUN apt-get update && \
+#     apt-get install -y --no-install-recommends libpq5 && \
+#     rm -rf /var/lib/apt/lists/*
 
-# Set the working directory
+# Create non-root user for security
+RUN addgroup --system appgroup && \
+    adduser --system --ingroup appgroup appuser
+
+# Set working directory
 WORKDIR /app
 
-# Copy the virtual environment from the builder stage.
-# This is the core of the multi-stage build, bringing in dependencies without build tools.
+# Copy virtual environment from builder
 COPY --from=builder $VIRTUAL_ENV $VIRTUAL_ENV
 
-# Copy the application code
+# Copy application code
 COPY . .
 
-# Create the directory for static files and assign ownership to the non-root user.
-# It's better to create the directory first, then chown it.
+# Create staticfiles directory and set proper ownership
 RUN mkdir -p /app/staticfiles && \
-    chown -R appuser:appgroup /app
+    chown -R appuser:appgroup /app/staticfiles
 
-# Switch to the non-root user BEFORE running any application-specific commands
+# Switch to non-root user early
 USER appuser
 
-# Run collectstatic as the non-root user.
-# This ensures that files created by this command have the correct permissions.
-# RUN python manage.py collectstatic --noinput
-RUN SECRET_KEY_DUMMY=dummy-for-collectstatic python manage.py collectstatic --noinput
+# Collect static files (using dummy secret key to avoid requiring real env vars at build time)
+# Replace 'project' with your actual settings module base name if different
+ENV DJANGO_SETTINGS_MODULE=project.settings.production
+RUN SECRET_KEY=dummy-key-for-build python manage.py collectstatic --noinput --clear
 
-# Expose the application port
+# Expose port
 EXPOSE 8000
-RUN for i in 1 2 3; do \
-    pip install --no-cache-dir -r requirements.txt && break || sleep 10; \
-    done
-# Start the application using Gunicorn.
-# The number of workers is often set via an environment variable for flexibility.
-# Ensure your project's wsgi file is correctly named ('project' or 'auth_project', etc.)
-CMD ["gunicorn", "--workers=3", "--bind", "0.0.0.0:8000", "project.wsgi:application"]
+
+# --- Production Command: Gunicorn with Uvicorn Workers (ASGI) ---
+# Uses modern uvicorn_worker for async support
+# Adjust worker count based on CPU cores: recommended = (2 * CPU cores) + 1
+CMD ["gunicorn", \
+     "project.asgi:application", \
+     "--bind", "0.0.0.0:8000", \
+     "--workers", "3", \
+     "--worker-class", "uvicorn_worker.UvicornWorker", \
+     "--log-level", "info"]

@@ -30,7 +30,7 @@ class DatabaseService:
         # Instantiate MetadataService with the same user context
         self.meta_svc = MetadataService(user_id=user_id)
 
-    def create_database_with_collections(
+    async def create_database_with_collections(
         self,
         user_provided_name: str,
         collections: List[Dict],
@@ -45,7 +45,7 @@ class DatabaseService:
         """
         
         # Guard: Check existence before generating names or starting transactions
-        if self.meta_svc.exists_db(user_provided_name, session=session):
+        if await self.meta_svc.exists_db(user_provided_name, session=session):
             raise ValueError(f"A database named '{user_provided_name}' already exists.")
 
         # Step 1: Generate the secure internal database name
@@ -64,7 +64,7 @@ class DatabaseService:
         coll_info = coll_svc.create(names, session=session)
 
         # Step 4: Create metadata entry
-        meta = self.meta_svc.create_db_meta(
+        meta = await self.meta_svc.create_db_meta(
             user_provided_name=user_provided_name,
             internal_db_name=internal_db_name,
             collections=collections,
@@ -73,7 +73,7 @@ class DatabaseService:
 
         return meta, coll_info # type: ignore
 
-    def add_collections_with_creation(
+    async def add_collections_with_creation(
         self,
         database_id: str,
         new_cols: List[Dict],
@@ -84,7 +84,7 @@ class DatabaseService:
         Verified: Only proceeds if the bound user owns the target database.
         """
         # Step 1: Verification & Data Retrieval
-        meta = self.meta_svc.get_db(database_id)
+        meta = await self.meta_svc.get_db(database_id)
         if not meta:
             raise PermissionError("Database not found or access denied.")
         
@@ -92,17 +92,17 @@ class DatabaseService:
         display_db_name = meta["displayName"]
 
         # Step 2: Physical Creation
-        coll_svc = CollectionService(display_db_name, user_id=self.user_id)
+        coll_svc = CollectionService(user_id=self.user_id, db_name=display_db_name)
         names = [c["name"] for c in new_cols]
 
         # Step 3: Create physical collections        
-        result = coll_svc.create(names, session=session)
+        result = await coll_svc.create(names, session=session)
 
         # Step 4: Metadata Update only after successful physical creation
         # Filter only successfully created collections
         created_cols = [col for col in new_cols if any(res["name"] == col["name"] and res["created"] for res in result)]
         if created_cols:
-            self.meta_svc.add_collections(
+            await self.meta_svc.add_collections(
                 db_id=database_id,
                 new_collections=created_cols,
                 session=session
