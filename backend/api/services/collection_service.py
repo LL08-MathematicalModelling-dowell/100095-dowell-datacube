@@ -1,20 +1,18 @@
 """
 Service for managing physical MongoDB collection operations.
-Refactored for 2025:
-1.  Native Async: Replaces sync_to_async with native PyMongo 4.9+ async API.
-2.  Stateful Identity: Locked to a verified db/user pair upon creation.
-3.  Ownership Guard: PermissionError raised if user-database mapping is invalid.
 """
 
+
 import re
+import asyncio
 from typing import Any, List, Dict, Optional
+
 from django.conf import settings
 from bson import ObjectId, errors
 from pymongo.errors import CollectionInvalid, PyMongoError
+
 from api.services.metadata_service import MetadataService
 from api.utils.mongodb import build_existing_fields_update_pipeline
-
-
 
 
 class MongoFilterHelper:
@@ -90,7 +88,7 @@ class CollectionService:
             if not await meta_svc.exists_db(db_name):
                 raise PermissionError(f"Unauthorized access to '{db_name}'")
 
-        if internal_db_name is None:
+        if (not new_db) and (internal_db_name is None):
             internal_db_name = await meta_svc.get_meta_internal_db_name(db_name)
 
         # Call the constructor using explicit keywords
@@ -112,20 +110,29 @@ class CollectionService:
 
     async def create(self, names: List[str], session=None) -> List[Dict]:
         """
-        Explicitly creates collections. Native async in PyMongo 4.9+.
+        Highly optimized parallel creation of MongoDB collections.
+        Designed for massive scale (2000+ collections) using asyncio concurrency.
         """
-        results = []
-        for name in names:
+        
+        async def _create_single(name: str) -> Dict:
+            """Helper to encapsulate the logic for a single collection."""
             report = {"name": name, "created": False, "exists": False, "error": None}
             try:
+                # We use the native async create_collection
                 await self.db.create_collection(name, session=session)
                 report["created"] = True
             except CollectionInvalid:
+                # Collection already exists or name is invalid
                 report["exists"] = True
             except PyMongoError as e:
                 report["error"] = str(e)
-            results.append(report)
-        return results
+            return report
+
+        tasks = [_create_single(name) for name in names]
+        
+        results = await asyncio.gather(*tasks)
+        
+        return list(results)
 
     async def count_documents(self, coll_name: str, filt: Optional[Dict] = None, session=None) -> int:
         """Returns document count using native async."""
@@ -149,7 +156,6 @@ class CollectionService:
         if not docs:
             return None
         return await self.db[coll_name].insert_many(docs, session=session)
-
    
     async def update_one(self, coll_name: str, filt: Dict, update: Dict, session=None):
         """Updates exactly one document, following global safety filters."""
@@ -178,28 +184,6 @@ class CollectionService:
             {"$set": update}, 
             session=session
         )
-
-
-    # async def update_many(self, coll_name: str, filt: Dict, update: Dict, session=None):
-    #     """Standard batch update."""
-    #     # Ensure we do not update 'is_deleted' documents
-    #     new_filt = self.filter_helper.convert_filter_ids(filt or {})
-    #     new_filt["is_deleted"] = {"$ne": True}
-
-    #     return await self.db[coll_name].update_many(
-    #         new_filt,
-    #         {"$set": update}, 
-    #         session=session
-    #     )
-
-    # async def update_one(self, coll_name: str, filt: Dict, update: Dict, session=None):
-    #     """Standard single document update."""
-    #     new_filt = self.filter_helper.convert_filter_ids(filt or {})
-    #     return await self.db[coll_name].update_one(
-    #         new_filt, 
-    #         {"$set": update}, 
-    #         session=session
-    #     )
 
     async def update_many_existing(self, coll_name: str, filt: Dict, update_data: Dict, session=None):
         """

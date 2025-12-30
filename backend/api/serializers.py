@@ -81,7 +81,8 @@ class AddDatabasePOSTSerializer(serializers.Serializer):
     collections = CollectionSerializer(
         many=True, 
         min_length=1,
-        help_text="A list of at least one collection to create within the new database."
+        max_length=500,
+        help_text="List of collections to create within the database."
     )
 
     def validate_db_name(self, value):
@@ -97,6 +98,11 @@ class AddDatabasePOSTSerializer(serializers.Serializer):
 
     def validate_collections(self, value):
         validate_unique_fields(value)
+        # ensure maximum collections is 500
+        if len(value) > 500:
+            raise serializers.ValidationError(
+                "A maximum of 500 collections can be created in a single api request."
+            )
         return value
 
 
