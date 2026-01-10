@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   backend:
     build:
@@ -11,12 +9,12 @@ services:
     ports:
       - "8000:8000"
     command:
-      [
-        "gunicorn",
-        "--workers=3",
-        "--bind=0.0.0.0:8000",
-        "project.wsgi:application",
-      ]
+      ["gunicorn",
+     "project.asgi:application",
+     "--bind", "0.0.0.0:8000",
+     "--workers", "3",
+     "--worker-class", "uvicorn_worker.UvicornWorker",
+     "--log-level", "info"]
     networks:
       - app-network
 
