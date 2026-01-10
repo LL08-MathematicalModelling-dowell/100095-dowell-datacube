@@ -46,24 +46,24 @@ class MetadataService:
             query["_id"] = ObjectId(db_id)
         return query
 
-    def get_db(self, db_id: str) -> Optional[Dict]:
+    async def get_db(self, db_id: str) -> Optional[Dict]:
         """Fetches a database document strictly scoped to the bound user."""
-        return self._coll.find_one(self._get_user_filter(db_id))
+        return await self._coll.find_one(self._get_user_filter(db_id))
 
-    def exists_db(self, display_name: str, *, session=None) -> bool:
+    async def exists_db(self, display_name: str, *, session=None) -> bool:
         """Checks display name uniqueness within the user's scope."""
         query = self._get_user_filter()
         query["displayName"] = display_name.lower().strip()
-        return self._coll.count_documents(query, limit=1, session=session) > 0
+        return await self._coll.count_documents(query, limit=1, session=session) > 0
 
-    def get_meta_internal_db_name(self, display_name: str) -> Optional[str]:
+    async def get_meta_internal_db_name(self, display_name: str) -> Optional[str]:
         """Retrieves the internal DB name for a given display name."""
         query = self._get_user_filter()
         query["displayName"] = display_name.lower().strip()
-        doc = self._coll.find_one(query, {"dbName": 1})
+        doc = await self._coll.find_one(query, {"dbName": 1})
         return doc["dbName"] if doc else None
 
-    def create_db_meta(
+    async def create_db_meta(
         self,
         user_provided_name: str,
         internal_db_name: str,
@@ -80,15 +80,15 @@ class MetadataService:
             "updated_at": now,
             "collections": self._format_collection_schema(collections),
         }
-        result = self._coll.insert_one(meta, session=session)
+        result = await self._coll.insert_one(meta, session=session)
         meta["_id"] = result.inserted_id
         return meta
 
-    def add_collections(self, db_id: str, new_collections: List[Dict], *, session=None) -> List[Dict]:
+    async def add_collections(self, db_id: str, new_collections: List[Dict], *, session=None) -> List[Dict]:
         formatted_docs = self._format_collection_schema(new_collections)
         
         # update_one using centralized user filter
-        updated = self._coll.find_one_and_update(
+        updated = await self._coll.find_one_and_update(
             self._get_user_filter(db_id),
             {
                 "$push": {"collections": {"$each": formatted_docs}},
@@ -102,12 +102,12 @@ class MetadataService:
             raise PermissionError("Access denied or Database not found.")
         return formatted_docs
 
-    def drop_collections(self, db_id: str, names: List[str], *, session=None) -> List[str]:
+    async def drop_collections(self, db_id: str, names: List[str], *, session=None) -> List[str]:
         """
         Removes specific collections from metadata and physically drops them 
         from the internal database.
         """
-        meta = self.get_db(db_id)
+        meta = await self.get_db(db_id)
         if not meta:
             raise ValueError("Database not found or permission denied.")
 
@@ -120,7 +120,7 @@ class MetadataService:
             raise ValueError(f"Collections not found in metadata: {', '.join(invalid)}")
 
         # 1. Update Metadata
-        self._coll.update_one(
+        await self._coll.update_one(
             {"_id": ObjectId(db_id), "user_id": self.user_id},
             {
                 "$pull": {"collections": {"name": {"$in": names}}},
@@ -130,23 +130,24 @@ class MetadataService:
         )
 
         # 2. Drop Physical Collections
-        db_instance = settings.MONGODB_CLIENT[internal_db_name]
+        db_instance = await settings.MONGODB_CLIENT[internal_db_name]
         for name in names:
-            db_instance.drop_collection(name)
+            await db_instance.drop_collection(name)
  
         return names
 
-    def drop_database(self, db_id: str, *, session=None) -> Dict:
+    async def drop_database(self, db_id: str, *, session=None) -> Dict:
         """Drops metadata and physical DB using bound identity."""
-        meta = self._coll.find_one_and_delete(self._get_user_filter(db_id), session=session)
+        meta = await self._coll.find_one_and_delete(self._get_user_filter(db_id), session=session)
         if not meta:
             raise PermissionError("Access denied or Database not found.")
         
         # Physical drop using internal name retrieved from secure metadata
-        settings.MONGODB_CLIENT.drop_database(meta['dbName'])
+        await settings.MONGODB_CLIENT.drop_database(meta['dbName'])
+
         return meta
 
-    def list_databases_paginated(
+    async def list_databases_paginated(
         self, page: int = 1, page_size: int = 50, search_term: str | None = None
     ) -> Tuple[int, List[Dict]]:
         """
@@ -157,34 +158,34 @@ class MetadataService:
         if search_term:
             query["displayName"] = {"$regex": search_term.strip(), "$options": "i"}
 
-        total = self._coll.count_documents(query)
+        total = await self._coll.count_documents(query)
         skip = (page - 1) * page_size
 
-        # We sort by 'displayName' for consistent UI listing
-        cursor = (
-            self._coll.find(query, {"_id": 1, "displayName": 1, "collections": 1})
-            .sort("displayName", 1)
-            .skip(skip)
-            .limit(page_size)
-        )
+        # REMOVE 'await' from here
+        cursor = self._coll.find(query, {"_id": 1, "displayName": 1, "collections": 1}) \
+             .sort("displayName", 1) \
+             .skip(skip) \
+             .limit(page_size)
+
+        # AWAIT the result retrieval
+        results_docs = await cursor.to_list(length=page_size)
 
         results = []
-        for doc in cursor:
-            # We count the collections stored in the metadata array 
-            # rather than pinging the physical DB in a loop (Performance Fix)
+        for doc in results_docs:
             results.append({
                 "id": str(doc["_id"]),
                 "name": doc["displayName"],
                 "num_collections": len(doc.get("collections", []))
             })
+                        
 
         return total, results
 
-    def list_collections_with_live_counts(self, db_id: str, *, session=None) -> List[Dict]:
+    async def list_collections_with_live_counts(self, db_id: str, *, session=None) -> List[Dict]:
         """
         Returns collections with their live document counts from the physical DB.
         """
-        meta = self.get_db(db_id)
+        meta = await self.get_db(db_id)
         if not meta:
             raise PermissionError("Database not found or access denied.")
 
@@ -197,7 +198,7 @@ class MetadataService:
             col_name = col_meta["name"]
             try:
                 # count_documents is safer than estimated_document_count for small/filtered sets
-                count = db[col_name].count_documents({}, session=session)
+                count = await db[col_name].count_documents({}, session=session)
                 results.append({
                     "name": col_name,
                     "num_documents": count,
@@ -234,7 +235,7 @@ class MetadataService:
         # Merge multiple types into a single string (e.g., "string, null")
         return {k: ", ".join(sorted(v)) for k, v in field_map.items()}
 
-    def update_collection_schema_inference(self, db_id: str, coll_name: str, sample_docs: List[Dict]):
+    async def update_collection_schema_inference(self, db_id: str, coll_name: str, sample_docs: List[Dict]):
         """
         Learns the schema from new data and updates metadata if new fields 
         or new types are discovered.
@@ -243,7 +244,7 @@ class MetadataService:
         if not new_schema:
             return
 
-        meta = self.get_db(db_id)
+        meta = await self.get_db(db_id)
         if not meta:
             raise PermissionError("Access denied.")
 
@@ -282,7 +283,7 @@ class MetadataService:
                 {"$set": {"collections.$.fields": updated_fields_list, "updated_at": datetime.now()}}
             )
 
-    def prune_inactive_fields(self, db_id: str, dry_run: bool = True) -> Dict[str, Any]:
+    async def prune_inactive_fields(self, db_id: str, dry_run: bool = True) -> Dict[str, Any]:
         """
         Maintenance task: Removes field metadata for fields that have not 
         appeared in any documents since the configured 'inactive_days' threshold.
@@ -291,7 +292,7 @@ class MetadataService:
         schema versions that are no longer being sent to the API.
         """
         # 1. Fetch metadata using centralized user context
-        meta = self.get_db(db_id)
+        meta = await self.get_db(db_id)
         if not meta:
             raise PermissionError("Database not found or access denied.")
 
