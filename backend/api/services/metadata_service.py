@@ -274,7 +274,7 @@ class MetadataService:
 
         if has_changed:
             updated_fields_list = [{"name": n, "type": t} for n, t in existing_fields.items()]
-            self._coll.update_one(
+            await self._coll.update_one(
                 {
                     "_id": ObjectId(db_id), 
                     "user_id": self.user_id,
@@ -382,21 +382,42 @@ class MetadataService:
             }
         )
 
-
-    # api/services/metadata_service.py update
-    def check_quota_is_exceeded(self, user_id):
+    async def check_quota_is_exceeded(self) -> bool:
         """
-        Decision Gate: Returns True if the user has reached their 2025 storage limit.
+        Decision Gate: Validates if the tenant has exceeded their storage allocation.
+        Integrates with 'platform_ops' snapshots and user subscription logic.
         """
-        stats_db = settings.MONGODB_CLIENT["platform_ops"]
-        # Get the latest snapshot for all user's databases
-        latest_stat = stats_db["storage_snapshots"].find_one(
-            {"user_id": user_id},
+        # 1. Access the Telemetry database using the shared client
+        ops_db = settings.MONGODB_CLIENT["platform_ops"]
+        
+        # 2. Retrieve the most recent storage snapshot for this tenant
+        # FIXED: Added 'await' as find_one is an async coroutine in Motor
+        latest_stat = await ops_db["storage_snapshots"].find_one(
+            {"user_id": self.user_id},
             sort=[("timestamp", -1)]
         )
         
+        # If no snapshot exists yet, allow the operation (new user grace period)
         if not latest_stat:
             return False
             
-        TOTAL_LIMIT_BYTES = 1024 * 1024 * 500  # 500MB Limit for 2025 Free Tier
-        return latest_stat["total_size"] > TOTAL_LIMIT_BYTES
+        # 3. Determine the Tenant's Limit
+        # BEST PRACTICE: Move this to a setting or fetch from User Profile
+        # Defaulting to 500MB for Free Tier
+        limit_mb = getattr(settings, "DATACUBE_FREE_TIER_MB", 500)
+        total_limit_bytes = 1024 * 1024 * limit_mb
+        
+        # 4. Compare current usage (total_size) against limit
+        current_usage = latest_stat.get("total_size", 0)
+        
+        is_exceeded = current_usage > total_limit_bytes
+
+        if is_exceeded:
+            # Log a high-priority telemetry event for the Analysis App
+            await ops_db["user_activity"].insert_one({
+                "timestamp": datetime.now(timezone.utc),
+                "metadata": {"user_id": self.user_id, "type": "quota_block"},
+                "details": f"Blocked write at {current_usage} bytes (Limit: {total_limit_bytes})"
+            })
+
+        return is_exceeded
