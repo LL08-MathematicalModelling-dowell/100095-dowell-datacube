@@ -81,3 +81,12 @@ REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'] = (
 #         },
 #     },
 # }
+
+
+
+# Optional: Better result backend (requires django-celery-results)
+# CELERY_RESULT_BACKEND = 'django-db'
+# INSTALLED_APPS += ['django_celery_results', 'django_celery_beat']
+
+# For django-celery-beat (persistent scheduler - recommended for production)
+# CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'

@@ -24,6 +24,8 @@ from api.serializers import (
     ListQuerySerializer,
 )
 
+from analytics.signals.definitions import document_created_signal
+
 
 class ListDatabasesView(BaseAPIView):
     """List databases owned by the authenticated user."""
@@ -222,16 +224,16 @@ class ImportDataView(BaseAPIView):
 
         # 6. Bulk Insert
         result = db[coll_name].insert_many(docs)
-
        
         # Fire and forget! The user gets their response immediately.
-        post_import_signal.send(
-            sender=self.__class__,
-            user_id=request.user.id,
-            db_id=db_id,
-            count=len(result.inserted_ids)
-        )
-
+        if result and result.inserted_ids:
+            document_created_signal.send(
+                sender=self.__class__,
+                user_id=str(request.user.id),
+                db_id=db_id,
+                coll_name=coll_name,
+                count=len(result.inserted_ids)
+            )
 
         return Response({
             "success": True,
@@ -240,29 +242,29 @@ class ImportDataView(BaseAPIView):
         }, status=status.HTTP_201_CREATED)
 
 
-class AnalyticsTelemetryView(BaseAPIView):
-    permission_classes = [IsAuthenticated]
+# class AnalyticsTelemetryView(BaseAPIView):
+#     permission_classes = [IsAuthenticated]
 
-    @BaseAPIView.handle_errors
-    async def get(self, request):
-        user_id = request.user.id
-        db_id = request.query_params.get("database_id")
-        days = int(request.query_params.get("days", 7))
+#     @BaseAPIView.handle_errors
+#     async def get(self, request):
+#         user_id = request.user.id
+#         db_id = request.query_params.get("database_id")
+#         days = int(request.query_params.get("days", 7))
         
-        svc = AnalyticsService(user_id=user_id)
-        # Fetch the trend data
-        data = await svc.get_usage_trends(db_id, days=days)
+#         svc = AnalyticsService(user_id=user_id)
+#         # Fetch the trend data
+#         data = await svc.get_usage_trends(db_id, days=days)
         
-        # Format specifically for Recharts/Chart.js
-        formatted_data = []
-        for entry in data:
-            formatted_data.append({
-                "time": entry["_id"].strftime("%Y-%m-%d %H:%M"),
-                "ops": entry["total_ops"],
-                "latency": round(entry["avg_latency"], 2)
-            })
+#         # Format specifically for Recharts/Chart.js
+#         formatted_data = []
+#         for entry in data:
+#             formatted_data.append({
+#                 "time": entry["_id"].strftime("%Y-%m-%d %H:%M"),
+#                 "ops": entry["total_ops"],
+#                 "latency": round(entry["avg_latency"], 2)
+#             })
             
-        return Response({"success": True, "chart_data": formatted_data})
+#         return Response({"success": True, "chart_data": formatted_data})
 
 
 class HealthCheck(BaseAPIView):
