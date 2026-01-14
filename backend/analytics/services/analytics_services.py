@@ -34,7 +34,7 @@ class AnalyticsService:
     async def log_io(self, io_type: str, collection: str, duration_ms: float, success: bool):
         """Logs Read/Write performance and success rates."""
         await self.activity.insert_one({
-            "timestamp": datetime.utcnow(),
+            "timestamp": datetime.now(timezone.utc),
             "metadata": {"user_id": self.user_id, "type": "io", "coll": collection},
             "io_type": io_type,
             "latency": duration_ms,

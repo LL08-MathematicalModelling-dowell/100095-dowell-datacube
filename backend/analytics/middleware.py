@@ -32,8 +32,8 @@ class DatacubeObservabilityMiddleware:
             coll_name = request.GET.get('collection_name') or request.POST.get('collection_name', 'system')
 
             payload = {
-                "user_id": str(request.user.pk),
-                "db_id": db_id, # CRITICAL: Needed for DB-specific charts
+                "user_id": str(request.user.id),
+                "db_id": db_id,
                 "method": request.method,
                 "path": request.path,
                 "status_code": response.status_code,
@@ -44,6 +44,8 @@ class DatacubeObservabilityMiddleware:
 
             # DEBUG: Log safely instead of json.dumps(response)
             logger.debug(f"Datacube Telemetry dispatched for {request.path} - Latency: {duration:.2f}ms")
+
+            print(f"<<<<<<<<<  payload --> {request.data}>>>>")
 
             # Fire and Forget: Send to background worker (analytics queue)
             try:

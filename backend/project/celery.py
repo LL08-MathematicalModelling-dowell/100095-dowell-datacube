@@ -2,6 +2,7 @@ import os
 from celery import Celery
 from celery.schedules import crontab
 
+
 # 1. Set environment defaults
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'project.settings.production')
 
