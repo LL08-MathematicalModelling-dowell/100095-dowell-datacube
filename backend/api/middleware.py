@@ -5,6 +5,10 @@ import calendar
 
 
 class UsageMeteringMiddleware:
+    """
+    Middleware to meter API usage per user based on their subscription plan.
+    Enforces limits and resets usage counters monthly.
+    """
     def __init__(self, get_response):
         self.get_response = get_response
         # Define plan limits here
