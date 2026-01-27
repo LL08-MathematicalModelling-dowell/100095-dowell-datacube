@@ -5,10 +5,9 @@ import os
 import json
 from pathlib import Path
 from datetime import timedelta
-from pymongo import AsyncMongoClient # type: ignore
+from pymongo import AsyncMongoClient
 # from celery.schedules import crontab
-from dotenv import load_dotenv # type: ignore
-
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -174,3 +173,98 @@ CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
+
+
+
+# Redis connection settings
+REDIS_SETTINGS = {
+    'host': os.getenv('REDIS_HOST', 'localhost'),
+    'port': int(os.getenv('REDIS_PORT', 6379)),
+    'db': 0,  # Default DB for Celery
+    'password': os.getenv('REDIS_PASSWORD', None),
+    'socket_timeout': 5,
+    'socket_connect_timeout': 5,
+    'retry_on_timeout': True,
+    'max_connections': 50,
+    'health_check_interval': 30,  # seconds
+}
+
+# settings/common.py or settings/base.py
+
+# Redis Cache Configuration
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379/1",  # Use database 1 for cache (0 is for Celery)
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "CONNECTION_POOL_KWARGS": {
+                "max_connections": 100,
+                "retry_on_timeout": True,
+            },
+            "COMPRESSOR": "django_redis.compressors.zlib.ZlibCompressor",
+            "SERIALIZER": "django_redis.serializers.json.JSONSerializer",
+            "SOCKET_CONNECT_TIMEOUT": 5,  # seconds
+            "SOCKET_TIMEOUT": 5,  # seconds
+        },
+        "KEY_PREFIX": "datacube",  # All cache keys will be prefixed with this
+    },
+    
+    # Session cache (optional, can use default)
+    "sessions": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379/2",  # Use database 2 for sessions
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "SERIALIZER": "django_redis.serializers.json.JSONSerializer",
+        },
+        "KEY_PREFIX": "datacube_session",
+    },
+    
+    # Analytics cache (for your middleware metrics)
+    "analytics": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379/3",  # Use database 3 for analytics
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "SERIALIZER": "django_redis.serializers.json.JSONSerializer",
+            "COMPRESSOR": "django_redis.compressors.zlib.ZlibCompressor",
+        },
+        "KEY_PREFIX": "datacube_analytics",
+        "TIMEOUT": 86400,  # 24 hours default timeout
+    },
+}
+
+# Use Redis for session storage (optional but recommended)
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+SESSION_CACHE_ALIAS = "sessions"
+SESSION_COOKIE_AGE = 1209600  # 2 weeks in seconds
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+
+# Cache timeouts (in seconds)
+CACHE_TTL = {
+    'SHORT': 60 * 5,       # 5 minutes
+    'MEDIUM': 60 * 30,     # 30 minutes
+    'LONG': 60 * 60 * 6,   # 6 hours
+    'DAY': 60 * 60 * 24,   # 24 hours
+    'WEEK': 60 * 60 * 24 * 7,  # 1 week
+}
+
+# For production, use environment variables
+if os.getenv('REDIS_URL'):
+    # Heroku-style Redis URL
+    redis_url = os.getenv('REDIS_URL')
+    CACHES["default"]["LOCATION"] = redis_url
+    CACHES["sessions"]["LOCATION"] = redis_url + "/2" # type: ignore
+    CACHES["analytics"]["LOCATION"] = redis_url + "/3" # type: ignore
+elif os.getenv('REDIS_HOST'):
+    # Custom Redis configuration
+    redis_host = os.getenv('REDIS_HOST', '127.0.0.1')
+    redis_port = os.getenv('REDIS_PORT', 6379)
+    redis_password = os.getenv('REDIS_PASSWORD')
+    
+    location = f"redis://:{redis_password}@{redis_host}:{redis_port}" if redis_password else f"redis://{redis_host}:{redis_port}"
+    
+    CACHES["default"]["LOCATION"] = f"{location}/1"
+    CACHES["sessions"]["LOCATION"] = f"{location}/2"
+    CACHES["analytics"]["LOCATION"] = f"{location}/3"

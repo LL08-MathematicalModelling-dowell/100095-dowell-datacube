@@ -1,7 +1,12 @@
+"""
+Analytics Service Layer
+Handles logging, aggregation, and retrieval of analytics data.
+"""
+
 import logging
 from datetime import datetime, timedelta, timezone
-from django.conf import settings
-from api.utils.mongodb import get_async_client, jsonify_object_ids
+from api.utils.mongodb import get_sync_client, jsonify_object_ids
+
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +15,7 @@ class AnalyticsService:
     def __init__(self, user_id: str):
         self.user_id = user_id
         # Use the global client to prevent connection exhaustion
-        self.client = get_async_client()
+        self.client = get_sync_client()
         
         # Dedicated Ops Database
         self.ops_db = self.client['platform_ops']
@@ -22,37 +27,39 @@ class AnalyticsService:
 
     # --- LOGGING (Called by Tasks/Middleware) ---
 
-    async def log_usage(self, action: str, details: dict):
+    def log_usage(self, action: str, details: dict):
         """Logs general API navigation/usage."""
-        await self.activity.insert_one({
+        self.activity.insert_one({
             "timestamp": datetime.now(timezone.utc),
             "metadata": {"user_id": self.user_id, "type": "usage"},
             "action": action,
             "details": details
         })
 
-    async def log_io(self, io_type: str, collection: str, duration_ms: float, success: bool):
+    def log_io(self, io_type: str, collection: str, duration_ms: float, success: bool, details: dict = {}):
         """Logs Read/Write performance and success rates."""
-        await self.activity.insert_one({
+        self.activity.insert_one({
             "timestamp": datetime.now(timezone.utc),
             "metadata": {"user_id": self.user_id, "type": "io", "coll": collection},
             "io_type": io_type,
             "latency": duration_ms,
-            "success": success
+            "success": success,
+            "details": details or {}
         })
 
-    async def log_slow_query(self, query: dict, duration_ms: float):
+    def log_slow_query(self, query: dict, duration_ms: float, details: dict= {}):
         """Logs queries exceeding the Datacube threshold."""
-        await self.activity.insert_one({
-            "timestamp": datetime.utcnow(),
+        self.activity.insert_one({
+            "timestamp": datetime.now(timezone.utc),
             "metadata": {"user_id": self.user_id, "type": "slow_query"},
             "query_preview": str(query)[:500],
-            "duration": duration_ms
+            "duration": duration_ms,
+            "detail": details or {}
         })
 
-    async def collect_time_series_metrics(self, db_id: str, metrics: dict):
+    def collect_time_series_metrics(self, db_id: str, metrics: dict):
         """Snapshots DB health metrics from a background task."""
-        await self.storage_history.insert_one({
+        self.storage_history.insert_one({
             "timestamp": datetime.now(timezone.utc),
             "user_id": self.user_id,
             "db_id": db_id,
@@ -61,7 +68,7 @@ class AnalyticsService:
 
     # --- AGGREGATION ENGINE (The 2026 Secret Sauce) ---
 
-    async def run_daily_compaction(self, target_date: datetime):
+    def run_daily_compaction(self, target_date: datetime):
         """
         Aggregates raw logs into a single summary row for this tenant.
         Ensures frontend charts don't have to process millions of rows.
@@ -82,8 +89,8 @@ class AnalyticsService:
             }}
         ]
         
-        async for result in self.activity.aggregate(pipeline):
-            await self.summaries.update_one(
+        for result in self.activity.aggregate(pipeline):
+            self.summaries.update_one(
                 {"date": start, "user_id": self.user_id},
                 {"$set": result},
                 upsert=True
@@ -91,21 +98,21 @@ class AnalyticsService:
 
     # --- DATA RETRIEVAL (For Frontend Dashboards) ---
 
-    async def get_dashboard_charts(self, db_id: str, days: int = 7):
+    def get_dashboard_charts(self, db_id: str, days: int = 7):
         """
         Returns data formatted for Recharts/Chart.js.
         Queries Summaries first (fast), then Raw for today (accurate).
         """
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
         
         # 1. Get historical daily summaries
-        summaries = await self.summaries.find({
+        summaries = self.summaries.find({
             "user_id": self.user_id,
             "date": {"$gte": cutoff}
         }).sort("date", 1).to_list(100)
 
         # 2. Get today's hourly trend from raw activity
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0)
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0)
         raw_pipeline = [
             {"$match": {
                 "timestamp": {"$gte": today_start},
@@ -118,17 +125,17 @@ class AnalyticsService:
             }},
             {"$sort": {"_id": 1}}
         ]
-        
-        today_trend = await self.activity.aggregate(raw_pipeline).to_list(24)
+
+        today_trend = self.activity.aggregate(raw_pipeline).to_list(24)
 
         return {
             "historical": jsonify_object_ids(summaries),
             "today_hourly": today_trend
         }
 
-    async def get_storage_stats(self, db_id: str):
+    def get_storage_stats(self, db_id: str):
         """Returns latest storage metrics for Quota enforcement and UI."""
-        latest = await self.storage_history.find_one(
+        latest = self.storage_history.find_one(
             {"user_id": self.user_id, "db_id": db_id},
             sort=[("timestamp", -1)]
         )
