@@ -11,70 +11,64 @@ ensuring that files are stored in a user-specific namespace within the database.
 """
 
 
-from typing import AsyncIterable, Optional, Dict, Any
+from typing import AsyncIterable, Optional, Dict, Any, Callable, Awaitable
 from django.conf import settings
-from bson import ObjectId
+from django.conf import settings
 from gridfs.asynchronous import AsyncGridFSBucket
+from bson import ObjectId
 
 from api.services.metadata_service import MetadataService
 
-from typing import AsyncIterable, Optional, Dict, Any
-from django.conf import settings
-from bson import ObjectId
-from gridfs.asynchronous import AsyncGridFSBucket
+
+# Type alias for the callback: (bytes_uploaded: int) -> None
+ProgressCallback = Callable[[int], Awaitable[None]]
+
 
 class GridFSService:
-    def __init__(self, db_name: str, user_id: str, chunk_size: int = 1024 * 1024): # Default 1MB
-        if not user_id:
-            raise ValueError("GridFSService requires a valid user_id.")
-            
+    def __init__(self, db_name: str, user_id: str, chunk_size: int = 1024 * 1024):
         self.user_id = user_id
         self.client = settings.MONGODB_CLIENT 
         self.db = self.client[db_name]
-        
         self.bucket_name = f"user_{self.user_id}_bucket"
-        # Set chunk_size_bytes here to define how GridFS splits files
+        
         self.bucket = AsyncGridFSBucket(
             self.db, 
             bucket_name=self.bucket_name,
             chunk_size_bytes=chunk_size
         )
-        
-        # self.meta_svc = MetadataService(user_id=user_id)
+        self.meta_svc = MetadataService(user_id=user_id)
 
     async def upload_file_stream(
         self, 
         file_stream: AsyncIterable[bytes], 
         filename: str,
         content_type: str = None,
-        custom_chunk_size: Optional[int] = None
+        progress_callback: Optional[ProgressCallback] = None
     ) -> str:
         """
-        Streams file data directly to GridFS.
-        'custom_chunk_size' allows overriding the bucket default for specific uploads.
+        Streams file data and executes an async callback to track progress.
         """
-        # 1. Prepare options
-        upload_options = {
-            "metadata": {"contentType": content_type, "owner": self.user_id}
-        }
-        if custom_chunk_size:
-            upload_options["chunk_size_bytes"] = custom_chunk_size
-
-        # 2. Use 'async with' for automatic closing and error handling
-        async with self.bucket.open_upload_stream(filename, **upload_options) as grid_in:
-            total_size = 0
+        async with self.bucket.open_upload_stream(
+            filename, 
+            metadata={"contentType": content_type, "owner": self.user_id}
+        ) as grid_in:
+            total_uploaded = 0
+            
             async for chunk in file_stream:
-                # The driver handles buffering these chunks into GridFS blocks
                 await grid_in.write(chunk)
-                total_size += len(chunk)
+                
+                # Update counters and trigger progress tracking
+                total_uploaded += len(chunk)
+                if progress_callback:
+                    await progress_callback(total_uploaded)
             
             file_id_str = str(grid_in._id)
 
-        # 3. Log to MetadataService
+        # Sync metadata
         await self.meta_svc.create_entry(
             file_id=file_id_str,
             filename=filename,
-            size=total_size,
+            size=total_uploaded,
             content_type=content_type,
             storage_type="gridfs"
         )
