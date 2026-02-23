@@ -18,70 +18,74 @@ from gridfs.asynchronous import AsyncGridFSBucket
 
 from api.services.metadata_service import MetadataService
 
+from typing import AsyncIterable, Optional, Dict, Any
+from django.conf import settings
+from bson import ObjectId
+from gridfs.asynchronous import AsyncGridFSBucket
 
 class GridFSService:
-    def __init__(self, db_name: str, user_id: str):
+    def __init__(self, db_name: str, user_id: str, chunk_size: int = 1024 * 1024): # Default 1MB
         if not user_id:
             raise ValueError("GridFSService requires a valid user_id.")
             
         self.user_id = user_id
-        self.client = settings.MONGODB_CLIENT # An AsyncIOMotorClient
+        self.client = settings.MONGODB_CLIENT 
         self.db = self.client[db_name]
         
         self.bucket_name = f"user_{self.user_id}_bucket"
-        self.bucket = AsyncGridFSBucket(self.db, bucket_name=self.bucket_name)
+        # Set chunk_size_bytes here to define how GridFS splits files
+        self.bucket = AsyncGridFSBucket(
+            self.db, 
+            bucket_name=self.bucket_name,
+            chunk_size_bytes=chunk_size
+        )
         
-        self.meta_svc = MetadataService(user_id=user_id)
+        # self.meta_svc = MetadataService(user_id=user_id)
 
     async def upload_file_stream(
         self, 
         file_stream: AsyncIterable[bytes], 
         filename: str,
-        content_type: str = None
+        content_type: str = None,
+        custom_chunk_size: Optional[int] = None
     ) -> str:
         """
-        Streams file data directly to GridFS to minimize memory footprint.
-        Accepts an async iterable (e.g., from a FastAPI request or Django chunked file).
+        Streams file data directly to GridFS.
+        'custom_chunk_size' allows overriding the bucket default for specific uploads.
         """
-        # 1. Open an upload stream in GridFS
-        grid_in = self.bucket.open_upload_stream(
-            filename, 
-            metadata={"contentType": content_type, "owner": self.user_id}
-        )
-        
-        try:
+        # 1. Prepare options
+        upload_options = {
+            "metadata": {"contentType": content_type, "owner": self.user_id}
+        }
+        if custom_chunk_size:
+            upload_options["chunk_size_bytes"] = custom_chunk_size
+
+        # 2. Use 'async with' for automatic closing and error handling
+        async with self.bucket.open_upload_stream(filename, **upload_options) as grid_in:
             total_size = 0
-            # 2. Iterate through incoming chunks and write them immediately
             async for chunk in file_stream:
+                # The driver handles buffering these chunks into GridFS blocks
                 await grid_in.write(chunk)
                 total_size += len(chunk)
-                
-            # 3. Finalize the upload
-            await grid_in.close()
+            
             file_id_str = str(grid_in._id)
 
-            # 4. Sync with MetadataService
-            await self.meta_svc.create_entry(
-                file_id=file_id_str,
-                filename=filename,
-                size=total_size,
-                content_type=content_type,
-                storage_type="gridfs"
-            )
-            
-            return file_id_str
-            
-        except Exception as e:
-            await grid_in.abort()  # Clean up partial data if upload fails
-            raise e
-
+        # 3. Log to MetadataService
+        await self.meta_svc.create_entry(
+            file_id=file_id_str,
+            filename=filename,
+            size=total_size,
+            content_type=content_type,
+            storage_type="gridfs"
+        )
+        
+        return file_id_str
 
     async def upload_file(self, file_data: bytes, filename: str, content_type: str = None) -> str:
         """
-        Uploads a file to GridFS, stores tracking metadata, and returns the file ID.
+        Uploads a full byte buffer to GridFS.
         """
-        # 1. Upload to GridFS
-        # Using open_upload_stream allows for setting metadata within GridFS itself
+        # upload_from_stream takes (filename, source, **kwargs)
         grid_file_id = await self.bucket.upload_from_stream(
             filename, 
             file_data, 
@@ -89,7 +93,6 @@ class GridFSService:
         )
         file_id_str = str(grid_file_id)
 
-        # 2. Sync with your MetadataService for high-level tracking
         await self.meta_svc.create_entry(
             file_id=file_id_str,
             filename=filename,
@@ -97,28 +100,29 @@ class GridFSService:
             content_type=content_type,
             storage_type="gridfs"
         )
-        
         return file_id_str
 
     async def download_file(self, file_id: str) -> Optional[bytes]:
         """
-        Downloads a file from GridFS using its ID.
+        Downloads a file from GridFS using its ID. Returns None if file not found.
         """
         try:
-            grid_out = await self.bucket.open_download_stream(ObjectId(file_id))
-            return await grid_out.read()
+            # open_download_stream returns an AsyncGridOut object
+            stream = await self.bucket.open_download_stream(ObjectId(file_id))
+            return await stream.read()
         except Exception as e:
-            # Consider using a proper logger here
-            print(f"Error downloading file {file_id}: {e}")
+            # Log specific GridFS errors (e.g., NoFile)
             return None
 
     async def get_file_info(self, file_id: str) -> Optional[Dict[str, Any]]:
         """
-        Retrieves file metadata from the GridFS .files collection.
+        Retrieves file metadata from the GridFS .files collection using AsyncCursor.
         """
         cursor = self.bucket.find({"_id": ObjectId(file_id)})
-        if await cursor.to_list(length=1):
-            file_doc = cursor.delegate.next()
+        results = await cursor.to_list(length=1) # Efficiently fetch one result
+        
+        if results:
+            file_doc = results[0]
             return {
                 "filename": file_doc.filename,
                 "upload_date": file_doc.upload_date,
@@ -129,16 +133,13 @@ class GridFSService:
 
     async def delete_file(self, file_id: str) -> bool:
         """
-        Deletes a file from GridFS and removes its entry from the MetadataService.
+        Deletes a file and cleans up the metadata entry.
         """
         try:
-            # 1. Delete from GridFS
+            # Delete from GridFS first
             await self.bucket.delete(ObjectId(file_id))
-            
-            # 2. Delete from MetadataService
+            # Only delete metadata if the storage deletion succeeds
             await self.meta_svc.delete_entry(file_id=file_id)
-            
             return True
-        except Exception as e:
-            print(f"Error deleting file {file_id}: {e}")
+        except Exception:
             return False
