@@ -1,121 +1,83 @@
-import pandas as pd
-from io import BytesIO
-from datetime import datetime, timedelta
-from reportlab.pdfgen import canvas
-
-from django.http import HttpResponse
+from asgiref.sync import sync_to_async
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
 from api.views.base import BaseAPIView
-from api.utils.mongodb import jsonify_object_ids
-from analytics.services.analytics_services import AnalyticsService
-from ..serializers import (
-    SummarySerializer, TimeSeriesSerializer, 
-    SlowQuerySerializer, ExportSerializer
+from analytics.analytics_serializers import (
+    DashboardQuerySerializer,
+    StorageQuerySerializer,
 )
+from analytics.services.analytics_services import AnalyticsService
 
-class DashboardSummaryView(BaseAPIView):
+
+class AnalyticsDashboardView(BaseAPIView):
     """
-    Primary landing view for the Datacube Analytics Dashboard.
-    Provides a consolidated 'Pulse' of the database/collection.
+    GET /api/analytics/dashboard/?db_id=<id>&days=7
+    Returns dashboard charts: historical daily summaries + today's hourly trend.
     """
     permission_classes = [IsAuthenticated]
 
+    @property
+    def analytics_svc(self):
+        # Instantiate service with current user
+        return AnalyticsService(user_id=str(self.request.user.pk))
+
     @BaseAPIView.handle_errors
     async def get(self, request):
-        db_id = request.query_params.get('database_id')
-        days = int(request.query_params.get('days', 7))
-        
-        if not db_id:
-            return Response({"error": "database_id is required"}, status=400)
+        # Validate query parameters
+        params = self.validate_serializer(DashboardQuerySerializer, request.query_params)
+        db_id = params["db_id"]
+        days = params["days"]
 
-        svc = AnalyticsService(user_id=str(request.user.pk))
-        
-        # 1. Fetch Storage Snapshot (from latest Celery task)
-        storage = await svc.get_storage_stats(db_id)
-        
-        # 2. Fetch Chart Data (Historical Summaries + Live Hourly)
-        charts = await svc.get_dashboard_charts(db_id, days=days)
-        
+        # Call the sync service method in a thread
+        charts = await sync_to_async(self.analytics_svc.get_dashboard_charts)(
+            db_id=db_id, days=days
+        )
+
         return Response({
             "success": True,
-            "tenant_id": request.user.id,
-            "db_id": db_id,
-            "summary": storage,
-            "charts": charts
-        })
+            "data": charts
+        }, status=status.HTTP_200_OK)
 
-class SlowQueryLogView(BaseAPIView):
-    """Fetches high-latency queries for performance tuning."""
+
+class AnalyticsStorageView(BaseAPIView):
+    """
+    GET /api/analytics/storage/?db_id=<id>
+    Returns the latest storage snapshot for the database.
+    """
     permission_classes = [IsAuthenticated]
+
+    @property
+    def analytics_svc(self):
+        return AnalyticsService(user_id=str(self.request.user.pk))
 
     @BaseAPIView.handle_errors
     async def get(self, request):
-        svc = AnalyticsService(user_id=str(request.user.pk))
-        
-        # Query raw activity logs where type is 'slow_query'
-        # Using the standard time-series collection 'user_activity'
-        limit = int(request.query_params.get('limit', 20))
-        
-        cursor = svc.activity.find({
-            "metadata.user_id": svc.user_id,
-            "metadata.type": "slow_query"
-        }).sort("timestamp", -1).limit(limit)
-        
-        queries = await cursor.to_list(length=limit)
+        params = self.validate_serializer(StorageQuerySerializer, request.query_params)
+        db_id = params["db_id"]
+
+        stats = await sync_to_async(self.analytics_svc.get_storage_stats)(db_id=db_id)
+
         return Response({
             "success": True,
-            "results": jsonify_object_ids(queries)
-        })
+            "data": stats
+        }, status=status.HTTP_200_OK)
+    
 
-class DataExportView(BaseAPIView):
-    """
-    Generates CSV/PDF reports for business compliance.
-    Utilizes Pandas for CSV generation and ReportLab for PDF.
-    """
+class AnalyticsSlowQueriesView(BaseAPIView):
     permission_classes = [IsAuthenticated]
+
+    @property
+    def analytics_svc(self):
+        return AnalyticsService(user_id=str(self.request.user.pk))
 
     @BaseAPIView.handle_errors
     async def get(self, request):
-        params = self.validate_serializer(ExportSerializer, request.query_params)
-        data_type = params['data_type']
-        file_format = params['format']
-
-        svc = AnalyticsService(user_id=str(request.user.pk))
-        
-        # 1. Fetch data based on type
-        if data_type == 'storage_history':
-            cursor = svc.storage_history.find({"user_id": svc.user_id}).limit(100)
-            data = await cursor.to_list(length=100)
-        else:
-            # Fallback to daily summaries
-            cursor = svc.summaries.find({"user_id": svc.user_id}).limit(100)
-            data = await cursor.to_list(length=100)
-
-        # 2. Handle Export Format
-        if file_format == 'csv':
-            df = pd.DataFrame(jsonify_object_ids(data))
-            output = BytesIO()
-            df.to_csv(output, index=False)
-            response = HttpResponse(output.getvalue(), content_type='text/csv')
-            response['Content-Disposition'] = f'attachment; filename="datacube_{data_type}.csv"'
-            return response
-
-        elif file_format == 'pdf':
-            output = BytesIO()
-            p = canvas.Canvas(output)
-            p.drawString(100, 800, f"Datacube Analytics Report: {data_type}")
-            p.drawString(100, 780, f"Generated for User: {request.user.email}")
-            
-            # Simple PDF Table Simulation
-            y = 750
-            for item in data[:20]:
-                p.drawString(100, y, f"Date: {item.get('timestamp') or item.get('date')} - Value: {item.get('total_size') or item.get('total_ops')}")
-                y -= 20
-            
-            p.save()
-            response = HttpResponse(output.getvalue(), content_type='application/pdf')
-            response['Content-Disposition'] = f'attachment; filename="datacube_report.pdf"'
-            return response
+        db_id = request.query_params.get("db_id")
+        limit = int(request.query_params.get("limit", 20))
+        # Assuming we add get_slow_queries method to AnalyticsService
+        slow_queries = await sync_to_async(self.analytics_svc.get_slow_queries)(
+            db_id=db_id, limit=limit
+        )
+        return Response({"success": True, "data": slow_queries})
