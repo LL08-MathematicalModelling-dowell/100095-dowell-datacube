@@ -65,7 +65,7 @@ class GridFSService:
             file_id_str = str(grid_in._id)
 
         # Sync metadata
-        await self.meta_svc.create_entry(
+        await self.meta_svc.create_file_entry(
             file_id=file_id_str,
             filename=filename,
             size=total_uploaded,
@@ -87,7 +87,7 @@ class GridFSService:
         )
         file_id_str = str(grid_file_id)
 
-        await self.meta_svc.create_entry(
+        await self.meta_svc.create_file_entry(
             file_id=file_id_str,
             filename=filename,
             size=len(file_data),
@@ -133,7 +133,8 @@ class GridFSService:
             # Delete from GridFS first
             await self.bucket.delete(ObjectId(file_id))
             # Only delete metadata if the storage deletion succeeds
-            await self.meta_svc.delete_entry(file_id=file_id)
+            await self.meta_svc.delete_file_entry(file_id=file_id)
             return True
         except Exception:
             return False
+    
