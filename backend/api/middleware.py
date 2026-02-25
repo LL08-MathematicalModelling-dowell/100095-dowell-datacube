@@ -50,9 +50,9 @@ class UsageMeteringMiddleware:
             user_doc = user_manager.get_user_by_id(user_id)
 
         # Enforce limits
-        plan = user_doc.get('subscription_plan', 'free')
+        plan = user_doc.get('subscription_plan', 'free') # type: ignore
         limit = self.plan_limits.get(plan, self.plan_limits['free'])['api_calls']
-        current_usage = user_doc['usage']['api_calls_current_month']
+        current_usage = user_doc['usage']['api_calls_current_month'] # type: ignore
 
         if current_usage >= limit:
             return JsonResponse(
@@ -62,7 +62,7 @@ class UsageMeteringMiddleware:
 
         # Increment usage count using an atomic operation
         user_manager.users_collection.update_one(
-            {'_id': user_doc['_id']},
+            {'_id': user_doc['_id']}, # type: ignore
             {'$inc': {'usage.api_calls_current_month': 1}}
         )
 

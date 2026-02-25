@@ -42,7 +42,7 @@ class GridFSService:
         self, 
         file_stream: AsyncIterable[bytes], 
         filename: str,
-        content_type: str = None,
+        content_type: str | None = None,
         progress_callback: Optional[ProgressCallback] = None
     ) -> str:
         """
@@ -75,7 +75,7 @@ class GridFSService:
         
         return file_id_str
 
-    async def upload_file(self, file_data: bytes, filename: str, content_type: str = None) -> str:
+    async def upload_file(self, file_data: bytes, filename: str, content_type: str | None = None) -> str:
         """
         Uploads a full byte buffer to GridFS.
         """

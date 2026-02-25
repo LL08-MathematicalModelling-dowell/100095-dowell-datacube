@@ -5,6 +5,7 @@ Handles logging, aggregation, and retrieval of analytics data.
 
 import logging
 from datetime import datetime, timedelta, timezone
+from api.tests.conftest import db_id
 from api.utils.mongodb import get_sync_client, jsonify_object_ids
 
 
@@ -56,6 +57,15 @@ class AnalyticsService:
             "duration": duration_ms,
             "detail": details or {}
         })
+
+    def get_slow_queries(self, db_id: str, limit: int = 20):
+        """Retrieves recent slow queries for a given database."""
+        return self.activity.find({
+            "metadata.user_id": self.user_id,
+            "metadata.type": "slow_query",
+            "detail.db_id": db_id
+        }).sort("timestamp", -1).limit(limit).to_list(limit) # type: ignore 
+
 
     def collect_time_series_metrics(self, db_id: str, metrics: dict):
         """Snapshots DB health metrics from a background task."""
