@@ -89,7 +89,7 @@ class AnalyticsService:
             }}
         ]
         
-        for result in self.activity.aggregate(pipeline):
+        for result in self.activity.aggregate(pipeline).to_list(None): # type: ignore
             self.summaries.update_one(
                 {"date": start, "user_id": self.user_id},
                 {"$set": result},
@@ -126,7 +126,7 @@ class AnalyticsService:
             {"$sort": {"_id": 1}}
         ]
 
-        today_trend = self.activity.aggregate(raw_pipeline).to_list(24)
+        today_trend = self.activity.aggregate(raw_pipeline).to_list(24) # type: ignore
 
         return {
             "historical": jsonify_object_ids(summaries),
