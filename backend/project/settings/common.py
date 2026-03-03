@@ -101,14 +101,15 @@ MONGODB_URI = os.getenv('MONGODB_URI', config.get('mongo_path'))
 MONGODB_DATABASE = os.getenv('MONGODB_DATABASE', config.get('database'))
 MONGODB_COLLECTION = os.getenv('MONGODB_COLLECTION', config.get('collection'))
 DATACUBE_V2_AUTH_DB = os.getenv("AUTH_DB_NAME")
+FILE_STORAGE_DB_NAME = os.getenv("FILE_STORAGE_DB_NAME", config.get("file_storage_db_name", "datacube_V2_db_files"))
 
 
 if not all([MONGODB_URI, MONGODB_DATABASE, MONGODB_COLLECTION, DATACUBE_V2_AUTH_DB]):
     raise ValueError("MongoDB settings missing. Please set them in config.json or environment.")
 
 MONGODB_CLIENT = AsyncMongoClient(MONGODB_URI)
-METADATA_DB = MONGODB_CLIENT[MONGODB_DATABASE]
-METADATA_COLLECTION = METADATA_DB[MONGODB_COLLECTION]
+METADATA_DB = MONGODB_CLIENT[MONGODB_DATABASE] # type: ignore
+METADATA_COLLECTION = METADATA_DB[MONGODB_COLLECTION] # type: ignore
 FILE_METADATA_COLLECTION = METADATA_DB["file_metadata"]
 
 

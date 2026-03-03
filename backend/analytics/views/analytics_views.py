@@ -33,6 +33,7 @@ class AnalyticsDashboardView(BaseAPIView):
 
     @BaseAPIView.handle_errors
     async def get(self, request):
+        print("Received request for dashboard analytics with params:", request.query_params)
         # Validate query parameters
         params = self.validate_serializer(DashboardQuerySerializer, request.query_params)
         db_id = params["db_id"]

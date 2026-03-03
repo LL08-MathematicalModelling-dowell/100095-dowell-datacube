@@ -41,7 +41,8 @@ class AnalyticsService:
         """Logs Read/Write performance and success rates."""
         self.activity.insert_one({
             "timestamp": datetime.now(timezone.utc),
-            "metadata": {"user_id": self.user_id, "type": "io", "coll": collection},
+            "metadata": {"user_id": self.user_id, "type": "io", "coll": collection, "db_id": details.get("db_id")},
+            "type": "io",
             "io_type": io_type,
             "latency": duration_ms,
             "success": success,
@@ -118,6 +119,7 @@ class AnalyticsService:
         # 1. Get historical daily summaries
         summaries = self.summaries.find({
             "user_id": self.user_id,
+            "db_id": db_id,
             "date": {"$gte": cutoff}
         }).sort("date", 1).to_list(100)
 
