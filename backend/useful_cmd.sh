@@ -3,6 +3,7 @@ DJANGO_SETTINGS_MODULE=project.settings.development uvicorn project.asgi:applica
 docker run -d -p 6379:6379 redis:7-alpine
 
 docker run -d --name datacube-redis -p 6379:6379 redis:7-alpine
+celery -A project worker --loglevel=info -Q analytics,maintenance,celery --pool=gevent
 
 celery -A project worker --loglevel=info -Q analytics,maintenance,celery
 
@@ -12,5 +13,4 @@ celery -A project beat --loglevel=info
 celery -A project worker --loglevel=info -Q analytics,maintenance,celery --pool=solo
 
 pip install gevent
-celery -A project worker --loglevel=info -Q analytics,maintenance,celery --pool=gevent
 
