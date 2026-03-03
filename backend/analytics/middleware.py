@@ -2,6 +2,9 @@ import os
 import time
 import json
 import logging
+from urllib import request
+
+from django.http import RawPostDataException
 from .tasks import log_request_metrics_task
 
 logger = logging.getLogger(__name__)
@@ -177,7 +180,7 @@ class DatacubeObservabilityMiddleware:
         duration = (time.perf_counter() - start_time) * 1000
 
         # 6. Offload to Celery for authenticated users
-        if hasattr(request, 'user') and request.user.is_authenticated:
+        if hasattr(request, 'user') and request.user is not None and request.user.is_authenticated:
             # Get request body data from various sources
             request_body = {}
             if hasattr(request, '_parsed_json'):
@@ -201,7 +204,13 @@ class DatacubeObservabilityMiddleware:
             )
             
             # Calculate request/response sizes
-            request_size = len(request.body) if request.body else 0
+            # request_size = len(request.body) if request.body else 0
+            try:
+                request_size = len(request.body) if request.body else 0
+            except RawPostDataException:
+                # Body already read (e.g., file upload); fall back to CONTENT_LENGTH
+                request_size = int(request.META.get('CONTENT_LENGTH', 0))
+        
             response_size = len(response.content) if hasattr(response, 'content') else 0
             
             # Extract MongoDB-specific metrics

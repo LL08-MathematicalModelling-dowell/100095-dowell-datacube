@@ -1,12 +1,8 @@
-from django.test import TestCase
-
-# Create your tests here.
 import pytest
-from django.contrib.auth.models import AnonymousUser
 from django.test import RequestFactory
 from rest_framework import status
 
-from analytics.views.analytics_views import AnalyticsDashboardView, AnalyticsStorageView
+from analytics.views.analytics_views import AnalyticsDashboardView, AnalyticsExportView, AnalyticsStorageView
 
 
 @pytest.fixture
@@ -169,3 +165,20 @@ class TestAnalyticsStorageView:
 
         assert response.status_code == 500
         assert 'MongoDB error' in response.data.get('message', '')
+
+    async def test_export_pdf_success(self, request_factory, mock_user, mocker):
+        mock_service = mocker.patch('api.views.analytics_views.AnalyticsService')
+        mock_service.return_value.get_dashboard_charts.return_value = {}
+        mock_service.return_value.get_storage_stats.return_value = {}
+        mock_generate = mocker.patch('api.views.analytics_views.generate_pdf_report', return_value=b'%PDF-1.4...')
+
+        request = request_factory.get('/analytics/export/', {'db_id': 'db123', 'days': 30})
+        request.user = mock_user
+
+        view = AnalyticsExportView()
+        response = await view.get(request)
+
+        assert response.status_code == 200
+        assert response['Content-Type'] == 'application/pdf'
+        assert 'attachment; filename=' in response['Content-Disposition']
+        mock_generate.assert_called_once()

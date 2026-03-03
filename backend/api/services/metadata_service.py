@@ -1,7 +1,3 @@
-# metadata_service.py (extended)
-# Service for managing metadata documents in MongoDB collections.
-# Now includes file metadata management for GridFS.
-
 import collections
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional, Any, Tuple
@@ -27,6 +23,24 @@ class MetadataService:
         # File metadata collection (new)
         self._file_coll = settings.FILE_METADATA_COLLECTION
         self._client = settings.MONGODB_CLIENT
+
+    def _stringify_objectids(self, doc):
+        """Recursively convert ObjectId instances to strings in a document."""
+        if doc is None:
+            return None
+        if isinstance(doc, list):
+            return [self._stringify_objectids(item) for item in doc]
+        if isinstance(doc, dict):
+            result = {}
+            for k, v in doc.items():
+                if isinstance(v, ObjectId):
+                    result[k] = str(v)
+                elif isinstance(v, (dict, list)):
+                    result[k] = self._stringify_objectids(v)
+                else:
+                    result[k] = v
+            return result
+        return doc
 
     # ----------------------------------------------------------------------
     # Existing methods for database metadata (unchanged, kept for context)
@@ -392,7 +406,9 @@ class MetadataService:
         }
         result = await self._file_coll.insert_one(entry, session=session)
         entry["_id"] = result.inserted_id
-        return entry
+
+        return self._stringify_objectids(entry) # type: ignore
+        # return entry
 
     async def delete_file_entry(self, file_id: str, *, session=None) -> bool:
         """
@@ -410,7 +426,8 @@ class MetadataService:
         """
         Retrieves a file metadata entry scoped to the user.
         """
-        return await self._file_coll.find_one(self._get_file_user_filter(file_id))
+        doc = await self._file_coll.find_one(self._get_file_user_filter(file_id))
+        return self._stringify_objectids(doc) if doc else None # type: ignore
 
     async def list_files_paginated(
         self, page: int = 1, page_size: int = 50, search_term: Optional[str] = None
@@ -425,13 +442,8 @@ class MetadataService:
         
         total = await self._file_coll.count_documents(query)
         skip = (page - 1) * page_size
-        
         cursor = self._file_coll.find(query).sort("uploaded_at", -1).skip(skip).limit(page_size)
         docs = await cursor.to_list(length=page_size)
         
-        # Convert _id (ObjectId) to string for JSON serialization
-        for doc in docs:
-            doc["_id"] = str(doc["_id"])
-            # file_id is already a string
-        
-        return total, docs
+        docs = [self._stringify_objectids(doc) for doc in docs]
+        return total, docs # type: ignore
