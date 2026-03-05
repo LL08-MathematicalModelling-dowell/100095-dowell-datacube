@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 import useAuthStore from '../store/authStore';
+import FilesSection from '../components/FileSection';
 
 // Define validation schema
 const collectionFieldSchema = z.object({
@@ -126,6 +127,8 @@ const Overview = () => {
             </div>
           </div>
         </section>
+        
+        <FilesSection />
 
         {/* Databases List */}
         <section className="p-6 bg-slate-800/50 rounded-xl border border-slate-700/80 mb-8">

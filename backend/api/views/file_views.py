@@ -15,20 +15,57 @@ class FileListView(BaseAPIView):
     """
     permission_classes = [IsAuthenticated]
 
+
     @BaseAPIView.handle_errors
     async def get(self, request):
         params = self.validate_serializer(FileListQuerySerializer, request.query_params)
+        page = params.get("page", 1)
+        page_size = params.get("page_size", 10)
+        
+        # 1. Fetch files and basic total count
         total, files = await self.metadata_svc.list_files_paginated(
-            page=params.get("page", 1),
-            page_size=params.get("page_size", 50),
+            page=page,
+            page_size=page_size,
             search_term=params.get("search", "")
         )
+
+        # 2. Get aggregate stats (Total size and count for the user)
+        # Assuming you add a 'get_storage_stats' to your metadata_service
+        stats = await self.metadata_svc.get_storage_stats() 
+        # stats example: {"total_count": 15, "total_size_bytes": 10485760}
+
         return Response({
             "success": True,
             "data": files,
-            "pagination": {"total": total}},
-            status=status.HTTP_200_OK
-        )
+            "stats": {
+                "total_files": stats.get("total_count", total),
+                "total_storage_bytes": stats.get("total_size_bytes", 0),
+            },
+            "pagination": {
+                "current_page": page,
+                "page_size": page_size,
+                "total_items": total,
+                "total_pages": (total + page_size - 1) // page_size if page_size > 0 else 0
+            }
+        }, status=status.HTTP_200_OK)
+
+    # ... post method remains the same ...
+
+
+    # @BaseAPIView.handle_errors
+    # async def get(self, request):
+    #     params = self.validate_serializer(FileListQuerySerializer, request.query_params)
+    #     total, files = await self.metadata_svc.list_files_paginated(
+    #         page=params.get("page", 1),
+    #         page_size=params.get("page_size", 50),
+    #         search_term=params.get("search", "")
+    #     )
+    #     return Response({
+    #         "success": True,
+    #         "data": files,
+    #         "pagination": {"total": total}},
+    #         status=status.HTTP_200_OK
+    #     )
 
     @BaseAPIView.handle_errors
     async def post(self, request):
