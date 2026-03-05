@@ -416,18 +416,18 @@ export const apiDocs: ApiGroup[] = [
   {
     group: "File Storage API (GridFS)",
     description:
-      "Endpoints for high-performance large file storage using MongoDB GridFS. Files are stored in a shared high-availability bucket and indexed by user ownership. Supports streaming uploads and downloads.",
+      "Endpoints for high-performance large file storage using MongoDB GridFS. Files are stored in a shared high-availability bucket and indexed by user ownership. Supports streaming uploads and downloads with integrated storage telemetry.",
     auth_header: "Authorization: Api-Key <YOUR_API_KEY>",
     endpoints: [
       {
         name: "List Files",
-        description: "Retrieve a paginated list of metadata for all files you have uploaded.",
+        description: "Retrieve a paginated list of file metadata along with global storage statistics for the authenticated user.",
         auth_required: "API Key",
         url: "/api/files/",
         methods: [
           {
             method: "GET",
-            params: "page=1&page_size=50&search=report",
+            params: "page=1&page_size=10&search=report",
             response: JSON.stringify(
               {
                 success: true,
@@ -441,11 +441,15 @@ export const apiDocs: ApiGroup[] = [
                     uploaded_at: "2024-03-05T12:00:00Z"
                   }
                 ],
+                stats: {
+                  total_files: 15,
+                  total_storage_bytes: 52428800
+                },
                 pagination: {
-                  page: 1,
-                  page_size: 50,
-                  total_items: 1,
-                  total_pages: 1
+                  current_page: 1,
+                  page_size: 10,
+                  total_items: 15,
+                  total_pages: 2
                 }
               },
               null,
@@ -456,19 +460,19 @@ export const apiDocs: ApiGroup[] = [
       },
       {
         name: "Upload File",
-        description: "Upload a file using multipart/form-data. Files are streamed directly to storage to handle large sizes efficiently.",
+        description: "Stream a file to GridFS using multipart/form-data. Automatically calculates storage quota and updates user metadata.",
         auth_required: "API Key",
         url: "/api/files/",
         methods: [
           {
             method: "POST",
-            body: "Content-Type: multipart/form-data\n\nFields:\n- file: (Binary data)\n- filename: (Optional) custom_name.pdf\n- content_type: (Optional) application/pdf",
+            body: "Content-Type: multipart/form-data\n\nFields:\n- file: (Binary data)\n- filename: (Optional) string\n- content_type: (Optional) string",
             response: JSON.stringify(
               {
                 success: true,
                 file_id: "65e8a5b2f1d8b1a2d3e45678",
                 filename: "annual_report_2023.pdf",
-                size: 1048576
+                file_size: 1048576
               },
               null,
               2
@@ -478,7 +482,7 @@ export const apiDocs: ApiGroup[] = [
       },
       {
         name: "Get File Detail",
-        description: "Retrieve physical storage information and custom metadata for a specific file.",
+        description: "Retrieve physical storage info (chunks, upload date) and ownership metadata for a specific file.",
         auth_required: "API Key",
         url: "/api/files/:file_id/",
         methods: [
@@ -493,7 +497,7 @@ export const apiDocs: ApiGroup[] = [
                   length: 1048576,
                   metadata: {
                     contentType: "application/pdf",
-                    user_id: "user_uuid_123"
+                    user_id: "user_69a68586..."
                   }
                 }
               },
@@ -505,20 +509,20 @@ export const apiDocs: ApiGroup[] = [
       },
       {
         name: "Download File",
-        description: "Stream the binary content of a file. Returns a StreamingHttpResponse with appropriate Content-Disposition headers for browser downloads.",
+        description: "Stream the binary content of a file. Includes ownership verification and automatic Content-Type detection.",
         auth_required: "API Key",
         url: "/api/files/:file_id/download/",
         methods: [
           {
             method: "GET",
-            response: "(Binary Stream: application/octet-stream or specific Content-Type)",
+            response: "(Binary Stream: application/octet-stream or application/pdf)",
           },
         ],
-        notes: "This endpoint returns a raw stream. Use this URL directly in <a> tags or <img> src attributes."
+        notes: "Uses StreamingHttpResponse to minimize memory footprint. Directly compatible with <a download> or <img src>."
       },
       {
         name: "Delete File",
-        description: "Permanently remove a file from GridFS storage and its associated metadata entry.",
+        description: "Permanently remove file chunks from GridFS and cleanup the associated metadata document.",
         auth_required: "API Key",
         url: "/api/files/:file_id/",
         methods: [
@@ -536,5 +540,6 @@ export const apiDocs: ApiGroup[] = [
         ],
       },
     ],
-  },
+  }
+
 ];
