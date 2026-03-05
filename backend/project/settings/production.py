@@ -14,8 +14,8 @@ if not SECRET_KEY:
 DEBUG = False
 
 # Define the allowed hosts for your production site
-# ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
+# ALLOWED_HOSTS = ['*']
 if not ALLOWED_HOSTS:
     raise ValueError("No ALLOWED_HOSTS set for production environment.")
 
