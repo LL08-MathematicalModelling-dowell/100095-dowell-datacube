@@ -1,9 +1,38 @@
 """Service for managing documents in a MongoDB collection."""
 
 import json
-from bson import ObjectId
+from bson import ObjectId # pyright: ignore[reportMissingImports]
 from typing import Any, Dict
 
+
+# api/utils/mongodb.py (or where you define your client)
+import asyncio
+from pymongo import AsyncMongoClient, MongoClient # pyright: ignore[reportMissingImports]
+from django.conf import settings # type: ignore
+
+_mongo_client = None
+
+def get_async_client():
+    """
+    Returns a thread-safe Async Motor Client.
+    Ensures that Celery workers don't share the same loop as the main process.
+    """
+    global _mongo_client
+    if _mongo_client is None:
+        # Create a new client for this specific process/loop
+        _mongo_client = AsyncMongoClient(settings.MONGODB_URI)
+    return _mongo_client
+
+def get_sync_client():
+    """
+    Returns a thread-safe Sync PyMongo Client.
+    Ensures that Celery workers don't share the same loop as the main process.
+    """
+    global _mongo_client
+    if _mongo_client is None:
+        # Create a new client for this specific process/loop
+        _mongo_client = MongoClient(settings.MONGODB_URI)
+    return _mongo_client
 
 def to_object_id(oid):
     try:

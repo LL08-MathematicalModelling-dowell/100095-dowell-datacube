@@ -12,10 +12,11 @@ if not SECRET_KEY:
     raise ValueError("No SECRET_KEY set for production environment.")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True #False
 
 # Define the allowed hosts for your production site
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
+# ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
+ALLOWED_HOSTS = ['*']
 if not ALLOWED_HOSTS:
     raise ValueError("No ALLOWED_HOSTS set for production environment.")
 
@@ -81,3 +82,19 @@ REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'] = (
 #         },
 #     },
 # }
+
+
+
+# Optional: Better result backend (requires django-celery-results)
+# CELERY_RESULT_BACKEND = 'django-db'
+# INSTALLED_APPS += ['django_celery_results', 'django_celery_beat']
+
+# For django-celery-beat (persistent scheduler - recommended for production)
+# CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+
+CELERY_BROKER_URL = 'redis://redis:6379/0'
+CELERY_RESULT_BACKEND = 'redis://redis:6379/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'

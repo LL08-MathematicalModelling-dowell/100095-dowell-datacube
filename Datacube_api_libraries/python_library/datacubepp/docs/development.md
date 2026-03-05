@@ -130,7 +130,7 @@ Follow these coding standards to ensure consistency and quality:
   black .
   ```
 
-- Use `pylint` for static code analysis:
+- Use `pylint` for static code analytics:
 
   ```bash
   pylint datacubepp

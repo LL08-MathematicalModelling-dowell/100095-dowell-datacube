@@ -1,6 +1,14 @@
-version: "3.9"
-
 services:
+  # 1. Redis Service (Message Broker)
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # In production, we don't expose 6379 to the host unless needed for debugging.
+    # The containers communicate via the 'app-network'.
+    networks:
+      - app-network
+
+  # 2. Web Backend (ASGI Server)
   backend:
     build:
       context: ./backend
@@ -10,16 +18,34 @@ services:
       - ./backend/.env
     ports:
       - "8000:8000"
-    command:
-      ["gunicorn", \
-     "project.asgi:application", \
-     "--bind", "0.0.0.0:8000", \
-     "--workers", "3", \
-     "--worker-class", "uvicorn_worker.UvicornWorker", \
-     "--log-level", "info"]
+    command: >
+      gunicorn project.asgi:application 
+      --bind 0.0.0.0:8000 
+      --workers 3 
+      --worker-class uvicorn.workers.UvicornWorker 
+      --log-level info
+    depends_on:
+      - redis
     networks:
       - app-network
 
+  # 3. Celery Worker (Background Tasks)
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    # We use the exact command from your local testing, adapted for the container.
+    command: celery -A project worker --loglevel=info -Q analytics,maintenance,celery --pool=gevent
+    depends_on:
+      - redis
+      - backend
+    networks:
+      - app-network
+
+  # 4. Frontend Application
   react-app:
     build:
       context: ./UI/datacube-UI

@@ -1,8 +1,9 @@
 """
-Modernized CRUD operations for MongoDB documents.
+Modernized CRUD operations for MongoDB documents with Integrated Analytics.
 Optimized for Django 6.0+ and DRF 3.15+ standards.
 """
 
+from api.services.metadata_service import MetadataService
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -20,35 +21,57 @@ from api.utils.mongodb import (
     normalize_id_filter
 )
 from api.services.document_service import DocumentService
+from analytics.signals.definitions import document_created_signal
+
 
 
 class DataCrudView(BaseAPIView):
     """
     CRUD operations for documents in a user-owned MongoDB collection.
-    
-    This view leverages the handle_errors decorator to eliminate repetitive 
-    try-except blocks, maintaining a clean 'happy path' logic.
+    Includes automated telemetry and quota enforcement.
     """
     permission_classes = [IsAuthenticated]
     
     @property
     def doc_svc(self):
-        """
-        Instantiates the service with the current request's user_id.
-        This is called only when a request is made.
-        """
         return DocumentService(user_id=str(self.request.user.pk))
+    
+    @property
+    def metadata_svc(self):
+        """
+        Stateful service injection: Instantiates the service with the 
+        active user's ID for every request.
+        """
+        return MetadataService(user_id=str(self.request.user.pk))
 
     @BaseAPIView.handle_errors
     async def post(self, request):
-        """Create new documents with automatic ownership verification."""
+        """Create new documents with automatic ownership and quota verification."""
         payload = self.validate_serializer(AsyncPostDocumentSerializer, request.data)
+        
+        # 1. Decision Gate: Check Quota before heavy lifting
+        # (Assuming check_quota_is_exceeded is implemented in MetadataService)
+        if await self.metadata_svc.check_quota_is_exceeded():
+            return Response({"success": False, "message": "Storage quota exceeded."}, status=403)
 
         result = await self.doc_svc.create_docs(
             db_id=payload["database_id"],
             coll_name=payload["collection_name"],
             docs=payload["documents"]
         )
+
+
+        # 2. TRIGGER: Analytics Signal for Volume Tracking
+        # After successful insert_many
+        if result and result.inserted_ids:
+            document_created_signal.send(
+                sender=self.__class__,
+                user_id=str(request.user.id),
+                db_id=payload["database_id"],
+                coll_name=payload["collection_name"],
+                count=len(result.inserted_ids)
+            )
+
 
         return Response({
             "success": True,
@@ -58,9 +81,6 @@ class DataCrudView(BaseAPIView):
     @BaseAPIView.handle_errors
     async def get(self, request):
         """Read documents with structured query validation and paging."""
-        user_id = request.user.id
-        
-        # 1. Validate query params using a serializer instead of manual get() calls
         params = self.validate_serializer(DocumentQuerySerializer, request.query_params)
         
         db_id = params["database_id"]
@@ -68,11 +88,8 @@ class DataCrudView(BaseAPIView):
         page = params.get("page", 1)
         page_size = params.get("page_size", 50)
         
-        # 2. Process filters safely
         filt = safe_load_filters(params.get("filters", "{}"))
 
-            
-        # 3. Service call
         total, docs = await self.doc_svc.list_docs(
             db_id, coll_name, filt, page, page_size
         )
@@ -112,7 +129,6 @@ class DataCrudView(BaseAPIView):
     @BaseAPIView.handle_errors
     async def delete(self, request):
         """Handle soft or hard deletions with unified response count."""
-        user_id = request.user.id
         payload = self.validate_serializer(DeleteDocumentSerializer, request.data)
 
         raw_filters = safe_load_filters(payload.get("filters", {}))
@@ -130,3 +146,4 @@ class DataCrudView(BaseAPIView):
             "success": True, 
             "count": result.modified_count if soft_delete else result.deleted_count
         }, status=status.HTTP_200_OK)
+

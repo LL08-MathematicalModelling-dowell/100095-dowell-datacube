@@ -5,15 +5,18 @@ import os
 import json
 from pathlib import Path
 from datetime import timedelta
-from pymongo import AsyncMongoClient
+from pymongo import AsyncMongoClient # type: ignore
 # from celery.schedules import crontab
-from dotenv import load_dotenv
+from dotenv import load_dotenv # type: ignore
+
+
+load_dotenv()
 
 # --- Core Paths and Config Loading ---
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-load_dotenv()
 
+DATACUBE_FREE_TIER_MB = 500
 
 # Paths
 CONFIG_PATH = BASE_DIR / 'config.json'
@@ -26,7 +29,7 @@ else:
 
 # --- Security ---
 # SECRET_KEY will be set in development.py and production.py
-SECRET_KEY = os.getenv('SECRET_KEY_DUMMY', os.getenv('SECRET_KEY'))
+SECRET_KEY = os.getenv('SECRET_KEY', 'SECRET_KEY_DUMMY')
 
 # --- Application Definition ---
 INSTALLED_APPS = [
@@ -41,10 +44,10 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework',
     'rest_framework_simplejwt',
-    # 'rest_framework_simplejwt.token_blacklist', # For token rotation
     # Local Apps
     'api',
     'core',
+    'analytics',
 ]
 
 MIDDLEWARE = [
@@ -56,6 +59,7 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'api.middleware.UsageMeteringMiddleware',
+    'analytics.middleware.DatacubeObservabilityMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -83,22 +87,12 @@ TEMPLATES = [
 
 # --- Database ---
 # We keep the default as SQLite. Production will override this.
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-#     }
-# }
-
-# --- MongoDB Connection (Centralized and Cleaned) ---
-# Moved client instantiation out of settings to avoid global state issues.
-# It's better to instantiate the client where it's needed (e.g., in a db.py file)
-# MONGODB_URI = os.getenv('MONGODB_URI')
-# MONGODB_DATABASE = os.getenv('MONGODB_DATABASE')
-# MONGODB_COLLECTION = os.getenv('MONGODB_COLLECTION')
-
-# if not all([MONGODB_URI, MONGODB_DATABASE, MONGODB_COLLECTION]):
-#     raise Exception("MongoDB settings missing. Please set them in your .env file.")
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+    }
+}
 
 # MongoDB
 MONGODB_URI = os.getenv('MONGODB_URI', config.get('mongo_path'))
@@ -107,14 +101,16 @@ MONGODB_URI = os.getenv('MONGODB_URI', config.get('mongo_path'))
 MONGODB_DATABASE = os.getenv('MONGODB_DATABASE', config.get('database'))
 MONGODB_COLLECTION = os.getenv('MONGODB_COLLECTION', config.get('collection'))
 DATACUBE_V2_AUTH_DB = os.getenv("AUTH_DB_NAME")
+FILE_STORAGE_DB_NAME = os.getenv("FILE_STORAGE_DB_NAME", config.get("file_storage_db_name", "datacube_V2_db_files"))
 
 
 if not all([MONGODB_URI, MONGODB_DATABASE, MONGODB_COLLECTION, DATACUBE_V2_AUTH_DB]):
     raise ValueError("MongoDB settings missing. Please set them in config.json or environment.")
 
 MONGODB_CLIENT = AsyncMongoClient(MONGODB_URI)
-METADATA_DB = MONGODB_CLIENT[MONGODB_DATABASE]
-METADATA_COLLECTION = METADATA_DB[MONGODB_COLLECTION]
+METADATA_DB = MONGODB_CLIENT[MONGODB_DATABASE] # type: ignore
+METADATA_COLLECTION = METADATA_DB[MONGODB_COLLECTION] # type: ignore
+FILE_METADATA_COLLECTION = METADATA_DB["file_metadata"]
 
 
 # --- Password Validation ---
@@ -170,3 +166,13 @@ SIMPLE_JWT = {
 #         "args": (False,)  # Set dry_run=False in production
 #     },
 # }
+
+
+
+
+# project/settings.py
+CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
+CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'

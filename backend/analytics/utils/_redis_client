@@ -1,0 +1,196 @@
+# utils/redis_client.py
+import redis
+from django.conf import settings
+from django.core.cache import cache as django_cache
+import logging
+import json
+
+logger = logging.getLogger(__name__)
+
+# Redis client for direct access (if needed)
+_redis_client = None
+
+def get_redis_client():
+    """Get or create Redis client singleton."""
+    global _redis_client
+    if _redis_client is None:
+        try:
+            _redis_client = redis.Redis(
+                host=settings.REDIS_SETTINGS.get('host', 'localhost'),
+                port=settings.REDIS_SETTINGS.get('port', 6379),
+                db=settings.REDIS_SETTINGS.get('db', 0),
+                password=settings.REDIS_SETTINGS.get('password'),
+                socket_timeout=settings.REDIS_SETTINGS.get('socket_timeout', 5),
+                socket_connect_timeout=settings.REDIS_SETTINGS.get('socket_connect_timeout', 5),
+                retry_on_timeout=settings.REDIS_SETTINGS.get('retry_on_timeout', True),
+                max_connections=settings.REDIS_SETTINGS.get('max_connections', 50),
+                decode_responses=True,  # Automatically decode responses to strings
+            )
+            # Test connection
+            _redis_client.ping()
+            logger.info("Redis client initialized successfully")
+        except redis.ConnectionError as e:
+            logger.error(f"Failed to connect to Redis: {e}")
+            _redis_client = None
+            raise
+    return _redis_client
+
+
+def cache_get_or_set(key, func, timeout=None, cache_alias='default'):
+    """
+    Get value from cache, or set it if not present.
+    
+    Args:
+        key: Cache key
+        func: Function to call if key not in cache
+        timeout: Cache timeout in seconds
+        cache_alias: Which cache to use (default, analytics, etc.)
+    
+    Returns:
+        Cached or computed value
+    """
+    from django.core.cache import caches
+    
+    cache = caches[cache_alias]
+    value = cache.get(key)
+    
+    if value is None:
+        value = func()
+        cache.set(key, value, timeout)
+        logger.debug(f"Cache miss for key '{key}', computed and cached")
+    else:
+        logger.debug(f"Cache hit for key '{key}'")
+    
+    return value
+
+
+def delete_pattern(pattern, cache_alias='default'):
+    """
+    Delete all keys matching a pattern.
+    
+    Args:
+        pattern: Redis pattern (e.g., 'prefix:*')
+        cache_alias: Which cache to use
+    """
+    from django.core.cache import caches
+    
+    cache = caches[cache_alias]
+    try:
+        # This works with django-redis backend
+        cache.delete_pattern(pattern)
+        logger.info(f"Deleted cache keys matching pattern: {pattern}")
+    except AttributeError:
+        # Fallback for other backends
+        logger.warning(f"Cannot delete by pattern with current cache backend")
+        cache.clear()
+
+
+def get_cache_stats(cache_alias='default'):
+    """
+    Get cache statistics.
+    
+    Returns:
+        Dict with cache statistics
+    """
+    from django.core.cache import caches
+    
+    cache = caches[cache_alias]
+    client = cache.client
+    
+    try:
+        # For django-redis
+        stats = {
+            'info': client.get_client().info(),
+            'dbsize': client.get_client().dbsize(),
+            'keys': len(client.keys('*')),
+        }
+        return stats
+    except:
+        return {'error': 'Could not retrieve cache stats'}
+
+
+def cache_memoize(timeout=300):
+    """
+    Decorator to memoize function results in cache.
+    
+    Args:
+        timeout: Cache timeout in seconds
+    
+    Example:
+        @cache_memoize(timeout=3600)
+        def expensive_computation(user_id):
+            # ... heavy computation ...
+            return result
+    """
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            # Create cache key from function name and arguments
+            key_parts = [func.__module__, func.__name__]
+            key_parts.extend([str(arg) for arg in args])
+            key_parts.extend([f"{k}:{v}" for k, v in sorted(kwargs.items())])
+            cache_key = "memoize:" + ":".join(key_parts)
+            
+            return cache_get_or_set(cache_key, lambda: func(*args, **kwargs), timeout)
+        return wrapper
+    return decorator
+
+
+# Analytics-specific cache helpers
+def update_analytics_counter(key, increment=1, expiry=3600):
+    """
+    Update analytics counter in Redis.
+    
+    Args:
+        key: Counter key
+        increment: Amount to increment (can be negative)
+        expiry: Key expiry in seconds
+    """
+    from django.core.cache import caches
+    
+    cache = caches['analytics']
+    
+    # Use Redis INCR for atomic increments
+    try:
+        client = cache.client.get_client()
+        count = client.incrby(f"{cache.key_prefix}:{key}", increment)
+        
+        # Set expiry if this is a new key
+        if count == increment:
+            client.expire(f"{cache.key_prefix}:{key}", expiry)
+        
+        return count
+    except Exception as e:
+        logger.error(f"Failed to update analytics counter {key}: {e}")
+        return None
+
+
+def get_analytics_counters(prefix=''):
+    """
+    Get all analytics counters with a given prefix.
+    
+    Args:
+        prefix: Key prefix to filter
+        
+    Returns:
+        Dict of counter keys and values
+    """
+    from django.core.cache import caches
+    
+    cache = caches['analytics']
+    
+    try:
+        client = cache.client.get_client()
+        pattern = f"{cache.key_prefix}:{prefix}*" if prefix else f"{cache.key_prefix}:*"
+        keys = client.keys(pattern)
+        
+        counters = {}
+        for key in keys:
+            # Remove prefix from key name
+            clean_key = key.decode().replace(f"{cache.key_prefix}:", "")
+            value = client.get(key)
+            counters[clean_key] = int(value) if value else 0
+        
+        return counters
+    except Exception as e:
+        logger.error(f"Failed to get analytics counters: {e}")
+        return {}
