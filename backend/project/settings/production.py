@@ -4,7 +4,6 @@ Django settings for the DataCube project in the production environment.
 import os
 from .common import *
 
-# --- Production-Specific Settings ---
 
 # SECURITY WARNING: keep the secret key used in production secret!
 # The SECRET_KEY is already loaded from .env in common.py
@@ -83,14 +82,6 @@ REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'] = (
 #     },
 # }
 
-
-
-# Optional: Better result backend (requires django-celery-results)
-# CELERY_RESULT_BACKEND = 'django-db'
-# INSTALLED_APPS += ['django_celery_results', 'django_celery_beat']
-
-# For django-celery-beat (persistent scheduler - recommended for production)
-# CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
 
 CELERY_BROKER_URL = 'redis://redis:6379/0'
