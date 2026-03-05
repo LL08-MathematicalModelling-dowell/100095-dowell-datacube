@@ -413,4 +413,128 @@ export const apiDocs: ApiGroup[] = [
       },
     ],
   },
+  {
+    group: "File Storage API (GridFS)",
+    description:
+      "Endpoints for high-performance large file storage using MongoDB GridFS. Files are stored in a shared high-availability bucket and indexed by user ownership. Supports streaming uploads and downloads.",
+    auth_header: "Authorization: Api-Key <YOUR_API_KEY>",
+    endpoints: [
+      {
+        name: "List Files",
+        description: "Retrieve a paginated list of metadata for all files you have uploaded.",
+        auth_required: "API Key",
+        url: "/api/files/",
+        methods: [
+          {
+            method: "GET",
+            params: "page=1&page_size=50&search=report",
+            response: JSON.stringify(
+              {
+                success: true,
+                data: [
+                  {
+                    file_id: "65e8a5b2f1d8b1a2d3e45678",
+                    filename: "annual_report_2023.pdf",
+                    size: 1048576,
+                    content_type: "application/pdf",
+                    storage_type: "gridfs",
+                    uploaded_at: "2024-03-05T12:00:00Z"
+                  }
+                ],
+                pagination: {
+                  page: 1,
+                  page_size: 50,
+                  total_items: 1,
+                  total_pages: 1
+                }
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      },
+      {
+        name: "Upload File",
+        description: "Upload a file using multipart/form-data. Files are streamed directly to storage to handle large sizes efficiently.",
+        auth_required: "API Key",
+        url: "/api/files/",
+        methods: [
+          {
+            method: "POST",
+            body: "Content-Type: multipart/form-data\n\nFields:\n- file: (Binary data)\n- filename: (Optional) custom_name.pdf\n- content_type: (Optional) application/pdf",
+            response: JSON.stringify(
+              {
+                success: true,
+                file_id: "65e8a5b2f1d8b1a2d3e45678",
+                filename: "annual_report_2023.pdf",
+                size: 1048576
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      },
+      {
+        name: "Get File Detail",
+        description: "Retrieve physical storage information and custom metadata for a specific file.",
+        auth_required: "API Key",
+        url: "/api/files/:file_id/",
+        methods: [
+          {
+            method: "GET",
+            response: JSON.stringify(
+              {
+                success: true,
+                info: {
+                  filename: "annual_report_2023.pdf",
+                  upload_date: "2024-03-05T12:00:00Z",
+                  length: 1048576,
+                  metadata: {
+                    contentType: "application/pdf",
+                    user_id: "user_uuid_123"
+                  }
+                }
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      },
+      {
+        name: "Download File",
+        description: "Stream the binary content of a file. Returns a StreamingHttpResponse with appropriate Content-Disposition headers for browser downloads.",
+        auth_required: "API Key",
+        url: "/api/files/:file_id/download/",
+        methods: [
+          {
+            method: "GET",
+            response: "(Binary Stream: application/octet-stream or specific Content-Type)",
+          },
+        ],
+        notes: "This endpoint returns a raw stream. Use this URL directly in <a> tags or <img> src attributes."
+      },
+      {
+        name: "Delete File",
+        description: "Permanently remove a file from GridFS storage and its associated metadata entry.",
+        auth_required: "API Key",
+        url: "/api/files/:file_id/",
+        methods: [
+          {
+            method: "DELETE",
+            response: JSON.stringify(
+              {
+                success: true,
+                message: "File deleted"
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      },
+    ],
+  },
 ];
