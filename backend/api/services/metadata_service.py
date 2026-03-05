@@ -442,8 +442,41 @@ class MetadataService:
         
         total = await self._file_coll.count_documents(query)
         skip = (page - 1) * page_size
+
         cursor = self._file_coll.find(query).sort("uploaded_at", -1).skip(skip).limit(page_size)
         docs = await cursor.to_list(length=page_size)
         
         docs = [self._stringify_objectids(doc) for doc in docs]
         return total, docs # type: ignore
+
+    async def get_storage_stats(self) -> Dict[str, Any]:
+        """
+        Calculates aggregate storage statistics for the current user.
+        Returns total count and total size in bytes.
+        """
+        pipeline = [
+            # 1. Filter documents belonging to this user
+            {"$match": {"user_id": self.user_id}},
+            # 2. Sum up the 'size' field and count documents
+            {
+                "$group": {
+                    "_id": None,
+                    "total_count": {"$sum": 1},
+                    "total_size_bytes": {"$sum": "$size"}
+                }
+            }
+        ]
+        
+        cursor = await self._file_coll.aggregate(pipeline)
+        results = await cursor.to_list(length=1)
+        
+        if not results:
+            return {
+                "total_count": 0,
+                "total_size_bytes": 0
+            }
+            
+        # Remove the internal _id from response
+        stats = results[0]
+        stats.pop("_id", None)
+        return stats
