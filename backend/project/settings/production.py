@@ -11,7 +11,7 @@ if not SECRET_KEY:
     raise ValueError("No SECRET_KEY set for production environment.")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True #False
+DEBUG = False
 
 # Define the allowed hosts for your production site
 # ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
