@@ -15,7 +15,10 @@ DEBUG = False
 
 # Define the allowed hosts for your production site
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
+
 # ALLOWED_HOSTS = ['*']
+# CORS_ORIGIN_ALLOW_ALL = True
+
 if not ALLOWED_HOSTS:
     raise ValueError("No ALLOWED_HOSTS set for production environment.")
 
@@ -86,6 +89,11 @@ REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'] = (
 
 CELERY_BROKER_URL = 'redis://redis:6379/0'
 CELERY_RESULT_BACKEND = 'redis://redis:6379/0'
+
+
+# CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
+# CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
+
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'

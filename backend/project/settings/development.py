@@ -9,7 +9,9 @@ from .common import *
 DEBUG = True
 
 # Allow all hosts for local development convenience
-ALLOWED_HOSTS = ['*']
+# ALLOWED_HOSTS = ['*']
+
+CORS_ORIGIN_ALLOW_ALL = True
 
 # --- Email ---
 # Use the console backend to see emails printed in the terminal
