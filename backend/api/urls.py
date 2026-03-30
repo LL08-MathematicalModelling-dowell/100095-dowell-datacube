@@ -48,4 +48,5 @@ urlpatterns = [
 
     # Health check - GET only
     re_path(r"^health_check/?$", HealthCheck.as_view(), name="health_check"),
+    re_path(r"^api/health_check/?$", HealthCheck.as_view(), name="health_check"),
 ]
