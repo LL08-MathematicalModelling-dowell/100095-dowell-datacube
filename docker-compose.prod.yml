@@ -14,8 +14,12 @@ services:
       context: ./backend
       dockerfile: Dockerfile.prod
     restart: unless-stopped
+    deploy:
+      replicas: 3
     env_file:
       - ./backend/.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=project.settings.production
     ports:
       - "8000:8000"
     command:
@@ -25,6 +29,14 @@ services:
      "--workers", "3",
      "--worker-class", "uvicorn_worker.UvicornWorker",
      "--log-level", "info"]
+    healthcheck:
+      test: [
+        "curl", "-f", "http://localhost:8000/api/health_check/"
+      ]
+      interval: 1m30s
+      timeout: 30s
+      retries: 3
+      start_period: 30s
     depends_on:
       - redis
     networks:
@@ -52,7 +64,9 @@ services:
       context: ./UI/datacube-UI
       dockerfile: Dockerfile
     restart: unless-stopped
-    container_name: react_app
+    deploy:
+      replicas: 2
+    # container_name: react_app
     ports:
       - "3000:3000"
     environment:
