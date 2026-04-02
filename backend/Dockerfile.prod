@@ -65,7 +65,12 @@ USER appuser
 # Collect static files (using dummy secret key to avoid requiring real env vars at build time)
 # Replace 'project' with your actual settings module base name if different
 ENV DJANGO_SETTINGS_MODULE=project.settings.production
-RUN SECRET_KEY=dummy-key-for-build python manage.py collectstatic --noinput --clear
+RUN SECRET_KEY=dummy-key-for-build \
+    MONGODB_URI=mongodb://mongo:27017/ \
+    MONGODB_DATABASE=mydatabase \
+    MONGODB_COLLECTION=mycollection \
+    DATACUBE_V2_AUTH_DB=auth_db \
+    python manage.py collectstatic --noinput --clear
 
 # Expose port
 EXPOSE 8000
