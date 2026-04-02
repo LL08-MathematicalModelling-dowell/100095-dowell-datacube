@@ -17,7 +17,12 @@ from api.views.database_views import (
 )
 from api.views.crud_views import DataCrudView
 
-from api.views.file_views import FileListView, FileDetailView, FileStreamView
+from api.views.file_views import (
+    FileListView,
+    FileDetailView,
+    FileStreamView,
+    FileDownloadView,
+)
 
 
 
@@ -43,8 +48,10 @@ urlpatterns = [
     # Retrieve metadata or delete a specific file
     re_path(r'^files/(?P<file_id>[a-fA-F0-9]{24})/$', FileDetailView.as_view(), name='file-detail'),
 
-    # Download a specific file
-    re_path(r'^files/(?P<file_id>[a-fA-F0-9]{24})/download/$', FileStreamView.as_view(), name='file-download'),
+    # Stream a specific file
+    re_path(r'^files/(?P<file_id>[a-fA-F0-9]{24})/stream/$', FileStreamView.as_view(), name='file-stream'),
+    # Download a specific file (reads entire file into memory - not recommended for large files)
+    re_path(r'^files/(?P<file_id>[a-fA-F0-9]{24})/download/$', FileDownloadView.as_view(), name='file-download'),
 
     # Health check - GET only
     re_path(r"^health_check/?$", HealthCheck.as_view(), name="health_check"),

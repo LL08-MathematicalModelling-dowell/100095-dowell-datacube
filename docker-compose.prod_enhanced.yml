@@ -1,0 +1,100 @@
+services:
+  # 1. Redis Service (Local Cache/Broker)
+  # NOTE: For High Availability, ensure your .env uses your MANAGED REDIS URL
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # 2. Web Backend (ASGI Server)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    deploy:
+      replicas: 3
+    env_file:
+      - ./backend/.env
+    
+    environment:
+      - DJANGO_SETTINGS_MODULE=project.settings.production
+    ports:
+      - "8000:8000"
+    command: >
+      gunicorn project.asgi:application 
+      --bind 0.0.0.0:8000 
+      --workers 3 
+      --worker-class uvicorn_worker.UvicornWorker 
+      --log-level info
+    healthcheck:
+      # Updated path to your Django health check view
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health_check/"]
+      interval: 45s      # Slightly more aggressive for faster failover
+      timeout: 10s
+      retries: 3
+      start_period: 40s   # Give Django time to initialize DB connections
+    labels:
+      - "autoheal=true"
+    depends_on:
+      - redis
+    networks:
+      - app-network
+
+  # 3. Autoheal Service
+  autoheal:
+    image: willfarrell/autoheal:latest
+    restart: always
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
+      - AUTOHEAL_INTERVAL=10
+      - CURL_TIMEOUT=30
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/log/autoheal:/var/log/autoheal
+    networks:
+      - app-network
+
+  # 4. Celery Worker (Background Tasks)
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    command: celery -A project worker --loglevel=info -Q analytics,maintenance,celery --pool=gevent
+    healthcheck:
+      # Verifies the worker is actually connected to the broker and responding
+      test: ["CMD-SHELL", "celery -A project inspect ping"]
+      interval: 1m
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+    labels:
+      - "autoheal=true"
+    depends_on:
+      - redis
+      - backend
+    networks:
+      - app-network
+
+  # 5. Frontend Application
+  react-app:
+    build:
+      context: ./UI/datacube-UI
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    external: true

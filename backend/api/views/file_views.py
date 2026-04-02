@@ -1,8 +1,11 @@
-from gridfs.grid_file import ObjectId
+from django.http import Http404, HttpResponse, StreamingHttpResponse
+
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from django.http import Http404, StreamingHttpResponse
+
+from gridfs.grid_file import ObjectId
+
 from api.views.base import BaseAPIView
 from api.file_serializer import FileUploadSerializer, FileListQuerySerializer
 
@@ -49,24 +52,6 @@ class FileListView(BaseAPIView):
             }
         }, status=status.HTTP_200_OK)
 
-    # ... post method remains the same ...
-
-
-    # @BaseAPIView.handle_errors
-    # async def get(self, request):
-    #     params = self.validate_serializer(FileListQuerySerializer, request.query_params)
-    #     total, files = await self.metadata_svc.list_files_paginated(
-    #         page=params.get("page", 1),
-    #         page_size=params.get("page_size", 50),
-    #         search_term=params.get("search", "")
-    #     )
-    #     return Response({
-    #         "success": True,
-    #         "data": files,
-    #         "pagination": {"total": total}},
-    #         status=status.HTTP_200_OK
-    #     )
-
     @BaseAPIView.handle_errors
     async def post(self, request):
         data = self.validate_serializer(FileUploadSerializer, request.data)
@@ -90,6 +75,7 @@ class FileListView(BaseAPIView):
         )
 
 class FileDetailView(BaseAPIView):
+    """View for retrieving file metadata or deleting a file."""
     permission_classes = [IsAuthenticated]
 
     @BaseAPIView.handle_errors
@@ -104,7 +90,8 @@ class FileDetailView(BaseAPIView):
             return Response({"success": True, "message": "File deleted"})
         raise Http404("File not found or unauthorized")
 
-class FileDownloadView(BaseAPIView):
+class FileStreamView(BaseAPIView):
+    """View for streaming a file. This is more memory efficient for large files."""
     permission_classes = [IsAuthenticated]
 
     @BaseAPIView.handle_errors
@@ -132,3 +119,42 @@ class FileDownloadView(BaseAPIView):
             )
         response['Content-Disposition'] = f'attachment; filename="{stream.filename}"'
         return response
+
+
+class FileDownloadView(BaseAPIView):
+    """
+    View for downloading a file. This is a simpler version 
+    that reads the entire file into memory before sending. 
+    Not recommended for large files.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @BaseAPIView.handle_errors
+    async def get(self, request, file_id):
+        try:
+            # Check ownership via the bucket find query in the driver
+            stream = await self.file_svc.bucket.open_download_stream(ObjectId(file_id))
+            # Security: Verify ownership from stream metadata
+            if stream.metadata.get("user_id") != str(request.user.pk): # type: ignore
+                await stream.close()
+                return Response({"success": False}, status=status.HTTP_403_FORBIDDEN)
+        except Exception: raise Http404("File not found")
+
+        # check file size before reading into memory (optional but recommended)
+        file_size = stream.length  # type: ignore
+        if file_size > 20 * 1024 * 1024:  # 20MB limit for in-memory download
+            await stream.close()
+            return Response({"success": False, "error": "FileTooLarge", "detail": "File exceeds 20MB limit for download"}, status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+
+        file_content = await stream.read()
+        await stream.close()
+
+        response = HttpResponse(
+            file_content,
+            content_type=stream.metadata.get("contentType", "application/octet-stream") # type: ignore
+        )
+        response['Content-Disposition'] = f'attachment; filename="{stream.filename}"'
+        return response
+
+    
