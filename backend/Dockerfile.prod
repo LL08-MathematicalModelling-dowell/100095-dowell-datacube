@@ -55,6 +55,7 @@ COPY --from=builder $VIRTUAL_ENV $VIRTUAL_ENV
 # Copy application code
 COPY . .
 
+
 # Create staticfiles directory and set proper ownership
 RUN mkdir -p /app/staticfiles && \
     chown -R appuser:appgroup /app/staticfiles
@@ -65,11 +66,13 @@ USER appuser
 # Collect static files (using dummy secret key to avoid requiring real env vars at build time)
 # Replace 'project' with your actual settings module base name if different
 ENV DJANGO_SETTINGS_MODULE=project.settings.production
+
 RUN SECRET_KEY=dummy-key-for-build \
-    MONGODB_URI=mongodb://mongo:27017/ \
+    MONGODB_URI=dummy-uri-for-build \
     MONGODB_DATABASE=mydatabase \
     MONGODB_COLLECTION=mycollection \
-    DATACUBE_V2_AUTH_DB=auth_db \
+    AUTH_DB_NAME=dummy-auth_db \
+    FILE_STORAGE_DB_NAME=dummy-file-storage-db \
     python manage.py collectstatic --noinput --clear
 
 # Expose port

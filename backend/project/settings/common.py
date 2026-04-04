@@ -2,7 +2,6 @@
 Django settings for the DataCube project that are common to all environments.
 """
 import os
-import json
 from pathlib import Path
 from datetime import timedelta
 from pymongo import AsyncMongoClient # type: ignore
@@ -19,13 +18,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATACUBE_FREE_TIER_MB = 500
 
 # Paths
-CONFIG_PATH = BASE_DIR / 'config.json'
+# CONFIG_PATH = BASE_DIR / 'config.json'
 
-if CONFIG_PATH.exists():
-    with open(CONFIG_PATH, encoding='utf-8') as f:
-        config = json.load(f)
-else:
-    config = {}
+# if CONFIG_PATH.exists():
+#     with open(CONFIG_PATH, encoding='utf-8') as f:
+#         config = json.load(f)
+# else:
+#     config = {}
 
 # --- Security ---
 # SECRET_KEY will be set in development.py and production.py
@@ -95,17 +94,15 @@ DATABASES = {
 }
 
 # MongoDB
-MONGODB_URI = os.getenv('MONGODB_URI', config.get('mongo_path'))
-
-
-MONGODB_DATABASE = os.getenv('MONGODB_DATABASE', config.get('database'))
-MONGODB_COLLECTION = os.getenv('MONGODB_COLLECTION', config.get('collection'))
+MONGODB_URI = os.getenv('MONGODB_URI')
+MONGODB_DATABASE = os.getenv('MONGODB_DATABASE')
+MONGODB_COLLECTION = os.getenv('MONGODB_COLLECTION')
 DATACUBE_V2_AUTH_DB = os.getenv("AUTH_DB_NAME")
-FILE_STORAGE_DB_NAME = os.getenv("FILE_STORAGE_DB_NAME", config.get("file_storage_db_name", "datacube_V2_db_files"))
+FILE_STORAGE_DB_NAME = os.getenv("FILE_STORAGE_DB_NAME")
 
 
-if not all([MONGODB_URI, MONGODB_DATABASE, MONGODB_COLLECTION, DATACUBE_V2_AUTH_DB]):
-    raise ValueError("MongoDB settings missing. Please set them in config.json or environment.")
+if not all([MONGODB_URI, MONGODB_DATABASE, MONGODB_COLLECTION, DATACUBE_V2_AUTH_DB, FILE_STORAGE_DB_NAME]):
+    raise ValueError("MongoDB settings missing. Please set them in environment.")
 
 MONGODB_CLIENT = AsyncMongoClient(MONGODB_URI)
 METADATA_DB = MONGODB_CLIENT[MONGODB_DATABASE] # type: ignore
