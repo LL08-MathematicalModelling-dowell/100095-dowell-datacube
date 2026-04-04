@@ -9,5 +9,5 @@ urlpatterns = [
     path('api/v2/', include('api.urls_v2')),
     path('admin/', admin.site.urls),
     path('core/', include('core.urls')),
-    path('analytics/', include('analytics.urls')),
+    path('analytics/api/v2/', include('analytics.urls')),
 ]
