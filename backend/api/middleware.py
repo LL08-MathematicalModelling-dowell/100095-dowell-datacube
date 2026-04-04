@@ -1,7 +1,6 @@
-from django.http import JsonResponse
 from datetime import datetime, timezone
+from django.http import JsonResponse
 from core.utils.managers import user_manager
-import calendar
 
 
 class UsageMeteringMiddleware:

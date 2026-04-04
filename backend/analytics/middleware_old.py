@@ -2,16 +2,11 @@ import os
 import time
 import json
 import logging
-from datetime import datetime, timezone
 
 from django.http import RawPostDataException
 
-from .tasks import (
-    get_slow_threshold, log_http_request_task, 
-    log_db_operation_task, log_performance_task,
-    log_client_info_task, log_error_task, 
-    log_mongo_detail_task, log_slow_query_task
-)
+from .tasks import log_request_metrics_task
+
 
 logger = logging.getLogger(__name__)
 
@@ -150,22 +145,26 @@ class DatacubeObservabilityMiddleware:
     def __call__(self, request):
         # 1. High-precision start timer
         start_time = time.perf_counter()
-
-        # 2. Capture raw body BEFORE it gets consumed
+        
+        # 2. Capture raw body BEFORE it gets consumed by other middleware
         raw_body = None
         parsed_json = {}
         if request.content_type == 'application/json' and request.body:
             try:
+                # Read and store the body
                 raw_body = request.body.decode('utf-8')
+                # Recreate the body so other middleware can still read it
                 request._body = raw_body.encode('utf-8')
+                # Store parsed JSON
                 parsed_json = json.loads(raw_body)
                 request._parsed_json = parsed_json
             except (UnicodeDecodeError, json.JSONDecodeError) as e:
                 logger.debug(f"Could not decode JSON body: {e}")
+                raw_body = None
 
         # 3. Process request
         response = self.get_response(request)
-
+        
         # 4. Capture response data if available
         response_data = {}
         try:
@@ -181,7 +180,9 @@ class DatacubeObservabilityMiddleware:
         # 5. Calculate latency (ms)
         duration = (time.perf_counter() - start_time) * 1000
 
-        if hasattr(request, 'user') and request.user.is_authenticated:
+        # 6. Offload to Celery for authenticated users
+        if hasattr(request, 'user') and request.user is not None and request.user.is_authenticated:
+            # Get request body data from various sources
             request_body = {}
             if hasattr(request, '_parsed_json'):
                 request_body = request._parsed_json
@@ -189,124 +190,113 @@ class DatacubeObservabilityMiddleware:
                 request_body = request.data
             elif request.method in ['POST', 'PUT', 'PATCH']:
                 request_body = dict(request.POST.items())
-
+            
+            # Get database_id and collection_name
             db_id = (
                 request_body.get('database_id') or
                 request.GET.get('database_id') or
                 request.POST.get('database_id')
             )
+            
             coll_name = (
                 request_body.get('collection_name') or
                 request.GET.get('collection_name') or
                 request.POST.get('collection_name', 'system')
             )
-
-            # --- Request/Response sizes ---
+            
+            # Calculate request/response sizes
+            # request_size = len(request.body) if request.body else 0
             try:
                 request_size = len(request.body) if request.body else 0
             except RawPostDataException:
+                # Body already read (e.g., file upload); fall back to CONTENT_LENGTH
                 request_size = int(request.META.get('CONTENT_LENGTH', 0))
+        
             response_size = len(response.content) if hasattr(response, 'content') else 0
-
-            # --- MongoDB-specific metrics ---
+            
+            # Extract MongoDB-specific metrics
             mongo_metrics = self._extract_mongo_metrics(request_body, response_data)
-
-            # --- Redact sensitive data in production (optional) ---
+            
+            # Redact sensitive data in production
             if self.is_production:
                 request_body = self._redact_sensitive_data(request_body)
                 response_data = self._redact_sensitive_data(response_data)
-
-            user_id = str(request.user.id)
-            method = request.method
-            path = request.path
-            status_code = response.status_code
-            duration_ms = round(duration, 2)
-            timestamp = int(time.time() * 1000)
-            success = 200 <= status_code < 300
-
-            # 1. HTTP Request
-            http_data = {
-                "user_id": user_id,
-                "method": method,
-                "path": path,
-                "status_code": status_code,
-                "duration_ms": duration_ms,
-                "timestamp": datetime.fromtimestamp(timestamp/1000, tz=timezone.utc),
-                "success": success,
-            }
-            log_http_request_task.delay(http_data) # type: ignore
-
-            # 2. Database context (if applicable)
-            if db_id or coll_name != 'system':
-                db_data = {
-                    "user_id": user_id,
-                    "db_id": db_id,
-                    "collection": coll_name,
-                    "operation_type": mongo_metrics.get('operation_type', 'unknown'),
-                    "document_count": mongo_metrics.get('document_count', 0),
-                    "query_complexity": mongo_metrics.get('query_complexity', 'simple'),
-                }
-                log_db_operation_task.delay(db_data) # type: ignore
-
-            # 3. Performance metrics
-            throughput = round((response_size / (duration/1000)) if duration>0 else 0, 2)
-            warning = None
-            if duration > 1000: warning = 'slow_request'
-            elif request_size > 1024*1024: warning = 'large_request'
-            perf_data = {
-                "user_id": user_id,
+            
+            # Prepare payload
+            payload = {
+                # Basic request info
+                "user_id": str(request.user.id),
+                "method": request.method,
+                "path": request.path,
+                "status_code": response.status_code,
+                "duration_ms": round(duration, 2),
+                "timestamp": int(time.time() * 1000),  # Unix timestamp in milliseconds
+                
+                # Database context
+                "db_id": db_id,
+                "collection": coll_name,
+                
+                # Performance metrics
                 "request_size_bytes": request_size,
                 "response_size_bytes": response_size,
-                "throughput_bytes_per_sec": throughput,
-                "warning": warning,
-            }
-            log_performance_task.delay(perf_data) # type: ignore
-
-            # 4. Client info
-            client_data = {
-                "user_id": user_id,
+                "throughput_bytes_per_sec": round((response_size / (duration / 1000)) if duration > 0 else 0, 2),
+                
+                # MongoDB-specific metrics
+                "mongo_operation": mongo_metrics['operation_type'],
+                "document_count": mongo_metrics['document_count'],
+                "query_complexity": mongo_metrics['query_complexity'],
+                
+                # API categorization
+                "endpoint_category": self._categorize_endpoint(request.path, request.method),
+                
+                # Network/Client info
                 "client_ip": request.META.get('REMOTE_ADDR', ''),
-                "user_agent": request.META.get('HTTP_USER_AGENT', '')[:200],
+                "user_agent": request.META.get('HTTP_USER_AGENT', '')[:200],  # Truncate long UAs
                 "content_type": request.content_type,
+                
+                # Request/Response data (redacted in production)
+                "query_params": dict(request.GET.items()),
+                "request_body": request_body,
+                "response_body": response_data if not self.is_production else {'size': response_size},
+                
+                # Additional metrics from response
+                "success": 200 <= response.status_code < 300,
             }
-            log_client_info_task.delay(client_data) # type: ignore
+            
+            # Add MongoDB operation counts if available
+            for key in ['inserted_count', 'modified_count', 'deleted_count', 'returned_documents']:
+                if key in mongo_metrics:
+                    payload[key] = mongo_metrics[key]
+            
+            # Performance warnings
+            if duration > 1000:
+                payload["performance_warning"] = "slow_request"
+            if request_size > 1024 * 1024:  # 1MB
+                payload["performance_warning"] = "large_request"
+            if response.status_code >= 500:
+                payload["error_type"] = "server_error"
+            elif response.status_code >= 400:
+                payload["error_type"] = "client_error"
+            
+            # Log and dispatch
+            if duration > 500:  # Log slow requests
+                logger.warning(f"Slow request detected: {request.path} took {duration:.2f}ms")
+            
+            logger.debug(f"Datacube Telemetry: {request.path} - {duration:.2f}ms")
+            
+            
 
-            # 5. Error (if 4xx/5xx)
-            if status_code >= 400:
-                error_data = {
-                    "user_id": user_id,
-                    "status_code": status_code,
-                    "error_type": 'server_error' if status_code >= 500 else 'client_error',
-                    "error_message": None,  # could extract from response
-                }
-                log_error_task.delay(error_data) # type: ignore
-
-            # 6. MongoDB details (if any counts)
-            if any(k in mongo_metrics for k in ['inserted_count','modified_count','deleted_count','returned_documents']):
-                detail_data = {
-                    "user_id": user_id,
-                    "inserted_count": mongo_metrics.get('inserted_count'),
-                    "modified_count": mongo_metrics.get('modified_count'),
-                    "deleted_count": mongo_metrics.get('deleted_count'),
-                    "returned_documents": mongo_metrics.get('returned_documents'),
-                }
-                log_mongo_detail_task.delay(detail_data) # type: ignore
-
-            # 7. Slow query (if duration > threshold)
-            threshold = get_slow_threshold(mongo_metrics.get('operation_type',''), path)
-            if duration > threshold:
-                slow_data = {
-                    "user_id": user_id,
-                    "query_details": {
-                        "method": method,
-                        "path": path,
-                        "params": dict(request.GET.items()),
-                    },
-                    "duration_ms": duration_ms,
-                    "threshold_ms": threshold,
-                    "collection": coll_name,
-                    "db_id": db_id,
-                }
-                log_slow_query_task.delay(slow_data) # type: ignore
+            try:
+                log_request_metrics_task.delay(payload) # type: ignore
+            except Exception as e:
+                logger.error(f"Failed to dispatch telemetry task: {e}")
+                
+                # Fallback: Log to local file if Celery fails
+                try:
+                    with open('/tmp/datacube_telemetry_fallback.log', 'a') as f:
+                        import datetime
+                        f.write(f"{datetime.datetime.now().isoformat()}: {json.dumps(payload)}\n")
+                except:
+                    pass
 
         return response

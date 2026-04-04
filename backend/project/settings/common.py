@@ -4,7 +4,7 @@ Django settings for the DataCube project that are common to all environments.
 import os
 from pathlib import Path
 from datetime import timedelta
-from pymongo import AsyncMongoClient # type: ignore
+from pymongo import AsyncMongoClient, MongoClient  # type: ignore
 # from celery.schedules import crontab
 from dotenv import load_dotenv # type: ignore
 
@@ -105,6 +105,7 @@ if not all([MONGODB_URI, MONGODB_DATABASE, MONGODB_COLLECTION, DATACUBE_V2_AUTH_
     raise ValueError("MongoDB settings missing. Please set them in environment.")
 
 MONGODB_CLIENT = AsyncMongoClient(MONGODB_URI)
+SYNC_MONGODB_CLIENT = MongoClient(MONGODB_URI)
 METADATA_DB = MONGODB_CLIENT[MONGODB_DATABASE] # type: ignore
 METADATA_COLLECTION = METADATA_DB[MONGODB_COLLECTION] # type: ignore
 FILE_METADATA_COLLECTION = METADATA_DB["file_metadata"]

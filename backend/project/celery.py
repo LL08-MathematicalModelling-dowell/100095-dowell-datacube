@@ -6,7 +6,7 @@ from celery.schedules import crontab
 # 1. Set environment defaults
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'project.settings.production')
 
-app = Celery('datacube') # Renamed to align with your app name
+app = Celery('datacube') # type: ignore # Renamed to align with your app name
 
 # 2. Optimized Configuration
 app.config_from_object('django.conf:settings', namespace='CELERY')

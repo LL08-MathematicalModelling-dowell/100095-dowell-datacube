@@ -80,7 +80,7 @@ services:
     restart: unless-stopped
     env_file:
       - ./backend/.env
-    command: celery -A project worker --loglevel=info -Q analytics,maintenance,celery --pool=gevent
+    command: celery -A project worker -Q analytics,maintenance -l info
     healthcheck:
       # Verifies the worker is actually connected to the broker and responding
       test: ["CMD-SHELL", "celery -A project inspect ping"]
