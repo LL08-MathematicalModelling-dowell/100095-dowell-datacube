@@ -14,3 +14,6 @@ DJANGO_SETTINGS_MODULE=project.settings.development celery -A project worker --l
 
 pip install gevent
 
+# Check health status of the backend container
+docker inspect --format='{{json .State.Health}}' bb81fa2b578c
+docker inspect --format='{{json .State.Health}}' datacube-backend

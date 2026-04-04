@@ -20,8 +20,10 @@ services:
     
     environment:
       - DJANGO_SETTINGS_MODULE=project.settings.production
-    ports:
-      - "8000:8000"
+    # ports:
+    #   - "8000:8000"
+    expose:
+      - 8000
     command: >
       gunicorn project.asgi:application 
       --bind 0.0.0.0:8000 
@@ -30,7 +32,9 @@ services:
       --log-level info
     healthcheck:
       # Updated path to your Django health check view
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/health_check/"]
+      # test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/health_check/"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v2/health_check/').read()"]
+
       interval: 45s      # Slightly more aggressive for faster failover
       timeout: 10s
       retries: 3
@@ -41,6 +45,18 @@ services:
       - redis
     networks:
       - app-network
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.local.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
 
   # 3. Autoheal Service
   autoheal:
@@ -97,4 +113,4 @@ services:
 
 networks:
   app-network:
-    external: true
+    driver: bridge
