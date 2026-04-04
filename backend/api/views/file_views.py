@@ -108,7 +108,9 @@ class FileStreamView(BaseAPIView):
         async def file_content_generator():
             try:
                 while True:
-                    chunk = await stream.read(65536)
+                    # Using readchunk() to read the next chunk of data from the stream. 
+                    # + This is more efficient for large files.
+                    chunk = await stream.readchunk()  # type: ignore
                     if not chunk: break
                     yield chunk
             finally: await stream.close()

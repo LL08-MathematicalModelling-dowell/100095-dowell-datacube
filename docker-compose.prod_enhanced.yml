@@ -30,7 +30,7 @@ services:
       --log-level info
     healthcheck:
       # Updated path to your Django health check view
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health_check/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/health_check/"]
       interval: 45s      # Slightly more aggressive for faster failover
       timeout: 10s
       retries: 3

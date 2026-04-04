@@ -49,7 +49,7 @@ const Overview = () => {
 
   // Create database mutation
   const createMutation = useMutation({
-    mutationFn: (data: CreateDatabaseForm) => api.post('/api/create_database/', data),
+    mutationFn: (data: CreateDatabaseForm) => api.post('/api/v2/create_database/', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['databases'] });
       setIsFormOpen(false);

@@ -99,7 +99,7 @@ export const apiDocs: ApiGroup[] = [
         description:
           "Create a new logical database with its initial collections and schema.",
         auth_required: "API Key",
-        url: "/api/create_database",
+        url: "/api/v2/create_database",
         methods: [
           {
             method: "POST",
@@ -139,7 +139,7 @@ export const apiDocs: ApiGroup[] = [
         description:
           "Retrieve a paginated list of all logical databases you own.",
         auth_required: "API Key",
-        url: "/api/list_databases",
+        url: "/api/v2/list_databases",
         methods: [
           {
             method: "GET",
@@ -167,7 +167,7 @@ export const apiDocs: ApiGroup[] = [
         description:
           "Fetch the complete metadata document for a single database, including its schema.",
         auth_required: "API Key",
-        url: "/api/get_metadata",
+        url: "/api/v2/get_metadata",
         methods: [
           {
             method: "GET",
@@ -194,7 +194,7 @@ export const apiDocs: ApiGroup[] = [
         description:
           "Permanently delete a logical database and all of its collections and documents.",
         auth_required: "JWT Bearer Token",
-        url: "/api/drop_database",
+        url: "/api/v2/drop_database",
         methods: [
           {
             method: "DELETE",
@@ -223,7 +223,7 @@ export const apiDocs: ApiGroup[] = [
         description:
           "Add one or more new collections to an existing database.",
         auth_required: "API Key",
-        url: "/api/add_collection",
+        url: "/api/v2/add_collection",
         methods: [
           {
             method: "POST",
@@ -267,7 +267,7 @@ export const apiDocs: ApiGroup[] = [
         description:
           "Retrieve all collections in a database along with their live document counts.",
         auth_required: "API Key",
-        url: "/api/list_collections",
+        url: "/api/v2/list_collections",
         methods: [
           {
             method: "GET",
@@ -292,7 +292,7 @@ export const apiDocs: ApiGroup[] = [
         description:
           "Permanently delete one or more collections from a database.",
         auth_required: "JWT Bearer Token",
-        url: "/api/drop_collections",
+        url: "/api/v2/drop_collections",
         methods: [
           {
             method: "DELETE",
@@ -353,7 +353,7 @@ export const apiDocs: ApiGroup[] = [
         description:
           "Perform operations on documents within a specific collection.",
         auth_required: "API Key",
-        url: "/api/crud",
+        url: "/api/v2/crud",
         methods: [
           {
             method: "POST (Create)",
@@ -423,7 +423,7 @@ export const apiDocs: ApiGroup[] = [
         name: "List Files",
         description: "Retrieve a paginated list of file metadata along with global storage statistics for the authenticated user.",
         auth_required: "API Key",
-        url: "/api/files/",
+        url: "/api/v2/files/",
         methods: [
           {
             method: "GET",
@@ -462,7 +462,7 @@ export const apiDocs: ApiGroup[] = [
         name: "Upload File",
         description: "Stream a file to GridFS using multipart/form-data. Automatically calculates storage quota and updates user metadata.",
         auth_required: "API Key",
-        url: "/api/files/",
+        url: "/api/v2/files/",
         methods: [
           {
             method: "POST",
@@ -484,7 +484,7 @@ export const apiDocs: ApiGroup[] = [
         name: "Get File Detail",
         description: "Retrieve physical storage info (chunks, upload date) and ownership metadata for a specific file.",
         auth_required: "API Key",
-        url: "/api/files/:file_id/",
+        url: "/api/v2/files/:file_id/",
         methods: [
           {
             method: "GET",
@@ -509,9 +509,22 @@ export const apiDocs: ApiGroup[] = [
       },
       {
         name: "Download File",
+        description: "Download the file in one go, with ownership verification and Content-Type header set for direct browser compatibility. Limits apply for files larger than 20MB to prevent memory issues.",
+        auth_required: "API Key",
+        url: "/api/v2/files/:file_id/download/",
+        methods: [
+          {
+            method: "GET",
+            response: "(Binary Stream: application/octet-stream or application/pdf)",
+          },
+        ],
+        notes: "For files larger than 20MB, use the Stream File endpoint to avoid memory issues."
+      },
+       {
+        name: "Stream File",
         description: "Stream the binary content of a file. Includes ownership verification and automatic Content-Type detection.",
         auth_required: "API Key",
-        url: "/api/files/:file_id/download/",
+        url: "/api/v2/files/:file_id/stream/",
         methods: [
           {
             method: "GET",
@@ -524,7 +537,7 @@ export const apiDocs: ApiGroup[] = [
         name: "Delete File",
         description: "Permanently remove file chunks from GridFS and cleanup the associated metadata document.",
         auth_required: "API Key",
-        url: "/api/files/:file_id/",
+        url: "/api/v2/files/:file_id/",
         methods: [
           {
             method: "DELETE",

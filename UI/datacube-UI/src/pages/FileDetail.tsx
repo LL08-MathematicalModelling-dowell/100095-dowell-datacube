@@ -9,11 +9,11 @@ const FileDetail = () => {
 
   const { data: file, isLoading, error } = useQuery({
     queryKey: ['file', fileId],
-    queryFn: () => api.get(`/api/files/${fileId}/`).then(res => res.info),
+    queryFn: () => api.get(`/api/v2/files/${fileId}/`).then(res => res.info),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: () => api.delete(`/api/files/${fileId}/`),
+    mutationFn: () => api.delete(`/api/v2/files/${fileId}/`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['files'] });
       navigate('/dashboard/overview');
@@ -22,7 +22,7 @@ const FileDetail = () => {
 
   const downloadFile = async () => {
     try {
-      const response = await api.get(`/api/files/${fileId}/download/`, {
+      const response = await api.get(`/api/v2/files/${fileId}/download/`, {
         responseType: 'blob',
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));
