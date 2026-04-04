@@ -31,7 +31,7 @@ services:
      "--log-level", "info"]
     healthcheck:
       test: [
-        "curl", "-f", "http://localhost:8000/api/health_check/"
+        "curl", "-f", "http://localhost:8000/api/v2/health_check/"
       ]
       interval: 1m30s
       timeout: 30s

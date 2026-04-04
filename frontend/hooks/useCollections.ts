@@ -43,7 +43,7 @@ export const useCreateCollection = (databaseId: string) => {
   return useMutation<CreateCollectionResponse, Error, CreateCollectionInput>({
     mutationFn: (data) =>
       client
-        .post<CreateCollectionResponse>(`/api/database/${databaseId}/`, data)
+        .post<CreateCollectionResponse>(`/api/v2/database/${databaseId}/`, data)
         .then((res) => res.data),
     onSuccess: () => {
       // Invalidate the collections query to refetch

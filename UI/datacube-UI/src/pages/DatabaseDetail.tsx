@@ -67,7 +67,7 @@ const DatabaseDetail = () => {
   const deleteMutation = useMutation({
     mutationFn: async ({ collection_name }: { collection_name: string }) => {
       if (!data) return;
-      await api.delete('/api/drop_collections/', { database_id: dbId, collection_names: [collection_name] });
+      await api.delete('/api/v2/drop_collections/', { database_id: dbId, collection_names: [collection_name] });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['database', dbId] }); // Invalidate specific database to refetch collections
@@ -110,7 +110,7 @@ const DatabaseDetail = () => {
           })),
         })),
       };
-      const response = await api.post('/api/add_collection/', payload);
+      const response = await api.post('/api/v2/add_collection/', payload);
       return response;
     },
     onSuccess: () => {

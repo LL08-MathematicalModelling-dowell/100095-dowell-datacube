@@ -19,10 +19,10 @@ const endpoints = [
             {
                 title: 'List Databases',
                 method: 'GET',
-                path: '/api/database',
+                path: '/api/v2/database',
                 description: 'Return all databases you own.',
                 request: `curl -H "datacube-key: YOUR_API_KEY" \
-  https://your-domain.com/api/database`,
+  https://datacube.uxlivinglab.online/api/v2/database`,
                 response: `{
   "success": true,
   "data": [
@@ -34,12 +34,12 @@ const endpoints = [
             {
                 title: 'Create Database',
                 method: 'POST',
-                path: '/api/database',
+                path: '/api/v2/database',
                 description: 'Create a new database under your account.',
                 request: `curl -X POST -H "Content-Type: application/json" \\
      -H "datacube-key: YOUR_API_KEY" \\
      -d '{"name":"my_new_db"}' \\
-     https://your-domain.com/api/database`,
+     https://datacube.uxlivinglab.online/api/v2/database`,
                 response: `{
   "success": true,
   "data": { "id": "db3", "name": "my_new_db", ... }
@@ -53,10 +53,10 @@ const endpoints = [
             {
                 title: 'List Collections',
                 method: 'GET',
-                path: '/api/database/{dbId}/collections',
+                path: '/api/v2/database/{dbId}/collections',
                 description: 'Page and filter collections in a database.',
                 request: `curl -H "datacube-key: YOUR_API_KEY" \\
-  "https://your-domain.com/api/database/db1/collections?page=1&pageSize=10"`,
+  "https://datacube.uxlivinglab.online/api/v2/database/db1/collections?page=1&pageSize=10"`,
                 response: `{
   "success": true,
   "data": [
@@ -69,12 +69,12 @@ const endpoints = [
             {
                 title: 'Create Collection',
                 method: 'POST',
-                path: '/api/database/{dbId}/collections',
+                path: '/api/v2/database/{dbId}/collections',
                 description: 'Create a new collection in the database.',
                 request: `curl -X POST -H "Content-Type: application/json" \\
   -H "datacube-key: YOUR_API_KEY" \\
   -d '{"name":"products"}' \\
-  https://your-domain.com/api/database/db1/collections`,
+  https://datacube.uxlivinglab.online/api/v2/database/db1/collections`,
                 response: `{
   "success": true,
   "data": { "id":"col5","name":"products","createdAt":"..." }
@@ -88,10 +88,10 @@ const endpoints = [
             {
                 title: 'List Documents',
                 method: 'GET',
-                path: '/api/database/{dbId}/collections/{collName}',
+                path: '/api/v2/database/{dbId}/collections/{collName}',
                 description: 'Page & filter JSON documents.',
                 request: `curl -H "datacube-key: YOUR_API_KEY" \\
-  "https://your-domain.com/api/database/db1/collections/users?page=2&pageSize=5&filters={\"active\":true}"`,
+  "https://datacube.uxlivinglab.online/api/v2/database/db1/collections/users?page=2&pageSize=5&filters={\"active\":true}"`,
                 response: `{
   "success": true,
   "data": [
@@ -104,12 +104,12 @@ const endpoints = [
             {
                 title: 'Create Document(s)',
                 method: 'POST',
-                path: '/api/database/{dbId}/collections/{collName}',
+                path: '/api/v2/database/{dbId}/collections/{collName}',
                 description: 'Insert one or more JSON documents.',
                 request: `curl -X POST -H "Content-Type: application/json" \\
   -H "datacube-key: YOUR_API_KEY" \\
   -d '[{"name":"Alice"},{"name":"Bob"}]' \\
-  https://your-domain.com/api/database/db1/collections/customers`,
+  https://datacube.uxlivinglab.online/api/v2/database/db1/collections/customers`,
                 response: `{
   "success": true,
   "message": "Bulk insert OK",
@@ -119,12 +119,12 @@ const endpoints = [
             {
                 title: 'Update Document',
                 method: 'PUT',
-                path: '/api/database/{dbId}/collections/{collName}',
+                path: '/api/v2/database/{dbId}/collections/{collName}',
                 description: 'Update a single document by its `_id`.',
                 request: `curl -X PUT -H "Content-Type: application/json" \\
   -H "datacube-key: YOUR_API_KEY" \\
   -d '{"_id":"60a...","role":"admin"}' \\
-  https://your-domain.com/api/database/db1/collections/users`,
+  https://datacube.uxlivinglab.online/api/v2/database/db1/collections/users`,
                 response: `{
   "success": true,
   "message": "Document updated successfully."
@@ -133,12 +133,12 @@ const endpoints = [
             {
                 title: 'Delete Document',
                 method: 'DELETE',
-                path: '/api/database/{dbId}/collections/{collName}',
+                path: '/api/v2/database/{dbId}/collections/{collName}',
                 description: 'Delete a document by its `_id`.',
                 request: `curl -X DELETE -H "Content-Type: application/json" \\
   -H "datacube-key: YOUR_API_KEY" \\
   -d '{"documentId":"60a..."}' \\
-  https://your-domain.com/api/database/db1/collections/users`,
+  https://datacube.uxlivinglab.online/api/v2/database/db1/collections/users`,
                 response: `{
   "success": true,
   "message": "Document deleted successfully."
@@ -152,11 +152,11 @@ const endpoints = [
             {
                 title: 'Get Reports',
                 method: 'GET',
-                path: '/api/reports',
+                path: '/api/v2/reports',
                 description:
                     'Weekly & daily metrics: totalRecords, recordsAddedPerWeek, history.',
                 request: `curl -H "datacube-key: YOUR_API_KEY" \\
-  https://your-domain.com/api/reports`,
+  https://datacube.uxlivinglab.online/api/v2/reports`,
                 response: `{
   "success": true,
   "data": {
@@ -173,11 +173,11 @@ const endpoints = [
             {
                 title: 'Get Stats',
                 method: 'GET',
-                path: '/api/stats',
+                path: '/api/v2/stats',
                 description:
                     'Summary counts: databases, collections, documents, reads/writes per day/month.',
                 request: `curl -H "datacube-key: YOUR_API_KEY" \\
-  https://your-domain.com/api/stats`,
+  https://datacube.uxlivinglab.online/api/v2/stats`,
                 response: `{
   "success": true,
   "data": {
@@ -281,7 +281,7 @@ export default function ApiDocsPage() {
                             Provide your API key in the `datacube-key` header:
                         </p>
                         <pre className="bg-gray-800 p-4 rounded text-sm overflow-x-auto">
-                            {`fetch('/api/database', {
+                            {`fetch('/api/v2/database', {
   headers: {
     'datacube-key': 'YOUR_API_KEY',
     'Content-Type': 'application/json'

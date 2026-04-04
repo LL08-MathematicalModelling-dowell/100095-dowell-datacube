@@ -37,7 +37,7 @@ const FilesSection = () => {
   const { data, isLoading } = useQuery<FileListResponse>({
     queryKey: ['files', page],
     queryFn: async () => {
-      const response = await api.get(`/api/files/?page=${page}&page_size=${pageSize}`);
+      const response = await api.get(`/api/v2/files/?page=${page}&page_size=${pageSize}`);
       return response;
     },
     // keepPreviousData: true is deprecated in v5, use placeholderData if on newest TanStack
@@ -61,7 +61,7 @@ const FilesSection = () => {
     mutationFn: (file: File) => {
       const formData = new FormData();
       formData.append('file', file);
-      return api.post('/api/files/', formData, {
+      return api.post('/api/v2/files/', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
     },

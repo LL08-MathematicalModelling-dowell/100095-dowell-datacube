@@ -18,7 +18,7 @@ interface Document {
     [key: string]: any;
 }
 
-const CRUD_URL = "/api/crud/";
+const CRUD_URL = "/api/v2/crud/";
 
 const CollectionDocuments = () => {
     // === All hooks at the top — NEVER after conditional returns ===
