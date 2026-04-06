@@ -3,6 +3,7 @@ import inspect
 from functools import wraps
 from typing import Any, Callable, Type, Dict
 from datetime import datetime, timezone
+from urllib import response
 
 from django.conf import settings
 from django.http import Http404
@@ -27,12 +28,27 @@ from analytics.tasks import (
 )
 
 class BaseAPIView(AsyncAPIView):
+    _forced_user_id = None  # Add this to store the owner_id from the signed URL
+
     @property
     def file_svc(self):
+        # Use the forced ID if available (for signed URLs), else fall back to request.user
+        uid = self._forced_user_id or (str(self.request.user.pk) if self.request.user and self.request.user.is_authenticated else None)
+        
+        if not uid:
+            raise PermissionDenied("User context not found for File Service.")
+
         return GridFSService(
             db_name=settings.FILE_STORAGE_DB_NAME,
-            user_id=str(self.request.user.pk)
+            user_id=uid
         )
+
+    # @property
+    # def file_svc(self):
+    #     return GridFSService(
+    #         db_name=settings.FILE_STORAGE_DB_NAME,
+    #         user_id=str(self.request.user.pk)
+    #     )
 
     @property
     def metadata_svc(self):
@@ -46,6 +62,22 @@ class BaseAPIView(AsyncAPIView):
                 start_time = time.perf_counter()
                 try:
                     response = await fn(self, request, *args, **kwargs)
+                    # Check if we need to manually perform content negotiation
+                    if not hasattr(response, 'accepted_renderer'):
+                        negatitator = self.get_content_negotiator()
+                        renderers = self.get_renderers()
+                        # Select the appropriate renderer based on the request
+                        conneg = negatitator.select_renderer(request, renderers, self.format_kwarg)
+                        
+                        response.accepted_renderer = conneg[0]
+                        response.accepted_media_type = conneg[1]
+                        # FIX: Call without positional arguments
+                        response.renderer_context = self.get_renderer_context() 
+                    
+                    if hasattr(response, 'render') and callable(response.render):
+                        # Render to ensure response.content is available for _track
+                        await response.render() if inspect.iscoroutinefunction(response.render) else response.render()
+                        
                     BaseAPIView._track(request, response, start_time)
                     return response
                 except (Http404, APIException) as e:
@@ -66,6 +98,22 @@ class BaseAPIView(AsyncAPIView):
             start_time = time.perf_counter()
             try:
                 response = fn(self, request, *args, **kwargs)
+                # Check if we need to manually perform content negotiation
+                if not hasattr(response, 'accepted_renderer'):
+                    negatitator = self.get_content_negotiator()
+                    renderers = self.get_renderers()
+                    # Select the appropriate renderer based on the request
+                    conneg = negatitator.select_renderer(request, renderers, self.format_kwarg)
+                    
+                    response.accepted_renderer = conneg[0]
+                    response.accepted_media_type = conneg[1]
+                    # FIX: Call without positional arguments
+                    response.renderer_context = self.get_renderer_context() 
+                
+                if hasattr(response, 'render') and callable(response.render):
+                    # Render to ensure response.content is available for _track
+                    response.render()
+
                 BaseAPIView._track(request, response, start_time)
                 return response
             except (Http404, APIException) as e:
@@ -242,93 +290,3 @@ class BaseAPIView(AsyncAPIView):
                 "db_id": db_id,
             }
             log_slow_query_task.delay(slow_data) # type: ignore
-
-
-# import time
-# import inspect
-# from functools import wraps
-# from typing import Any, Callable, Type, Dict, List, Tuple
-
-# from django.conf import settings
-# from django.http import Http404
-# from adrf.views import APIView as AsyncAPIView
-# from rest_framework.response import Response
-# from rest_framework import status
-# from rest_framework.serializers import Serializer
-# from rest_framework.exceptions import APIException
-
-# from api.services.metadata_service import MetadataService
-# from api.services.gridfs_service import GridFSService
-
-# class BaseAPIView(AsyncAPIView):
-#     @property
-#     def file_svc(self):
-#         return GridFSService(
-#             db_name=settings.FILE_STORAGE_DB_NAME,
-#             user_id=str(self.request.user.pk)
-#         )
-
-#     @property
-#     def metadata_svc(self):
-#         return MetadataService(user_id=str(self.request.user.pk))
-
-#     @staticmethod
-#     def handle_errors(fn: Callable) -> Callable:
-#         if inspect.iscoroutinefunction(fn):
-#             @wraps(fn)
-#             async def async_wrapper(self, request, *args, **kwargs):
-#                 start_time = time.perf_counter()
-#                 try:
-#                     response = await fn(self, request, *args, **kwargs)
-#                     BaseAPIView._track(request, response, start_time)
-#                     return response
-#                 except (Http404, APIException) as e:
-#                     # Capture DRF's 401, 403, 404, etc.
-#                     BaseAPIView._track(request, None, start_time, error=e)
-#                     status_code = getattr(e, 'status_code', status.HTTP_404_NOT_FOUND if isinstance(e, Http404) else 500)
-#                     detail = getattr(e, 'detail', str(e))
-#                     return Response({"success": False, "error": type(e).__name__, "detail": detail}, status=status_code)
-#                 except (ValueError, KeyError, TypeError) as e:
-#                     BaseAPIView._track(request, None, start_time, error=e)
-#                     return Response({"success": False, "error": "ValidationError", "detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-#                 except Exception as e:
-#                     BaseAPIView._track(request, None, start_time, error=e)
-#                     return Response({"success": False, "error": "InternalServerError", "detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-#             return async_wrapper
-
-#         @wraps(fn)
-#         def sync_wrapper(self, request, *args, **kwargs):
-#             start_time = time.perf_counter()
-#             try:
-#                 response = fn(self, request, *args, **kwargs)
-#                 BaseAPIView._track(request, response, start_time)
-#                 return response
-#             except (Http404, APIException) as e:
-#                 BaseAPIView._track(request, None, start_time, error=e)
-#                 status_code = getattr(e, 'status_code', status.HTTP_404_NOT_FOUND if isinstance(e, Http404) else 500)
-#                 return Response({"success": False, "error": type(e).__name__, "detail": getattr(e, 'detail', str(e))}, status=status_code)
-#             except (ValueError, KeyError, TypeError) as e:
-#                 BaseAPIView._track(request, None, start_time, error=e)
-#                 return Response({"success": False, "error": "ValidationError", "detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-#             except Exception as e:
-#                 BaseAPIView._track(request, None, start_time, error=e)
-#                 return Response({"success": False, "detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-#         return sync_wrapper
-
-#     def validate_serializer(self, serializer_class: Type[Serializer], data: Dict[str, Any]) -> Dict[str, Any]:
-#         serializer = serializer_class(data=data, context={'request': self.request})
-#         serializer.is_valid(raise_exception=True)
-#         return serializer.validated_data # type: ignore
-
-#     @staticmethod
-#     def _track(request, response, start_time, error=None):
-#         if not request.user or not request.user.is_authenticated: return
-#         duration = (time.perf_counter() - start_time) * 1000
-#         telemetry_data = {
-#             "user_id": str(request.user.pk),
-#             "method": request.method,
-#             "path": request.path,
-#             "status_code": response.status_code if response else 500,
-#             "duration_ms": duration,
-#             "is_error": error is not None
-#         }

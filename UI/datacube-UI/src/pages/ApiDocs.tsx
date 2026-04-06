@@ -14,6 +14,7 @@ interface Endpoint {
   description: string;
   url: string;
   methods: Method[];
+  notes?: string; // Optional field for additional notes or warnings about the endpoint
 }
 
 interface ApiGroup {
@@ -30,7 +31,7 @@ interface CopyButtonProps {
 
 const CopyButton: React.FC<CopyButtonProps> = ({ textToCopy }) => {
   const [isCopied, setIsCopied] = useState(false);
-  
+
   const handleCopy = () => {
     const textArea = document.createElement('textarea');
     textArea.value = textToCopy;
@@ -68,15 +69,15 @@ const MethodBadge: React.FC<MethodBadgeProps> = ({ method }) => {
 
   const baseClasses = "text-xs font-bold px-2 py-1 rounded-md shadow-md flex-shrink-0";
   const colors: Record<HttpVerb, string> = {
-    GET: "bg-emerald-500/20 text-emerald-400", 
+    GET: "bg-emerald-500/20 text-emerald-400",
     POST: "bg-sky-500/20 text-sky-400",
-    PUT: "bg-amber-500/20 text-amber-400", 
+    PUT: "bg-amber-500/20 text-amber-400",
     DELETE: "bg-red-500/20 text-red-400",
     PATCH: "bg-purple-500/20 text-purple-400",
   };
-  
+
   const colorClass = colors[verb] || "bg-slate-500/20 text-slate-400";
-  
+
   return <span className={`${baseClasses} ${colorClass}`}>{verb}</span>;
 };
 
@@ -185,23 +186,23 @@ export default function App() {
     <div className="bg-slate-900 text-slate-300 font-sans min-h-screen">
       {/* Enable smooth scrolling globally */}
       <style>{`html { scroll-behavior: smooth; }`}</style>
-      
+
       {/* Mobile Menu Button - Fixed position */}
       {MobileMenuButton}
 
       <div className="max-w-7xl mx-auto flex relative">
-        
+
         {/* Mobile Backdrop */}
         {isMenuOpen && (
-          <div 
-            className="fixed inset-0 bg-black/50 z-30 lg:hidden" 
-            onClick={() => setIsMenuOpen(false)} 
-            aria-hidden="true" 
+          <div
+            className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+            onClick={() => setIsMenuOpen(false)}
+            aria-hidden="true"
           ></div>
         )}
 
         {/* Sidebar Navigation */}
-        <aside 
+        <aside
           className={`
             fixed top-0 left-0 w-64 h-full bg-slate-900 z-40 lg:sticky 
             lg:block lg:w-64 lg:flex-shrink-0 lg:h-screen lg:overflow-y-auto 
@@ -216,12 +217,12 @@ export default function App() {
               <ul className="space-y-1">
                 {apiDocs.map((group: ApiGroup) => (
                   <li key={group.group}>
-                    <a 
-                      href={`#${generateId(group.group)}`} 
+                    <a
+                      href={`#${generateId(group.group)}`}
                       onClick={handleLinkClick}
                       className={`block text-sm px-3 py-2 rounded-lg transition-colors 
-                        ${activeGroup === generateId(group.group) 
-                          ? 'bg-cyan-500/20 text-cyan-300 font-semibold shadow-inner' 
+                        ${activeGroup === generateId(group.group)
+                          ? 'bg-cyan-500/20 text-cyan-300 font-semibold shadow-inner'
                           : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-100'
                         }`
                       }
@@ -253,7 +254,7 @@ export default function App() {
                   groupRefs.current[generateId(group.group)] = el;
                 }}
                 // Padding for smooth scrolling anchor target below fixed header
-                className="pt-16 -mt-16" 
+                className="pt-16 -mt-16"
               >
                 <h2 className="text-3xl font-bold text-white tracking-tight mt-12">{group.group}</h2>
                 <p className="mt-3 text-slate-400 text-lg">{group.description}</p>
@@ -267,7 +268,7 @@ export default function App() {
 
                     {endpoint.methods.map((method: Method, index: number) => (
                       <div key={index} className={index > 0 ? "mt-6 border-t border-slate-700/60 pt-6" : "mt-4"}>
-                        
+
                         {/* Method and URL display */}
                         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-slate-900 p-3 rounded-lg overflow-x-auto border border-slate-800/80">
                           <MethodBadge method={method.method} />
@@ -286,6 +287,11 @@ export default function App() {
                         <div className="mt-4"> <h4 className="font-semibold text-slate-200 text-base">Example Response</h4> <CodeBlock code={method.response} /> </div>
                       </div>
                     ))}
+                    {endpoint.notes && (
+                          <div className="mt-4 p-3 bg-slate-900/50 rounded border-l-4 border-amber-500">
+                            <p className="text-sm text-slate-300">📘 Note: {endpoint.notes}</p>
+                          </div>
+                        )}
                   </article>
                 ))}
               </section>

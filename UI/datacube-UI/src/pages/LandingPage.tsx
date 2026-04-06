@@ -185,8 +185,8 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* Pricing */}
-      <section className="py-32 px-6 bg-[var(--bg-dark-2)]/30">
+      {/* Pricing Commented out for now*/}
+      {/* <section className="py-32 px-6 bg-[var(--bg-dark-2)]/30">
         <div className="text-center mb-20">
           <h2 className="text-6xl font-bold mb-6">Pricing That Makes Sense</h2>
           <p className="text-2xl text-[var(--text-muted)]">One plan. Unlimited everything.</p>
@@ -220,7 +220,7 @@ const LandingPage = () => {
             cta={{ text: "Go Pro →", to: "/register" }}
           />
         </div>
-      </section>
+      </section> */}
 
       {/* Blog Preview */}
       <section className="py-32 px-6">

@@ -140,7 +140,7 @@ class MetadataService:
             session=session
         )
 
-        db_instance = await settings.MONGODB_CLIENT[internal_db_name]
+        db_instance = settings.MONGODB_CLIENT[internal_db_name]
         for name in names:
             await db_instance.drop_collection(name)
         return names
