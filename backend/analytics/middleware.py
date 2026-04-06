@@ -162,6 +162,7 @@ class DatacubeObservabilityMiddleware:
                 request._parsed_json = parsed_json
             except (UnicodeDecodeError, json.JSONDecodeError) as e:
                 logger.debug(f"Could not decode JSON body: {e}")
+                raw_body = None # If decoding fails, we won't have the raw body for logging, but we can still proceed with an empty dict for parsed_json.
 
         # 3. Process request
         response = self.get_response(request)
@@ -181,7 +182,8 @@ class DatacubeObservabilityMiddleware:
         # 5. Calculate latency (ms)
         duration = (time.perf_counter() - start_time) * 1000
 
-        if hasattr(request, 'user') and request.user.is_authenticated:
+        # if hasattr(request, 'user') and request.user.is_authenticated:
+        if hasattr(request, 'user') and request.user and request.user.is_authenticated:
             request_body = {}
             if hasattr(request, '_parsed_json'):
                 request_body = request._parsed_json

@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom';
 import api from '../services/api';
 import useAuthStore from '../store/authStore';
 import FilesSection from '../components/FileSection';
+import AnalyticsCharts from '../components/AnalyticsCharts';
 
 // Define validation schema
 const collectionFieldSchema = z.object({
@@ -88,7 +89,7 @@ const Overview = () => {
         </p>
 
         {/* API Usage Stats */}
-        <section className="p-6 bg-slate-800/50 rounded-xl border border-slate-700/80 mb-8">
+        {/* <section className="p-6 bg-slate-800/50 rounded-xl border border-slate-700/80 mb-8">
           <h2 className="text-2xl font-semibold text-white tracking-tight mb-6">
             API Usage & Statistics
           </h2>
@@ -114,7 +115,6 @@ const Overview = () => {
               </div>
               <p className="text-xs text-slate-500 mt-3">Total databases provisioned</p>
             </div>
-            {/* You could add more stat cards here, e.g., Storage Used, Active Users, etc. */}
             <div className="bg-slate-700/40 p-5 rounded-lg border border-slate-600/50 flex flex-col justify-between">
               <div>
                 <h3 className="text-sm font-medium text-slate-400 mb-2 flex items-center">
@@ -126,8 +126,16 @@ const Overview = () => {
               <p className="text-xs text-slate-500 mt-3">Endpoints connected to your databases</p>
             </div>
           </div>
+        </section> */}
+
+        {/* Analytics Charts */}
+        <section className="p-6 bg-slate-800/50 rounded-xl border border-slate-700/80 mb-8">
+          <h2 className="text-2xl font-semibold text-white tracking-tight mb-6">
+            Analytics & Performance
+          </h2>
+          <AnalyticsCharts />
         </section>
-        
+
         <FilesSection />
 
         {/* Databases List */}

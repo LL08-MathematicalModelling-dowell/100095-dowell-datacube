@@ -23,6 +23,7 @@
     "react-hook-form": "^7.64.0",
     "react-hot-toast": "^2.6.0",
     "react-router-dom": "^7.9.3",
+    "recharts": "^3.8.1",
     "zod": "^4.1.11",
     "zustand": "^5.0.8"
   },

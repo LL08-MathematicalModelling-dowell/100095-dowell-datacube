@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any, Callable, Awaitable
 from django.conf import settings
-from gridfs.asynchronous import AsyncGridFSBucket
 from bson import ObjectId
+from gridfs.asynchronous import AsyncGridFSBucket
 from api.services.metadata_service import MetadataService
 
 
@@ -44,18 +44,34 @@ class GridFSService:
         return file_id_str
 
     async def get_file_info(self, file_id: str) -> Optional[Dict[str, Any]]:
-        """Retrieves file metadata information for a given file_id, scoped to the user."""
-        cursor = self.bucket.find({"_id": ObjectId(file_id), "metadata.user_id": self.user_id})
-        results = await cursor.to_list(length=1)
-        if results:
-            file_doc = results[0]
-            return {
-                "filename": file_doc.filename,
-                "upload_date": file_doc.upload_date,
-                "length": file_doc.length,
-                "metadata": file_doc.metadata
-            }
-        return None
+        """Retrieves file metadata using find_one for better async stability."""
+        try:
+            oid = ObjectId(file_id)
+            
+            file_doc = self.bucket.find(
+                {
+                    "_id": oid, 
+                    "metadata.user_id": self.user_id
+                } 
+            ).limit(1)
+
+            file_doc = await file_doc.to_list()
+
+            if file_doc and len(file_doc) > 0:
+                return {
+                    "filename": file_doc[0].filename,
+                    "file_id": str(file_doc[0]._id),
+                    "content_type": file_doc[0].metadata.get("contentType"),
+                    "upload_date": file_doc[0].upload_date,
+                    "length": file_doc[0].length,
+                    "metadata": file_doc[0].metadata
+                }
+            
+            return None
+
+        except Exception as e:
+            print(f"DEBUG: GridFS failed at find_one for {file_id}: {e}")
+            raise e
 
     async def delete_file(self, file_id: str) -> bool:
         """Deletes a file from GridFS and its metadata entry, scoped to the user."""
