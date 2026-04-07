@@ -1,21 +1,28 @@
-FROM node:18-alpine
+# --- Stage 1: Build ---
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files and install dependencies
+# Copy package files
 COPY package.json package-lock.json ./
-RUN npm install
 
-# Copy the rest of the application
+# Timeout fixes for unstable connections
+RUN npm config set fetch-retry-maxtimeout 1200000 && \
+    npm config set fetch-retries 10 && \
+    npm install
+
+# Copy source and build
 COPY . .
-
-# Build the Vite app
 RUN npm run build
 
-# Install serve to run the built app
-RUN npm install -g serve
+# --- Stage 2: Production ---
+FROM nginx:stable-alpine
 
-# Serve the built app on port 3000
-CMD ["serve", "-s", "dist", "-l", "3000"]
+# Copy the static build from the builder stage
+# Vite builds to 'dist', standard React builds to 'build'
+COPY --from=builder /app/dist /usr/share/nginx/html
 
-EXPOSE 3000
+# Expose port 80 (Nginx default)
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

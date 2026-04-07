@@ -1,47 +1,22 @@
 /* eslint-disable @typescript/no-explicit-any */
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import {
-    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-    ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell
+    Bar,
+    BarChart,
+    CartesianGrid,
+    Cell,
+    Legend,
+    Line,
+    LineChart,
+    Pie,
+    PieChart,
+    ResponsiveContainer,
+    Tooltip,
+    XAxis, YAxis
 } from 'recharts';
 import api from '../services/api';
 
-// --- Types ---
-interface DashboardData {
-    overview: {
-        total_requests: number;
-        avg_response_time_ms: number;
-        error_rate_percent: number;
-        total_storage_mb: number;
-    };
-    daily_requests: {
-        dates: string[];
-        counts: number[];
-        avg_durations_ms: number[];
-    };
-}
-
-interface PerformanceData {
-    percentiles_ms: {
-        p50: number;
-        p90: number;
-        p95: number;
-        p99: number;
-    };
-    throughput_last_24h: Array<{ hour: string; requests: number }>;
-}
-
-interface ErrorData {
-    errors_by_status_code: Record<string, number>;
-    top_error_endpoints: Array<{ path: string; errors: number }>;
-    error_types: { client_error: number; server_error: number };
-}
-
-interface TopCollection {
-    name: string;
-    operations: number;
-}
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
@@ -60,7 +35,7 @@ const AnalyticsCharts = () => {
     };
 
     // Dashboard query
-    const { data: dashboardRaw, isLoading: dashboardLoading, error: dashboardError, refetch: refetchDashboard } = useQuery({
+    const { data: dashboardRaw, isLoading: dashboardLoading, error: dashboardError} = useQuery({
         queryKey: ['analytics', 'dashboard'],
         queryFn: async () => {
             const res = await api.get('/analytics/api/v2/dashboard/');
@@ -72,7 +47,7 @@ const AnalyticsCharts = () => {
     });
 
     // Performance query
-    const { data: performanceRaw, isLoading: perfLoading, error: perfError, refetch: refetchPerf } = useQuery({
+    const { data: performanceRaw, isLoading: perfLoading, error: perfError} = useQuery({
         queryKey: ['analytics', 'performance'],
         queryFn: async () => {
             const res = await api.get('/analytics/api/v2/performance/');
@@ -83,7 +58,7 @@ const AnalyticsCharts = () => {
     });
 
     // Errors query
-    const { data: errorsRaw, isLoading: errorsLoading, error: errorsError, refetch: refetchErrors } = useQuery({
+    const { data: errorsRaw, isLoading: errorsLoading, error: errorsError} = useQuery({
         queryKey: ['analytics', 'errors'],
         queryFn: async () => {
             const res = await api.get('/analytics/api/v2/errors/');
@@ -94,7 +69,7 @@ const AnalyticsCharts = () => {
     });
 
     // Top collections query
-    const { data: topCollectionsRaw, isLoading: topLoading, error: topError, refetch: refetchTop } = useQuery({
+    const { data: topCollectionsRaw, isLoading: topLoading, error: topError} = useQuery({
         queryKey: ['analytics', 'top-collections'],
         queryFn: async () => {
             const res = await api.get('/analytics/api/v2/top-collections/');

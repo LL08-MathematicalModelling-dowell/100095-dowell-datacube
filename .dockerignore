@@ -1,0 +1,36 @@
+# 1. Version Control
+.git
+.gitignore
+
+# 2. Python (Backend)
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.venv
+venv
+ENV
+env
+
+# 3. Node.js (Frontend)
+**/node_modules
+**/npm-debug.log*
+**/yarn-error.log*
+.npm
+
+# 4. Build Artifacts
+**/dist
+**/build
+**/out
+.next
+
+# 5. Secrets and Configuration
+.env
+*.local
+secrets.json
+
+# 6. IDE / System Files
+.vscode
+.idea
+.DS_Store
+Thumbs.db
