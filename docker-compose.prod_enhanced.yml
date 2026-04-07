@@ -20,8 +20,6 @@ services:
       - ./backend/.env.prod
     environment:
       - DJANGO_SETTINGS_MODULE=project.settings.production
-    # REMOVED PORTS: Scaling 3 replicas with a host port (8000:8000) causes errors.
-    # Use 'expose' for internal networking only.
     expose:
       - 8000
     command: >
@@ -87,8 +85,6 @@ services:
     restart: unless-stopped
     deploy:
       replicas: 2
-    # NOTE: If scaling this, you'll need a Load Balancer (Nginx) 
-    # to sit on port 80 and point to this service.
     expose:
       - 80
     environment:
