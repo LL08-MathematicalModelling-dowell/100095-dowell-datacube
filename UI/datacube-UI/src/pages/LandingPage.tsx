@@ -1,6 +1,6 @@
 import { format } from "date-fns";
 import { motion } from "framer-motion";
-import { ArrowRight, Check, Github, Mail, Rocket, Shield, Star, Zap } from "lucide-react";
+import { ArrowRight, Github, Mail, Rocket, Shield, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -16,47 +16,47 @@ const blogPosts = [
   { title: "Scaling to 1M Requests with Zero Ops", date: "2025-03-10", excerpt: "How DataCube handles traffic spikes without you lifting a finger.", readTime: "5 min" },
 ];
 
-const PricingTier = ({ title, price, yearlyPrice, features, popular, cta }: any) => (
-  <motion.div
-    whileHover={{ y: -12, scale: 1.02 }}
-    className={`relative p-10 rounded-3xl border-2 transition-all ${
-      popular
-        ? "border-[var(--green-dark)] bg-gradient-to-b from-[var(--green-dark)]/10 to-transparent shadow-2xl shadow-[var(--green-dark)]/30"
-        : "border-[var(--border-color)] bg-[var(--bg-dark-2)]"
-    }`}
-  >
-    {popular && (
-      <div className="absolute -top-5 left-1/2 -translate-x-1/2 bg-[var(--green-dark)] text-white px-6 py-2 rounded-full text-sm font-bold flex items-center gap-2">
-        <Star className="w-4 h-4 fill-current" />
-        Most Popular
-      </div>
-    )}
-    <h3 className="text-3xl font-bold text-[var(--green-dark)] mb-4">{title}</h3>
-    <div className="mb-8">
-      <span className="text-6xl font-bold text-[var(--text-light)]">${price}</span>
-      <span className="text-[var(--text-muted)] text-xl">/month</span>
-      {yearlyPrice && <span className="block text-sm text-[var(--text-muted)] mt-2">or ${yearlyPrice}/year (Save 20%)</span>}
-    </div>
-    <ul className="space-y-4 mb-10">
-      {features.map((f: string) => (
-        <li key={f} className="flex items-start gap-3">
-          <Check className="w-6 h-6 text-[var(--green-dark)] flex-shrink-0 mt-0.5" />
-          <span className="text-lg">{f}</span>
-        </li>
-      ))}
-    </ul>
-    <Link
-      to={cta.to}
-      className={`block text-center py-4 rounded-xl font-bold text-xl transition-all ${
-        popular
-          ? "bg-[var(--green-dark)] text-white hover:bg-[var(--green-dark)]/90 shadow-lg"
-          : "bg-[var(--bg-dark-3)] hover:bg-[var(--bg-dark-3)]/80"
-      }`}
-    >
-      {cta.text}
-    </Link>
-  </motion.div>
-);
+// const PricingTier = ({ title, price, yearlyPrice, features, popular, cta }: any) => (
+//   <motion.div
+//     whileHover={{ y: -12, scale: 1.02 }}
+//     className={`relative p-10 rounded-3xl border-2 transition-all ${
+//       popular
+//         ? "border-[var(--green-dark)] bg-gradient-to-b from-[var(--green-dark)]/10 to-transparent shadow-2xl shadow-[var(--green-dark)]/30"
+//         : "border-[var(--border-color)] bg-[var(--bg-dark-2)]"
+//     }`}
+//   >
+//     {popular && (
+//       <div className="absolute -top-5 left-1/2 -translate-x-1/2 bg-[var(--green-dark)] text-white px-6 py-2 rounded-full text-sm font-bold flex items-center gap-2">
+//         <Star className="w-4 h-4 fill-current" />
+//         Most Popular
+//       </div>
+//     )}
+//     <h3 className="text-3xl font-bold text-[var(--green-dark)] mb-4">{title}</h3>
+//     <div className="mb-8">
+//       <span className="text-6xl font-bold text-[var(--text-light)]">${price}</span>
+//       <span className="text-[var(--text-muted)] text-xl">/month</span>
+//       {yearlyPrice && <span className="block text-sm text-[var(--text-muted)] mt-2">or ${yearlyPrice}/year (Save 20%)</span>}
+//     </div>
+//     <ul className="space-y-4 mb-10">
+//       {features.map((f: string) => (
+//         <li key={f} className="flex items-start gap-3">
+//           <Check className="w-6 h-6 text-[var(--green-dark)] flex-shrink-0 mt-0.5" />
+//           <span className="text-lg">{f}</span>
+//         </li>
+//       ))}
+//     </ul>
+//     <Link
+//       to={cta.to}
+//       className={`block text-center py-4 rounded-xl font-bold text-xl transition-all ${
+//         popular
+//           ? "bg-[var(--green-dark)] text-white hover:bg-[var(--green-dark)]/90 shadow-lg"
+//           : "bg-[var(--bg-dark-3)] hover:bg-[var(--bg-dark-3)]/80"
+//       }`}
+//     >
+//       {cta.text}
+//     </Link>
+//   </motion.div>
+// );
 
 const LandingPage = () => {
   // const [isDark, setIsDark] = useState(true);
