@@ -9,7 +9,7 @@ services:
   # 2. Web Backend
   backend:
     # Build & Push logic: image name includes your Docker Hub user + variable
-    image: ${DOCKER_HUB_USER}/backend:${APP_VERSION:-latest}
+    # image: ${DOCKER_HUB_USER}/backend:${APP_VERSION:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
@@ -56,7 +56,7 @@ services:
   # 4. Celery Worker
   celery_worker:
     # Reuses the same image as backend to keep versioning unified
-    image: ${DOCKER_HUB_USER}/backend:${APP_VERSION:-latest}
+    # image: ${DOCKER_HUB_USER}/backend:${APP_VERSION:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
@@ -78,7 +78,7 @@ services:
 
   # 5. Frontend Application
   react-app:
-    image: ${DOCKER_HUB_USER}/frontend:${APP_VERSION:-latest}
+    # image: ${DOCKER_HUB_USER}/frontend:${APP_VERSION:-latest}
     build:
       context: ./UI/datacube-UI
       dockerfile: Dockerfile
