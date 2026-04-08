@@ -14,8 +14,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile.prod
     restart: unless-stopped
-    deploy:
-      replicas: 3
+    # deploy:
+    #   replicas: 3
     env_file:
       - ./backend/.env.prod
     environment:
@@ -83,8 +83,8 @@ services:
       context: ./UI/datacube-UI
       dockerfile: Dockerfile
     restart: unless-stopped
-    deploy:
-      replicas: 2
+    # deploy:
+    #   replicas: 2
     expose:
       - 80
     environment:
