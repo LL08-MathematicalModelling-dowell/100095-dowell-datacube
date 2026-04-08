@@ -317,7 +317,7 @@ const FileDetail = () => {
 
                 <div className="bg-cyan-500/5 border border-cyan-500/20 p-4 rounded-xl">
                   <p className="text-xs text-cyan-400 leading-relaxed">
-                    <strong>Signed URL</strong> (expires in 5 minutes):<br />
+                    <strong>Signed URL</strong> (expires in 24 Hours):<br />
                     <span className="break-all text-slate-300 text-[11px] font-mono">
                       {file.signed_url}
                     </span>

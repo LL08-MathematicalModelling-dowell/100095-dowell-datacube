@@ -405,7 +405,7 @@ Fields:
       {
         name: "List Files",
         description:
-          "Retrieve a paginated list of file metadata along with global storage statistics for the authenticated user. Each file entry includes a **signed URL** that can be used directly in `<img>`, `<video>`, or `<a>` tags for 5 minutes.",
+          "Retrieve a paginated list of file metadata along with global storage statistics for the authenticated user. Each file entry includes a **signed URL** that can be used directly in `<img>`, `<video>`, or `<a>` tags for 5 Hours.",
         auth_required: "API Key",
         url: "/api/v2/files/",
         methods: [
@@ -479,7 +479,7 @@ Fields:
       {
         name: "Get File Detail",
         description:
-          "Retrieve metadata for a specific file, including a fresh signed URL (valid for 5 minutes).",
+          "Retrieve metadata for a specific file, including a fresh signed URL (valid for 24 Hours).",
         auth_required: "API Key",
         url: "/api/v2/files/:file_id/",
         methods: [
@@ -518,7 +518,7 @@ Fields:
           },
         ],
         notes:
-          "You do not need to add an `Authorization` header when using a signed URL – the signature and expiration provide secure access. The URL is valid for 5 minutes; after that, fetch a fresh one from the file detail endpoint.",
+          "You do not need to add an `Authorization` header when using a signed URL – the signature and expiration provide secure access. The URL is valid for 24 Hours; after that, fetch a fresh one from the file detail endpoint.",
       },
       {
         name: "Download File (Small Files)",
