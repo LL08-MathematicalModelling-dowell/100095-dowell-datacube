@@ -126,7 +126,7 @@ class FileListView(BaseAPIView):
             file_entry["signed_url"] = generate_signed_url(
                 file_id=file_id,
                 user_id=user_id,
-                expires_in_seconds=60 * 60 * 2  # 2 hours
+                expires_in_seconds=60 * 60 * 5  # 5 hours
             )
 
         # Send analytics
@@ -176,7 +176,7 @@ class FileListView(BaseAPIView):
         signed_url = generate_signed_url(
             file_id=file_id,
             user_id=str(request.user.pk),
-            expires_in_seconds=60 * 60 * 2  # 2 hours
+            expires_in_seconds=60 * 60 * 5  # 5 hours
         )
 
         return Response(
