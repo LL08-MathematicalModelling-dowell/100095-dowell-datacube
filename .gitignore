@@ -5,6 +5,11 @@ __pycache__
 # C extensions
 *.so
 
+
+IGNORE_THIS_DOC.md
+
+
+
 db.sqlite3
 # Distribution / packaging
 bin/

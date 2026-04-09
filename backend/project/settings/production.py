@@ -1,6 +1,7 @@
 """
 Django settings for the DataCube project in the production environment.
 """
+from ast import If
 import os
 from .common import *
 
@@ -13,14 +14,18 @@ if not SECRET_KEY:
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-# Define the allowed hosts for your production site
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
+# ----------------- CORS Allowed Hosts -----------------
+# Allow all origins for CORS for /api/ endpoints, but restrict others
+CORS_ORIGIN_ALLOW_ALL = False
+# CORS_ORIGIN_WHITELIST is set from environment variable in common.py, 
+# and CORS_URLS_REGEX restricts it to /api/ endpoints only, so we 
+#   can allow all origins for API while keeping other endpoints secure. 
+# This allows the frontend to connect to the API from any domain, while preventing CORS issues for non-API endpoints.
+CORS_ORIGIN_WHITELIST = os.getenv('ALLOWED_HOSTS', '').split(',')
+if not CORS_ORIGIN_WHITELIST:
+    raise ValueError("No ALLOWED_HOSTS set for production environment, which is required for CORS_ORIGIN_WHITELIST.")
 
-# ALLOWED_HOSTS = ['*']
-# CORS_ORIGIN_ALLOW_ALL = True
-
-if not ALLOWED_HOSTS:
-    raise ValueError("No ALLOWED_HOSTS set for production environment.")
+CORS_URLS_REGEX = r'^/api/.*$'
 
 # --- Security ---
 CSRF_COOKIE_SECURE = True
@@ -29,12 +34,6 @@ CSRF_COOKIE_SECURE = True
 # SECURE_HSTS_SECONDS = 31536000  # 1 year
 # SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 # SECURE_HSTS_PRELOAD = True
-
-# --- CORS ---
-# Be explicit about which origins are allowed to connect
-# CORS_ORIGIN_WHITELIST = os.getenv('CORS_ORIGIN_WHITELIST', '').split(',')
-# if not CORS_ORIGIN_WHITELIST:
-#     raise ValueError("No CORS_ORIGIN_WHITELIST set for production environment.")
 
 # --- Email ---
 # Use a real SMTP backend for production
