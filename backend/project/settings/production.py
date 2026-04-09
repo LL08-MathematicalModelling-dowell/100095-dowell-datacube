@@ -14,18 +14,11 @@ if not SECRET_KEY:
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-# ----------------- CORS Allowed Hosts -----------------
-# Allow all origins for CORS for /api/ endpoints, but restrict others
-CORS_ORIGIN_ALLOW_ALL = False
-# CORS_ORIGIN_WHITELIST is set from environment variable in common.py, 
-# and CORS_URLS_REGEX restricts it to /api/ endpoints only, so we 
-#   can allow all origins for API while keeping other endpoints secure. 
-# This allows the frontend to connect to the API from any domain, while preventing CORS issues for non-API endpoints.
-CORS_ORIGIN_WHITELIST = os.getenv('ALLOWED_HOSTS', '').split(',')
-if not CORS_ORIGIN_WHITELIST:
-    raise ValueError("No ALLOWED_HOSTS set for production environment, which is required for CORS_ORIGIN_WHITELIST.")
+ALLOWED_HOSTS = ['datacube.uxlivinglab.online', 'localhost', '127.0.0.1', 'backend']
 
-CORS_URLS_REGEX = r'^/api/.*$'
+# ----------------- CORS Allowed Hosts -----------------
+CORS_ALLOW_ALL_ORIGINS = True  # This makes the API "public" to any domain
+CORS_URLS_REGEX = r'^/api/.*$' # Only apply these open rules to /api/ routes
 
 # --- Security ---
 CSRF_COOKIE_SECURE = True
