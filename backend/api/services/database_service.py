@@ -84,10 +84,10 @@ class DatabaseService:
         if not meta:
             raise PermissionError("Database not found or access denied.")
         
-        # Enforce collections cap of 1000
+        # Enforce collections cap of 10000
         existing_col_count = len(meta.get("collections", []))
-        if existing_col_count + len(new_cols) > 1000:
-            raise ValueError("Adding these collections would exceed the limit of 1000 collections per database.")
+        if existing_col_count + len(new_cols) > 10000:
+            raise ValueError("Adding these collections would exceed the limit of 10000 collections per database.")
 
         # internal_db_name = meta["dbName"]
         display_db_name = meta["displayName"]
