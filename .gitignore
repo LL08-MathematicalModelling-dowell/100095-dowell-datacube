@@ -8,7 +8,7 @@ __pycache__
 
 IGNORE_THIS_DOC.md
 
-
+client_test_data/
 
 db.sqlite3
 # Distribution / packaging
