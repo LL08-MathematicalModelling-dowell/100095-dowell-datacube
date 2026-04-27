@@ -13,11 +13,6 @@ class DemoLoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        # Validate a shared secret (to prevent public abuse)
-        secret = request.headers.get('X-Demo-Secret')
-        if secret != settings.DEMO_PLAYGROUND_SECRET:
-            return Response({"error": "Unauthorized"}, status=401)
-
         # Get or create the demo user
         demo_email = "samanta@dowellresearch.se"
         user_doc = user_manager.get_user_by_email(demo_email)
