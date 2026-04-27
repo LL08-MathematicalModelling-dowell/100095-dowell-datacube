@@ -123,6 +123,24 @@ class UserManager:
             {"_id": ObjectId(user_id)},
             {"$unset": {"password_reset_token": "", "password_reset_expiry": ""}}
         )
+    
+    # def create_demo_user(self, email, first_name, last_name):
+    #     """Create a demo user with limited permissions."""
+    #     user_data = {
+    #         "email": email,
+    #         "firstName": first_name,
+    #         "lastName": last_name,
+    #         "password": None,
+    #         "is_email_verified": True,
+    #         "is_demo": True,                     # flag for permission checks
+    #         "usage": {
+    #             "api_calls_current_month": 0,
+    #             "last_reset_date": datetime.now(timezone.utc).isoformat()
+    #         }
+    #     }
+    #     result = self.users_collection.insert_one(user_data)
+    #     user_data['_id'] = result.inserted_id
+    #     return user_data
 
 
 # Instantiate the manager
