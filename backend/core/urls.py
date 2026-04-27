@@ -18,6 +18,9 @@ from .views.auth_views import (
     TokenRefreshView,
 )
 
+from .views.demo_views import DemoLoginView
+
+
 
 app_name = "core"
 
@@ -39,4 +42,8 @@ urlpatterns = [
     re_path(r'^password-reset/request/?$', PasswordResetRequestView.as_view(), name='password_reset_request'),
     re_path(r'^password-reset/confirm/(?P<token>[^/]+)/?$', PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
     re_path(r'^verify-email/resend/?$', ResendVerificationEmailView.as_view(), name='resend_verification'),
+]
+
+urlpatterns += [
+    re_path(r'^api/v2/demo/login/?$', DemoLoginView.as_view(), name='demo_login'),
 ]

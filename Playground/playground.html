@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DataCube Demo – One‑Click Login</title>
+    <style>
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .card {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 32px;
+            padding: 48px 32px;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        h1 {
+            color: white;
+            margin-bottom: 16px;
+        }
+        p {
+            color: #cbd5e1;
+            margin-bottom: 32px;
+        }
+        button {
+            background: #06b6d4;
+            border: none;
+            color: white;
+            font-size: 1.2rem;
+            font-weight: bold;
+            padding: 12px 32px;
+            border-radius: 40px;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+            box-shadow: 0 4px 12px rgba(6,182,212,0.4);
+        }
+        button:hover {
+            background: #0891b2;
+            transform: scale(1.02);
+        }
+        .loading {
+            display: none;
+            margin-top: 20px;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h1>🚀 DataCube Demo</h1>
+    <p>Experience the power of a scalable document database<br>without creating an account.</p>
+    <button id="demoBtn">✨ Launch Demo ✨</button>
+    <div id="loading" class="loading">Logging in, please wait...</div>
+</div>
+
+<script>
+    const API_BASE = 'https://datacube.uxlivinglab.online/core/api/v2';  // your backend URL
+    const DASHBOARD_URL = 'https://datacube.uxlivinglab.online/dashboard';
+
+    document.getElementById('demoBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('demoBtn');
+        const loadingDiv = document.getElementById('loading');
+        btn.disabled = true;
+        loadingDiv.style.display = 'block';
+
+        try {
+            const response = await fetch(`${API_BASE}/demo/login/`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-Demo-Secret': process.env.DEMO_PLAYGROUND_SECRET
+                }
+            });
+            
+            const data = await response.json();
+            if (data.access && data.refresh) {
+                // Store tokens in localStorage (same origin)
+                localStorage.setItem('accessToken', data.access);
+                localStorage.setItem('refreshToken', data.refresh);
+                // Redirect to dashboard
+                window.location.href = DASHBOARD_URL;
+            } else {
+                alert('Demo login failed. Please try again later.');
+                btn.disabled = false;
+                loadingDiv.style.display = 'none';
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Network error. Please check your connection.');
+            btn.disabled = false;
+            loadingDiv.style.display = 'none';
+        }
+    });
+</script>
+</body>
+</html>
