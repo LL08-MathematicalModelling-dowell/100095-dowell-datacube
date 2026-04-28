@@ -1,5 +1,7 @@
 from django.urls import path, re_path
 
+# from .views.demo_views import DemoLoginView
+
 # Import API data views
 from .views.api_views import (
     UserStatsAPIView,
@@ -16,9 +18,9 @@ from .views.auth_views import (
     UserProfileView,
     EmailVerificationView,
     TokenRefreshView,
+    DemoLoginView
 )
 
-from .views.demo_views import DemoLoginView
 
 
 
