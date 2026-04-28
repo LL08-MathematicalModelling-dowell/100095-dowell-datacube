@@ -298,3 +298,30 @@ class APIKeyView(APIView):
             return Response(status=status.HTTP_204_NO_CONTENT)
         else:
             return Response({"error": "Key not found or you do not have permission to delete it."}, status=status.HTTP_404_NOT_FOUND)
+
+
+
+class DemoLoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        # Get or create the demo user
+        demo_email = "samanta@dowellresearch.se"
+        user_doc = user_manager.get_user_by_email(demo_email)
+        if not user_doc:
+            return Response({"error": "Demo user not found"}, status=404)
+            # Create a demo user with read‑only permissions (set a flag)
+            # user_doc = user_manager.create_demo_user(
+            #     email=demo_email,
+            #     first_name="Demo",
+            #     last_name="User"
+            # )
+        # Generate JWT
+        proxy_user = MongoUser(user_doc)
+        refresh = RefreshToken.for_user(proxy_user)
+        return Response({
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+        })
+
+
