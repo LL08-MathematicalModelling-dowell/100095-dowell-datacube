@@ -1,9 +1,14 @@
 from datetime import datetime, timedelta, timezone
+import logging
 
 from django.conf import settings
 from adrf.views import APIView as AsyncAPIView
+from pymongo.errors import OperationFailure
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+
+
+logger = logging.getLogger(__name__)
 
 
 class AnalyticsBaseView(AsyncAPIView):
@@ -90,34 +95,89 @@ class DashboardOverviewView(AnalyticsBaseView):
 class PerformanceMetricsView(AnalyticsBaseView):
     """Response time percentiles (p50, p90, p95, p99) and throughput."""
 
+    _MAX_CLIENT_SIDE_DOCS = 100_000
+    _SAMPLE_FALLBACK = 50_000
+
+    async def _percentiles_ms_server(self, coll, user_id: str, start, end) -> dict | None:
+        pipeline = [
+            {"$match": {"user_id": user_id, "timestamp": {"$gte": start, "$lte": end}}},
+            {
+                "$group": {
+                    "_id": None,
+                    "n": {"$sum": 1},
+                    "pct": {
+                        "$percentile": {
+                            "input": "$duration_ms",
+                            "p": [0.5, 0.9, 0.95, 0.99],
+                            "method": "approximate",
+                        }
+                    },
+                }
+            },
+        ]
+        try:
+            cursor = await coll.aggregate(pipeline)
+            rows = await cursor.to_list(length=1)
+        except OperationFailure as exc:
+            logger.info("Analytics percentile aggregation not available, using fallback: %s", exc)
+            return None
+        if not rows or rows[0].get("n", 0) == 0:
+            return {}
+        pct = rows[0]["pct"] or []
+        if len(pct) < 4:
+            return None
+        return {
+            "p50": round(float(pct[0]), 2),
+            "p90": round(float(pct[1]), 2),
+            "p95": round(float(pct[2]), 2),
+            "p99": round(float(pct[3]), 2),
+        }
+
+    async def _percentiles_ms_fallback(self, coll, user_id: str, start, end) -> dict:
+        match = {"user_id": user_id, "timestamp": {"$gte": start, "$lte": end}}
+        total = await coll.count_documents(match)
+        if total == 0:
+            return {}
+
+        if total <= self._MAX_CLIENT_SIDE_DOCS:
+            cursor = coll.find(match, {"duration_ms": 1, "_id": 0})
+            docs = await cursor.to_list(length=self._MAX_CLIENT_SIDE_DOCS + 1)
+            durations_ms = [d["duration_ms"] for d in docs]
+        else:
+            sample_size = min(self._SAMPLE_FALLBACK, total)
+            pipeline = [
+                {"$match": match},
+                {"$sample": {"size": sample_size}},
+                {"$project": {"duration_ms": 1, "_id": 0}},
+            ]
+            cursor = await coll.aggregate(pipeline)
+            docs = await cursor.to_list(length=sample_size)
+            durations_ms = [d["duration_ms"] for d in docs]
+
+        durations_ms.sort()
+        n = len(durations_ms)
+
+        def percentile(p: int) -> float:
+            idx = int((p / 100) * n)
+            return float(durations_ms[min(idx, n - 1)])
+
+        return {
+            "p50": round(percentile(50), 2),
+            "p90": round(percentile(90), 2),
+            "p95": round(percentile(95), 2),
+            "p99": round(percentile(99), 2),
+        }
+
     async def get(self, request):
         user_id = self.get_user_id(request)
         db = await self.analytics_db
         end = datetime.now(timezone.utc)
         start = end - timedelta(days=7)
 
-        # Get all durations for the period
-        cursor = db["http_requests"].find(
-            {"user_id": user_id, "timestamp": {"$gte": start, "$lte": end}},
-            {"duration_ms": 1, "_id": 0}
-        )
-        durations = await cursor.to_list(length=None)
-        durations_ms = [d["duration_ms"] for d in durations]
-        durations_ms.sort()
-        n = len(durations_ms)
-        if n == 0:
-            return Response({"success": True, "percentiles": {}})
-
-        def percentile(p):
-            idx = int((p / 100) * n)
-            return durations_ms[min(idx, n-1)]
-
-        percentiles = {
-            "p50": round(percentile(50), 2),
-            "p90": round(percentile(90), 2),
-            "p95": round(percentile(95), 2),
-            "p99": round(percentile(99), 2),
-        }
+        coll = db["http_requests"]
+        percentiles = await self._percentiles_ms_server(coll, user_id, start, end)
+        if percentiles is None:
+            percentiles = await self._percentiles_ms_fallback(coll, user_id, start, end)
 
         # Throughput (requests per minute over last 24h)
         day_start = end - timedelta(days=1)

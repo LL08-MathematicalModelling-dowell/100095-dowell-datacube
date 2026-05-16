@@ -6,11 +6,15 @@ from datetime import datetime, timezone
 
 from django.http import RawPostDataException
 
+from analytics.thresholds import get_slow_threshold_ms
 from .tasks import (
-    get_slow_threshold, log_http_request_task, 
-    log_db_operation_task, log_performance_task,
-    log_client_info_task, log_error_task, 
-    log_mongo_detail_task, log_slow_query_task
+    log_http_request_task,
+    log_db_operation_task,
+    log_performance_task,
+    log_client_info_task,
+    log_error_task,
+    log_mongo_detail_task,
+    log_slow_query_task,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,28 +36,35 @@ class DatacubeObservabilityMiddleware:
         }
 
     def _categorize_endpoint(self, path, method):
-        """Categorize API endpoints for analytics grouping."""
-        endpoint_map = {
-            ('/api/create_database', 'POST'): 'database_creation',
-            ('/api/add_collection', 'POST'): 'collection_creation',
-            ('/api/list_databases', 'GET'): 'database_listing',
-            ('/api/list_collections', 'GET'): 'collection_listing',
-            ('/api/get_metadata', 'GET'): 'metadata_retrieval',
-            ('/api/drop_database', 'DELETE'): 'database_deletion',
-            ('/api/drop_collections', 'DELETE'): 'collection_deletion',
-            ('/api/import_data', 'POST'): 'data_import',
-            ('/api/crud', 'POST'): 'document_creation',
-            ('/api/crud', 'PUT'): 'document_update',
-            ('/api/crud', 'DELETE'): 'document_deletion',
-            ('/api/crud', 'GET'): 'document_query',
-            ('/health_check', 'GET'): 'health_check',
-        }
-        
-        for endpoint_pattern, category in endpoint_map.items():
-            if endpoint_pattern[0] in path and endpoint_pattern[1] == method:
+        """Map request path + method to an operation family (for thresholds and metrics)."""
+        path_l = path or ""
+        m = (method or "GET").upper()
+        rules = [
+            ("create_database", "POST", "database_creation"),
+            ("add_collection", "POST", "collection_creation"),
+            ("list_databases", "GET", "database_listing"),
+            ("list_collections", "GET", "collection_listing"),
+            ("get_metadata", "GET", "metadata_retrieval"),
+            ("drop_database", "DELETE", "database_deletion"),
+            ("drop_collections", "DELETE", "collection_deletion"),
+            ("import_data", "POST", "data_import"),
+            ("health_check", "GET", "health_check"),
+        ]
+        for segment, want_method, category in rules:
+            if m != want_method:
+                continue
+            if segment in path_l:
                 return category
-        
-        return 'other'
+        if path_l.rstrip("/").endswith("/crud") or "/crud/" in path_l:
+            if m == "POST":
+                return "document_creation"
+            if m == "PUT":
+                return "document_update"
+            if m == "DELETE":
+                return "document_deletion"
+            if m == "GET":
+                return "document_query"
+        return "other"
 
     def _redact_sensitive_data(self, data):
         """Redact sensitive data from logs in production."""
@@ -184,6 +195,8 @@ class DatacubeObservabilityMiddleware:
 
         # if hasattr(request, 'user') and request.user.is_authenticated:
         if hasattr(request, 'user') and request.user and request.user.is_authenticated:
+            method = request.method
+            path = request.path
             request_body = {}
             if hasattr(request, '_parsed_json'):
                 request_body = request._parsed_json
@@ -212,6 +225,8 @@ class DatacubeObservabilityMiddleware:
 
             # --- MongoDB-specific metrics ---
             mongo_metrics = self._extract_mongo_metrics(request_body, response_data)
+            if mongo_metrics.get("operation_type") in ("unknown", "query"):
+                mongo_metrics["operation_type"] = self._categorize_endpoint(path, method)
 
             # --- Redact sensitive data in production (optional) ---
             if self.is_production:
@@ -219,8 +234,6 @@ class DatacubeObservabilityMiddleware:
                 response_data = self._redact_sensitive_data(response_data)
 
             user_id = str(request.user.id)
-            method = request.method
-            path = request.path
             status_code = response.status_code
             duration_ms = round(duration, 2)
             timestamp = int(time.time() * 1000)
@@ -295,7 +308,7 @@ class DatacubeObservabilityMiddleware:
                 log_mongo_detail_task.delay(detail_data) # type: ignore
 
             # 7. Slow query (if duration > threshold)
-            threshold = get_slow_threshold(mongo_metrics.get('operation_type',''), path)
+            threshold = get_slow_threshold_ms(mongo_metrics.get("operation_type", "unknown"))
             if duration > threshold:
                 slow_data = {
                     "user_id": user_id,
