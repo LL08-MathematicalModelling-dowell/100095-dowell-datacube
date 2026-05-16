@@ -1,12 +1,12 @@
-from api.views.base import BaseAPIView
+from api.presentation.views.base import BaseAPIView
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 
-from core.utils.managers import user_manager
-from core.utils.authentication import api_key_manager
-from api.services.metadata_service import MetadataService
+from core.infrastructure.managers import user_manager
+from core.infrastructure.authentication import api_key_manager
+from api.application.metadata_service import MetadataService
 from bson import ObjectId
 from datetime import datetime
 
