@@ -54,6 +54,7 @@ config.json*
 profile_images/
 env/
 venv/
+.venv/
 .idea/
 .vscode/
 .env

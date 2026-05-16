@@ -10,8 +10,18 @@ DJANGO_SETTINGS_MODULE=project.settings.development celery -A project worker -Q 
 
 docker compose -f docker-compose.prod_enhanced.yml up -d
 
-pip install gevent
+# uv add gevent   # already in pyproject; use: uv sync
 
 # Check health status of the backend container
 docker inspect --format='{{json .State.Health}}' bb81fa2b578c
 docker inspect --format='{{json .State.Health}}' datacube-backend
+
+cd backend
+uv sync                 # app + dev tools
+uv run python manage.py runserver
+uv run pytest ...
+uv sync --no-dev        # production-like (matches Docker)
+
+uv run pytest api/tests analytics/tests
+
+uv run pytest api/tests analytics/tests
