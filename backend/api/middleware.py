@@ -1,6 +1,12 @@
+import os
 from datetime import datetime, timezone
+
 from django.http import JsonResponse
-from core.utils.managers import user_manager
+
+from core.infrastructure.managers import user_manager
+
+# Bill only writes by default so read-heavy dashboards do not burn monthly quota.
+_MUTATING = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 
 class UsageMeteringMiddleware:
@@ -8,18 +14,27 @@ class UsageMeteringMiddleware:
     Middleware to meter API usage per user based on their subscription plan.
     Enforces limits and resets usage counters monthly.
     """
+
     def __init__(self, get_response):
         self.get_response = get_response
-        # Define plan limits here
         self.plan_limits = {
-            'free': {'api_calls': 1000},
-            'pro': {'api_calls': 50000},
+            "free": {"api_calls": 1000},
+            "pro": {"api_calls": 50000},
         }
+        self._meter_reads = os.getenv("USAGE_METER_INCLUDE_READS", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
 
     def __call__(self, request):
-        # Only meter requests to the core data plane
-        if not request.path.startswith('/api/v1/data/crud'):
-             return self.get_response(request)
+        if not request.path.startswith("/api/v2/"):
+            return self.get_response(request)
+        if "health_check" in request.path:
+            return self.get_response(request)
+
+        if not self._meter_reads and request.method not in _MUTATING:
+            return self.get_response(request)
 
         # request.user is set by the authentication middleware
         if not hasattr(request, 'user') or not request.user.is_authenticated:

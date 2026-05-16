@@ -11,11 +11,16 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
-from api.views.base import BaseAPIView
-from api.services.metadata_service import MetadataService
-from api.utils.validators import sanitize_name
-from api.utils.mongodb import jsonify_object_ids
-from api.serializers import (
+from api.permissions import (
+    BlockAnalystOnUnsafeMethods,
+    IsDeveloperOrAdmin,
+)
+from core.infrastructure.permissions import IsRoleAdmin
+from api.presentation.views.base import BaseAPIView
+from api.application.metadata_service import MetadataService
+from api.infrastructure.validators import sanitize_name
+from api.infrastructure.mongodb import jsonify_object_ids
+from api.presentation.serializers import (
     DatabaseDropSerializer,
     CollectionDropSerializer,
     JsonImportSerializer,
@@ -32,7 +37,7 @@ from analytics.tasks import (
 
 class ListDatabasesView(BaseAPIView):
     """List databases owned by the authenticated user."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, BlockAnalystOnUnsafeMethods]
 
     @property
     def metadata_svc(self):
@@ -93,7 +98,7 @@ class ListDatabasesView(BaseAPIView):
 
 class ListCollectionsView(BaseAPIView):
     """List collections for a specific database."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, BlockAnalystOnUnsafeMethods]
 
     @property
     def metadata_svc(self):
@@ -140,7 +145,7 @@ class ListCollectionsView(BaseAPIView):
 
 class DropDatabaseView(BaseAPIView):
     """Drop a user-owned database."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsDeveloperOrAdmin]
 
     @property
     def metadata_svc(self):
@@ -194,7 +199,7 @@ class DropDatabaseView(BaseAPIView):
 
 class DropCollectionsView(BaseAPIView):
     """Drop collections from a user-owned database."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsDeveloperOrAdmin]
 
     @property
     def metadata_svc(self):
@@ -245,7 +250,7 @@ class DropCollectionsView(BaseAPIView):
 
 class GetMetadataView(BaseAPIView):
     """Fetch metadata for a database owned by the authenticated user."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, BlockAnalystOnUnsafeMethods]
 
     @property
     def metadata_svc(self):
@@ -297,7 +302,7 @@ class GetMetadataView(BaseAPIView):
 
 class ImportDataView(BaseAPIView):
     """Import JSON payload into a user-owned MongoDB collection."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsDeveloperOrAdmin]
 
     @property
     def metadata_svc(self):
@@ -376,6 +381,21 @@ class ImportDataView(BaseAPIView):
             "collection": coll_name,
             "inserted_count": inserted_count
         }, status=status.HTTP_201_CREATED)
+
+
+class PruneFieldsView(BaseAPIView):
+    """Admin role: prune inactive schema fields from metadata (optional dry run)."""
+    permission_classes = [IsAuthenticated, IsRoleAdmin]
+
+    @BaseAPIView.handle_errors
+    async def post(self, request):
+        db_id = request.data["database_id"]
+        dry_run = request.data.get("dry_run", True)
+        result = await MetadataService(user_id=str(request.user.pk)).prune_inactive_fields(
+            db_id=db_id,
+            dry_run=dry_run,
+        )
+        return Response(result, status=status.HTTP_200_OK)
 
 
 class HealthCheck(BaseAPIView):

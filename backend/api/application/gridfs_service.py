@@ -1,9 +1,13 @@
-from typing import Optional, Dict, Any, Callable, Awaitable
+import logging
+from typing import Any, Awaitable, Callable, Dict, Optional
+
 from django.conf import settings
 from bson import ObjectId
 from gridfs.asynchronous import AsyncGridFSBucket
-from api.services.metadata_service import MetadataService
+from api.application.metadata_service import MetadataService
 
+
+logger = logging.getLogger(__name__)
 
 ProgressCallback = Callable[[int], Awaitable[None]]
 
@@ -70,7 +74,7 @@ class GridFSService:
             return None
 
         except Exception as e:
-            print(f"DEBUG: GridFS failed at find_one for {file_id}: {e}")
+            logger.warning("GridFS metadata lookup failed for %s: %s", file_id, e)
             raise e
 
     async def delete_file(self, file_id: str) -> bool:

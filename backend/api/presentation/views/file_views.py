@@ -7,12 +7,13 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
+from api.permissions import BlockAnalystOnUnsafeMethods
 
 from gridfs.grid_file import ObjectId
 
-from api.views.base import BaseAPIView
-from api.file_serializer import FileUploadSerializer, FileListQuerySerializer
-from api.utils.signing import generate_signed_url, verify_signed_url
+from api.presentation.views.base import BaseAPIView
+from api.presentation.file_serializer import FileUploadSerializer, FileListQuerySerializer
+from api.infrastructure.signing import generate_signed_url, verify_signed_url
 
 # Analytics tasks
 from analytics.tasks import (
@@ -28,7 +29,7 @@ class FileListView(BaseAPIView):
     GET returns a paginated list of files with signed URLs.
     POST allows uploading a new file.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, BlockAnalystOnUnsafeMethods]
 
     def _send_file_list_analytics(self, request, total_files, stats, start_time):
         user_id = str(request.user.pk)
@@ -193,7 +194,7 @@ class FileListView(BaseAPIView):
 
 class FileDetailView(BaseAPIView):
     """View for retrieving file metadata or deleting a file."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, BlockAnalystOnUnsafeMethods]
 
     def _send_file_metadata_analytics(self, request, file_id, start_time):
         user_id = str(request.user.pk)

@@ -6,9 +6,9 @@ database operations).
 
 
 from typing import List, Dict, Tuple
-from api.utils.naming import generate_db_name
-from api.services.metadata_service import MetadataService
-from api.services.collection_service import CollectionService
+from api.infrastructure.naming import generate_db_name
+from api.application.metadata_service import MetadataService
+from api.application.collection_service import CollectionService
 
 
 class DatabaseService:

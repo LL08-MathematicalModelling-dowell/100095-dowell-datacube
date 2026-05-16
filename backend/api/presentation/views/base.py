@@ -3,19 +3,18 @@ import inspect
 from functools import wraps
 from typing import Any, Callable, Type, Dict
 from datetime import datetime, timezone
-from urllib import response
 
 from django.conf import settings
-from django.http import Http404
+from django.http import Http404, RawPostDataException
 
 from adrf.views import APIView as AsyncAPIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.serializers import Serializer
-from rest_framework.exceptions import APIException
+from rest_framework.exceptions import APIException, PermissionDenied
 
-from api.services.metadata_service import MetadataService
-from api.services.gridfs_service import GridFSService
+from api.application.metadata_service import MetadataService
+from api.application.gridfs_service import GridFSService
 
 # Import analytics tasks
 from analytics.tasks import (
@@ -42,13 +41,6 @@ class BaseAPIView(AsyncAPIView):
             db_name=settings.FILE_STORAGE_DB_NAME,
             user_id=uid
         )
-
-    # @property
-    # def file_svc(self):
-    #     return GridFSService(
-    #         db_name=settings.FILE_STORAGE_DB_NAME,
-    #         user_id=str(self.request.user.pk)
-    #     )
 
     @property
     def metadata_svc(self):
@@ -138,6 +130,10 @@ class BaseAPIView(AsyncAPIView):
         """Send analytics data to Celery tasks asynchronously."""
         if not request.user or not request.user.is_authenticated:
             return
+        if getattr(settings, "ANALYTICS_DISABLE_VIEW_TELEMETRY_FOR_API_V2", False) and request.path.startswith(
+            "/api/v2/"
+        ):
+            return
 
         duration_ms = (time.perf_counter() - start_time) * 1000
         user_id = str(request.user.pk)
@@ -171,7 +167,7 @@ class BaseAPIView(AsyncAPIView):
         request_size = 0
         try:
             request_size = len(request.body) if hasattr(request, 'body') and request.body else 0
-        except:
+        except RawPostDataException:
             request_size = int(request.META.get('CONTENT_LENGTH', 0))
         response_size = len(response.content) if response and hasattr(response, 'content') else 0
         throughput = round((response_size / (duration_ms / 1000)) if duration_ms > 0 else 0, 2)
@@ -219,8 +215,8 @@ class BaseAPIView(AsyncAPIView):
             else:
                 try:
                     body_data = request.POST.dict()
-                except:
-                    pass
+                except (AttributeError, TypeError):
+                    body_data = {}
             db_id = body_data.get('database_id') or request.GET.get('database_id')
             collection = body_data.get('collection_name') or request.GET.get('collection_name', 'unknown')
             # Infer operation type from method and endpoint

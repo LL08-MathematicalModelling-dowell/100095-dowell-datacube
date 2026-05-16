@@ -6,7 +6,7 @@ This module contains all serializers used by the API, organized by functionality
 
 import re
 from rest_framework import serializers
-from api.utils.validators import validate_collection_name, validate_unique_fields
+from api.infrastructure.validators import validate_collection_name, validate_unique_fields
 
 
 class ObjectIdField(serializers.CharField):
