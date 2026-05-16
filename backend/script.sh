@@ -5,7 +5,7 @@ uvicorn project.asgi:application --reload --host 127.0.0.1 --port 8000
 
 DJANGO_SETTINGS_MODULE=project.settings.development uvicorn project.asgi:application --reload --host 127.0.0.1 --port 8000
 
-pip install pytest pytest-django pytest-asyncio pytest-mock
+uv sync   # dev deps include pytest stack
 
 pytest tests/test_analytics_views.py -v
 

@@ -26,3 +26,5 @@ sudo chown www-data:www-data /var/www/demo
 # In your docker-compose.prod_enhanced.yml, add the following under the nginx service to mount the demo files:
 volumes:
       - /home/DowellDataCube/100095-dowell-datacube/Playground:/usr/share/nginx/html/demo
+
+
