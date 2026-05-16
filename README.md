@@ -1,246 +1,150 @@
-# DatacubeV2 API Documentation
+# Datacube V2
 
-## Overview
+MongoDB-backed **database and document platform** with a Django REST API, JWT/API-key authentication, optional analytics, and a React dashboard UI.
 
-Welcome to the **DatacubeV2 API** documentation! This API provides powerful database and collection management features for handling structured and unstructured data using MongoDB.
+## Repository layout
 
-With **DatacubeV2**, you can:
+| Path | Purpose |
+|------|---------|
+| `backend/` | Django project: data plane (`api`), auth and billing (`core`), observability (`analytics`) |
+| `UI/datacube-UI/` | React SPA for dashboards and account flows |
+| `_frontend_old_nextjs/`, `_Datacube_api_libraries_old/` | Legacy snapshots (not part of the active architecture) |
 
-- Create, read, update, and delete databases and collections.
-- Perform CRUD operations on documents.
-- Implement seamless database scaling with efficient data handling.
+## Backend: layered architecture
 
-## Table of Contents
+The Django apps stay named `api`, `core`, and `analytics` (migrations and `INSTALLED_APPS` unchanged). **Code inside each app is grouped by responsibility:**
 
-- [Getting Started](#getting-started)
-- [API Base URL](#api-base-url)
-- [Authentication](#authentication)
-- [API Endpoints](#api-endpoints)
-  - [Health Check](#health-check)
-  - [Database Management](#database-management)
-  - [Allowed Data Types](#allowed-data-types)
-  - [Collection Management](#collection-management)
-  - [CRUD Operations](#crud-operations)
-- [Error Handling](#error-handling)
-- [Contributing](#contributing)
-- [License](#license)
+### `api` (DataCube data plane)
 
----
+| Layer | Package | Responsibility |
+|-------|---------|----------------|
+| **Presentation** | `api.presentation` | DRF serializers (`serializers.py`, `file_serializer.py`), URLconf (`urls_v2.py`), and HTTP views under `api.presentation.views` |
+| **Application** | `api.application` | Orchestration services: metadata, databases, collections, documents, GridFS |
+| **Infrastructure** | `api.infrastructure` | Mongo helpers, naming, signing URL helpers, validators |
+| **Cross-cutting** | `api/` root | `middleware.py`, `permissions.py`, `models.py`, `admin.py`, `migrations/` |
 
-## Getting Started
+Views inherit from `BaseAPIView` in `api.presentation.views.base`, which wires analytics hooks and shared error handling.
 
-To start using the **DatacubeV2 API**, ensure you have the following:
+### `core` (accounts, JWT, API keys)
 
-- **An active API key** (if required for authentication)
-- **Postman or cURL** for testing API requests
-- **Python 3.7+** (for integrating into Python applications)
-- **MongoDB instance** (if required for local database operations)
+| Layer | Package |
+|-------|---------|
+| **Presentation** | `core.presentation` — `urls.py`, `serializers.py`, `views/` (auth, profile, API keys, Stripe webhooks) |
+| **Infrastructure** | `core.infrastructure` — `authentication.py`, `db.py`, `managers.py` (Mongo user and auth DB access) |
 
-### Installation
+DRF is configured to use `core.infrastructure.authentication.CustomJWTAuthentication` and `APIKeyAuthentication`.
 
-If you plan to integrate this API into your application, ensure you have Python and the necessary libraries installed:
+### `analytics`
 
-```bash
-pip install requests
-```
+Task and middleware code for usage logging and dashboard APIs; URLs live in `analytics/urls.py` under the global prefix `analytics/api/v2/`.
 
----
+## HTTP surface (prefixes)
 
-## API Base URL
+These are mounted from `backend/project/urls.py`:
 
-All API requests should be made to the following base URL:
+| Prefix | App | Examples |
+|--------|-----|----------|
+| `/api/v2/` | `api` | `create_database/`, `crud/`, `files/`, `health_check/` |
+| `/core/` | `core` | `register/`, `login/`, `profile/`, `api/v1/keys/` |
+| `/analytics/api/v2/` | `analytics` | `dashboard/`, `performance/`, … |
+| `/admin/` | Django | Admin site |
 
-```
-https://datacube.uxlivinglab.online/api/
-```
+Production host may differ; replace the host in examples with your deployment base URL.
 
-Make sure you include this base URL when making requests to specific endpoints.
-
----
-
-## Authentication
-
-If authentication is required, include your API key in the request header as follows:
-
-```http
-Authorization: Bearer YOUR_API_KEY
-```
-
-Replace `YOUR_API_KEY` with your actual API key.
-
----
-
-## API Endpoints
-
-### Health Check
-
-Check if the server is running:
+### Health check
 
 ```bash
-curl -X GET https://datacube.uxlivinglab.online/health_check/
+curl -sS "https://<host>/api/v2/health_check/"
 ```
 
-**Response:**
+Example JSON shape:
 
 ```json
 {
   "success": true,
-  "message": "Server is running fine"
+  "status": "healthy",
+  "timestamp": "2026-05-15T12:00:00"
 }
 ```
 
-### Database Management
-
-#### Allowed Data Types:
-
-1. "string" - Textual data
-2. "number" - Numeric data
-3. "object" - Embedded document
-4. "array" - List of values
-5. "boolean" - True/False
-6. "date" - ISO 8601 date
-7. "null" - Null value
-8. "binary" - Binary data
-9. "objectid" - ObjectId
-10. "decimal128" - High-precision decimal
-11. "regex" - Regular expression
-12. "timestamp" - Timestamp
-
-#### Create a Database
+### Example: create a database (authenticated)
 
 ```bash
-curl -X POST https://datacube.uxlivinglab.online/api/create_database/ \
-    -H "Content-Type: application/json" \
-    -d '{
-        "db_name": "example_db",
-        "collections": [
-            {
-                "name": "users",
-                "fields": [
-                    {"name": "username", "type": "string"},
-                    {"name": "age", "type": "number"}
-                ]
-            }
+curl -X POST "https://<host>/api/v2/create_database/" \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "db_name": "example_db",
+    "collections": [
+      {
+        "name": "users",
+        "fields": [
+          {"name": "username", "type": "string"},
+          {"name": "age", "type": "number"}
         ]
-    }'
+      }
+    ]
+  }'
 ```
 
-### Collection Management
+### Allowed collection field types
 
-#### Add Collections
+`string`, `number`, `object`, `array`, `boolean`, `date`, `null`, `binary`, `objectid`, `decimal128`, `regex`, `timestamp`.
+
+## Configuration (environment)
+
+Required for `project.settings.common` (MongoDB and file storage):
+
+- `MONGODB_URI`
+- `MONGODB_DATABASE`
+- `MONGODB_COLLECTION`
+- `AUTH_DB_NAME`
+- `FILE_STORAGE_DB_NAME`
+- `SECRET_KEY` (set per environment; never commit real secrets)
+
+Optional and feature-specific variables (Stripe, demo login, etc.) are read where those modules are used.
+
+## Local development
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then:
 
 ```bash
-curl -X POST https://datacube.uxlivinglab.online/api/add_collection/ \
-    -H "Content-Type: application/json" \
-    -d '{
-        "database_id": "your_database_id",
-        "collections": [
-            {
-                "name": "products",
-                "fields": [
-                    {"name": "product_id", "type": "string"},
-                    {"name": "price", "type": "number"}
-                ]
-            }
-        ]
-    }'
+cd backend
+uv sync
+export SECRET_KEY=dev-insecure-key
+export MONGODB_URI="mongodb://localhost:27017"
+export MONGODB_DATABASE=datacube_meta
+export MONGODB_COLLECTION=databases
+export AUTH_DB_NAME=datacube_auth
+export FILE_STORAGE_DB_NAME=datacube_files
+uv run python manage.py migrate
+uv run python manage.py runserver
 ```
 
-### CRUD Operations
+This creates `.venv/` from `uv.lock` (committed). Use `uv sync --no-dev` for a slimmer install without pytest or linters.
 
-#### Create Documents
+Use `project.settings.development` (default in `manage.py`) unless you override `DJANGO_SETTINGS_MODULE`.
+
+## Tests
 
 ```bash
-curl -X POST https://datacube.uxlivinglab.online/api/crud/ \
-    -H "Content-Type: application/json" \
-    -d '{
-        "database_id": "your_database_id",
-        "collection_name": "users",
-        "data": [
-            {
-                "username": "john_doe",
-                "age": 30
-            }
-        ]
-    }'
+cd backend
+export SECRET_KEY=test MONGODB_URI=mongodb://localhost:27017 \
+  MONGODB_DATABASE=test MONGODB_COLLECTION=meta AUTH_DB_NAME=auth FILE_STORAGE_DB_NAME=files
+uv run pytest api/tests analytics/tests -q
 ```
 
-#### Read Documents
+API tests mock MongoDB services and Celery `.delay` calls so they do not require Redis or a live broker.
 
-```bash
-curl -X GET "https://datacube.uxlivinglab.online/api/crud?database_id=your_database_id&collection_name=users&filters={\"age\":{\"$gt\":25}}&limit=50&offset=0"
-```
+## Documentation and API clients
 
-#### Update Documents
-
-```bash
-curl -X PUT https://datacube.uxlivinglab.online/api/crud/ \
-    -H "Content-Type: application/json" \
-    -d '{
-        "database_id": "your_database_id",
-        "collection_name": "users",
-        "filters": {"username": "john_doe"},
-        "update_data": {"age": 38}
-    }'
-```
-
-#### Delete Documents
-
-```bash
-curl -X DELETE https://datacube.uxlivinglab.online/api/crud/ \
-    -H "Content-Type: application/json" \
-    -d '{
-        "database_id": "your_database_id",
-        "collection_name": "users",
-        "filters": {"username": "john_doe"},
-        "soft_delete": true
-    }'
-```
-
----
-
-## Error Handling
-
-All API responses include a success status and a message. Errors return appropriate HTTP status codes. Example:
-
-```json
-{
-  "success": false,
-  "message": "Database with ID 'xyz' does not exist"
-}
-```
-
-### Common Errors:
-
-| Status Code | Meaning                                      |
-| ----------- | -------------------------------------------- |
-| 400         | Bad Request (Invalid parameters)             |
-| 401         | Unauthorized (Invalid API key)               |
-| 404         | Not Found (Database or Collection not found) |
-| 500         | Internal Server Error (Server issues)        |
-
----
+- Primary API examples for `/api/v2/` are maintained in this README and in `backend/README.md`.
+- Use JWT from `/core/login/` or API keys where enabled, then call `/api/v2/*` with `Authorization: Bearer <token>`.
 
 ## Contributing
 
-We welcome contributions! To contribute:
-
-1. Fork the repository.
-2. Create a new branch (`feature-branch`).
-3. Make your changes and commit them.
-4. Push to your fork and create a Pull Request.
-
----
+Fork the repository, branch from the default line of development, run tests for touched apps, and open a pull request with a short note on behavior changes (especially URL or auth changes).
 
 ## License
 
-This project is licensed under the MIT License. See the `LICENSE` file for details.
-
----
-
-## Contact
-
-For support or inquiries, reach out via:
-
-- 📧 Email: ...
-- 📌 Website: [DatacubeV2](https://datacube.uxlivinglab.online)
+See `backend/LICENSE` or the repository root license file if present.
