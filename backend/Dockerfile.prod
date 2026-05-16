@@ -1,70 +1,46 @@
 # --- Stage 1: Builder ---
 FROM python:3.11-slim-bullseye AS builder
 
-# Prevent Python from writing pyc files and buffer output
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Install build dependencies (needed for some packages like psycopg2, cryptography, etc.)
+# Faster, deterministic installs with uv (lockfile)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         gcc \
         build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Create and activate virtual environment
-ENV VIRTUAL_ENV=/opt/venv
-RUN python -m venv $VIRTUAL_ENV
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
-
-# Set work directory
 WORKDIR /app
 
-# Copy only requirements first to leverage Docker layer caching
-COPY requirements.txt .
+ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir --default-timeout=100 -r requirements.txt
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
 
 # --- Stage 2: Final Runtime Image ---
 FROM python:3.11-slim-bullseye
 
-# Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV VIRTUAL_ENV=/opt/venv
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+ENV PATH="/app/.venv/bin:$PATH"
 
-# Install runtime system dependencies (if needed, e.g., for PostgreSQL client)
-# Uncomment if you're using PostgreSQL
-# RUN apt-get update && \
-#     apt-get install -y --no-install-recommends libpq5 && \
-#     rm -rf /var/lib/apt/lists/*
-
-# Create non-root user for security
 RUN addgroup --system appgroup && \
     adduser --system --ingroup appgroup appuser
 
-# Set working directory
 WORKDIR /app
 
-# Copy virtual environment from builder
-COPY --from=builder $VIRTUAL_ENV $VIRTUAL_ENV
-
-# Copy application code
+COPY --from=builder /app/.venv /app/.venv
 COPY . .
 
-
-# Create staticfiles directory and set proper ownership
 RUN mkdir -p /app/staticfiles && \
     chown -R appuser:appgroup /app/staticfiles
 
-# Switch to non-root user early
 USER appuser
 
-# Collect static files (using dummy secret key to avoid requiring real env vars at build time)
-# Replace 'project' with your actual settings module base name if different
 ENV DJANGO_SETTINGS_MODULE=project.settings.production
 
 RUN SECRET_KEY=dummy-key-for-build \
@@ -75,12 +51,8 @@ RUN SECRET_KEY=dummy-key-for-build \
     FILE_STORAGE_DB_NAME=dummy-file-storage-db \
     python manage.py collectstatic --noinput --clear
 
-# Expose port
 EXPOSE 8000
 
-# --- Production Command: Gunicorn with Uvicorn Workers (ASGI) ---
-# Uses modern uvicorn_worker for async support
-# Adjust worker count based on CPU cores: recommended = (2 * CPU cores) + 1
 CMD ["gunicorn", \
      "project.asgi:application", \
      "--bind", "0.0.0.0:8000", \
