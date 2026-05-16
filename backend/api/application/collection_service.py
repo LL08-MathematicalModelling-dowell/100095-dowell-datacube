@@ -3,16 +3,19 @@ Service for managing physical MongoDB collection operations.
 """
 
 
-import re
 import asyncio
-from typing import Any, List, Dict, Optional
+import logging
+import re
+from typing import Any, Dict, List, Optional
 
 from django.conf import settings
 from bson import ObjectId, errors
 from pymongo.errors import CollectionInvalid, PyMongoError
 
-from api.services.metadata_service import MetadataService
-from api.utils.mongodb import build_existing_fields_update_pipeline
+from api.application.metadata_service import MetadataService
+from api.infrastructure.mongodb import build_existing_fields_update_pipeline
+
+logger = logging.getLogger(__name__)
 
 
 class MongoFilterHelper:
@@ -167,11 +170,10 @@ class CollectionService:
             session=session
         )
         
-        # Pro Tip: Log findings for debugging
         if result.matched_count == 0:
-            print(f"DEBUG: No document matched filter {safe_filt} in {coll_name}")
+            logger.debug("No document matched filter %s in %s", safe_filt, coll_name)
         elif result.modified_count == 0:
-            print(f"DEBUG: Document matched but no data changed (idempotent update)")
+            logger.debug("Document matched but no fields changed (idempotent update) in %s", coll_name)
             
         return result
 

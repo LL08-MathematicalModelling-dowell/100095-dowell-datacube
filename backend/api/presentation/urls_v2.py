@@ -2,22 +2,28 @@
 
 from django.urls import re_path
 
-from api.views.admin_views import (
+from api.presentation.views.admin_views import (
     ListDatabasesView,
     ListCollectionsView,
     DropDatabaseView,
     DropCollectionsView,
     GetMetadataView,
     ImportDataView,
+    PruneFieldsView,
     HealthCheck,
 )
-from api.views.database_views import (
+from api.presentation.views.database_views import (
     CreateDatabaseView,
     AddCollectionView,
 )
-from api.views.crud_views import DataCrudView
+from api.presentation.views.crud_views import DataCrudView
 
-from api.views.file_views import FileListView, FileDetailView, FileStreamView
+from api.presentation.views.file_views import (
+    FileListView,
+    FileDetailView,
+    FileStreamView,
+    FileDownloadView,
+)
 
 
 
@@ -32,6 +38,7 @@ urlpatterns = [
     re_path(r"^drop_database/?$",    DropDatabaseView.as_view(),     name="drop_database"),
     re_path(r"^drop_collections/?$", DropCollectionsView.as_view(),  name="drop_collections"),
     re_path(r"^import_data/?$",      ImportDataView.as_view(),       name="import_data"),
+    re_path(r"^admin/prune_fields/?$", PruneFieldsView.as_view(), name="prune_fields"),
 
     # CRUD operations - Handles POST, PUT, DELETE, so re_path is critical
     re_path(r"^crud/?$", DataCrudView.as_view(), name="crud"),
@@ -43,8 +50,10 @@ urlpatterns = [
     # Retrieve metadata or delete a specific file
     re_path(r'^files/(?P<file_id>[a-fA-F0-9]{24})/$', FileDetailView.as_view(), name='file-detail'),
 
-    # Download a specific file
-    re_path(r'^files/(?P<file_id>[a-fA-F0-9]{24})/download/$', FileStreamView.as_view(), name='file-download'),
+    # Stream a specific file
+    re_path(r'^files/stream/(?P<file_id>[a-fA-F0-9]{24})/$', FileStreamView.as_view(), name='file-stream'),
+    # Download a specific file (reads entire file into memory - not recommended for large files)
+    re_path(r'^files/download/(?P<file_id>[a-fA-F0-9]{24})/$', FileDownloadView.as_view(), name='file-download'),
 
     # Health check - GET only
     re_path(r"^health_check/?$", HealthCheck.as_view(), name="health_check"),

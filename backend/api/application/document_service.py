@@ -7,8 +7,8 @@ Refactored for 2025:
 """
 from datetime import datetime, timezone
 from typing import List, Dict, Tuple, Optional
-from api.services.metadata_service import MetadataService
-from api.services.collection_service import CollectionService
+from api.application.metadata_service import MetadataService
+from api.application.collection_service import CollectionService
 from pymongo.errors import PyMongoError
 
 

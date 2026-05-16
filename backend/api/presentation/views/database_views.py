@@ -7,10 +7,12 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
-from api.views.base import BaseAPIView
-from api.serializers import AddDatabasePOSTSerializer, AddCollectionPOSTSerializer
-from api.services.database_service import DatabaseService
-from api.services.metadata_service import MetadataService
+from api.permissions import IsDeveloperOrAdmin
+
+from api.presentation.views.base import BaseAPIView
+from api.presentation.serializers import AddDatabasePOSTSerializer, AddCollectionPOSTSerializer
+from api.application.database_service import DatabaseService
+from api.application.metadata_service import MetadataService
 
 # Analytics tasks
 from analytics.tasks import log_db_operation_task, log_mongo_detail_task, log_slow_query_task
@@ -20,7 +22,7 @@ class CreateDatabaseView(BaseAPIView):
     """
     Handles the creation of a new virtual database and its initial collections.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsDeveloperOrAdmin]
 
     @property
     def db_svc(self):
@@ -140,7 +142,7 @@ class AddCollectionView(BaseAPIView):
     View for adding new collections to an existing database.
     Ensures the user owns the target database before provisioning.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsDeveloperOrAdmin]
 
     @property
     def db_svc(self):
