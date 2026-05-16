@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Dict, Any
 
 from django.conf import settings
@@ -39,36 +40,61 @@ class AnalyticsService:
         self.db["mongo_details"].create_index([("user_id", ASCENDING), ("timestamp", DESCENDING)])
         # slow_queries
         self.db["slow_queries"].create_index([("user_id", ASCENDING), ("timestamp", DESCENDING)])
-        self.db["slow_queries"].create_index([("duration_ms", DESCENDING)])
+        self.db["daily_aggregates"].create_index([("user_id", ASCENDING), ("date", DESCENDING)])
+        self._ensure_ttl_indexes()
+
+    def _ensure_ttl_indexes(self) -> None:
+        """
+        Optional TTL on high-volume telemetry (MongoDB deletes documents automatically).
+        Set ANALYTICS_TTL_DAYS_TELEMETRY=0 to disable. Default 90 days.
+        """
+        raw = os.getenv("ANALYTICS_TTL_DAYS_TELEMETRY", "90").strip()
+        try:
+            days = int(raw)
+        except ValueError:
+            days = 90
+        if days <= 0:
+            return
+        expire_after = days * 86400
+        for coll in ("http_requests", "client_info", "performance_metrics"):
+            name = f"ttl_timestamp_{coll}"
+            try:
+                self.db[coll].create_index(
+                    [("timestamp", ASCENDING)],
+                    expireAfterSeconds=expire_after,
+                    name=name,
+                )
+            except Exception as exc:
+                logger.warning("TTL index on %s not created or already differs: %s", coll, exc)
 
     def log_http_request(self, data: Dict[str, Any]):
         """Insert one HTTP request log."""
-        schema = HttpRequestSchema(**data)
-        self.db["http_requests"].insert_one(schema.dict(by_alias=True))
+        schema_instance = HttpRequestSchema(**data)
+        self.db["http_requests"].insert_one(schema_instance.model_dump())
 
     def log_db_operation(self, data: Dict[str, Any]):
-        schema = DatabaseContextSchema(**data)
-        self.db["db_operations"].insert_one(schema.dict(by_alias=True))
+        schema_instance = DatabaseContextSchema(**data)
+        self.db["db_operations"].insert_one(schema_instance.model_dump())
 
     def log_performance_metrics(self, data: Dict[str, Any]):
-        schema = PerformanceMetricsSchema(**data)
-        self.db["performance_metrics"].insert_one(schema.dict(by_alias=True))
+        schema_instance = PerformanceMetricsSchema(**data)
+        self.db["performance_metrics"].insert_one(schema_instance.model_dump())
 
     def log_client_info(self, data: Dict[str, Any]):
-        schema = ClientInfoSchema(**data)
-        self.db["client_info"].insert_one(schema.dict(by_alias=True))
+        schema_instance = ClientInfoSchema(**data)
+        self.db["client_info"].insert_one(schema_instance.model_dump())
 
     def log_error(self, data: Dict[str, Any]):
-        schema = ErrorSchema(**data)
-        self.db["errors"].insert_one(schema.dict(by_alias=True))
+        schema_instance = ErrorSchema(**data)
+        self.db["errors"].insert_one(schema_instance.model_dump())
 
     def log_mongo_detail(self, data: Dict[str, Any]):
-        schema = MongoDetailSchema(**data)
-        self.db["mongo_details"].insert_one(schema.dict(by_alias=True))
+        schema_instance = MongoDetailSchema(**data)
+        self.db["mongo_details"].insert_one(schema_instance.model_dump())
 
     def log_slow_query(self, data: Dict[str, Any]):
-        schema = SlowQuerySchema(**data)
-        self.db["slow_queries"].insert_one(schema.dict(by_alias=True))
+        schema_instance = SlowQuerySchema(**data)
+        self.db["slow_queries"].insert_one(schema_instance.model_dump())
 
     # Bulk insertion for high throughput (optional)
     def bulk_log_http_requests(self, docs: list):
