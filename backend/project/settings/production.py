@@ -1,15 +1,15 @@
 """
 Django settings for the DataCube project in the production environment.
 """
-from ast import If
 import os
+
 from .common import *
 
 
-# SECURITY WARNING: keep the secret key used in production secret!
-# The SECRET_KEY is already loaded from .env in common.py
-if not SECRET_KEY:
-    raise ValueError("No SECRET_KEY set for production environment.")
+if not SECRET_KEY or SECRET_KEY == "SECRET_KEY_DUMMY":
+    raise ValueError(
+        "Production requires a strong SECRET_KEY env var (do not use SECRET_KEY_DUMMY)."
+    )
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
@@ -46,36 +46,39 @@ REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'] = (
     'rest_framework.renderers.JSONRenderer',
 )
 
-# --- Logging ---
-# Configure robust logging for production
-# LOGGING = {
-#     'version': 1,
-#     'disable_existing_loggers': False,
-#     'formatters': {
-#         'verbose': {
-#             'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
-#             'style': '{',
-#         },
-#     },
-#     'handlers': {
-#         'console': {
-#             'level': 'INFO',
-#             'class': 'logging.StreamHandler',
-#             'formatter': 'verbose',
-#         },
-#     },
-#     'root': {
-#         'handlers': ['console'],
-#         'level': 'INFO',
-#     },
-#     'loggers': {
-#         'django': {
-#             'handlers': ['console'],
-#             'level': 'INFO',
-#             'propagate': False,
-#         },
-#     },
-# }
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {name} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "level": "INFO",
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "datacube": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
 
 
 

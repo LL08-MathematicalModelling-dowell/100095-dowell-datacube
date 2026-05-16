@@ -29,6 +29,7 @@ DATACUBE_FREE_TIER_MB = 500
 # --- Security ---
 # SECRET_KEY will be set in development.py and production.py
 SECRET_KEY = os.getenv('SECRET_KEY', 'SECRET_KEY_DUMMY')
+INTERNAL_IPS = []
 
 # --- Application Definition ---
 INSTALLED_APPS = [
@@ -138,28 +139,52 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # --- DRF and JWT Settings ---
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'core.utils.authentication.CustomJWTAuthentication',
-        'core.utils.authentication.APIKeyAuthentication',
+        'core.infrastructure.authentication.CustomJWTAuthentication',
+        'core.infrastructure.authentication.APIKeyAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
     'UNAUTHENTICATED_USER': None,
+    'DEFAULT_THROTTLE_RATES': {
+        'otp': '60/hour',
+        'login': '30/minute',
+        'register': '20/minute',
+        'oauth': '40/minute',
+        'demo_login': '10/minute',
+        'password_reset': '15/hour',
+        'token_refresh': '90/minute',
+        'user_burst': '2000/hour',
+    },
 }
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(days=7),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=14),
-    "ROTATE_REFRESH_TOKENS": True,
-    "BLACKLIST_AFTER_ROTATION": True,
-    "UPDATE_LAST_LOGIN": True,
+    # Blacklist + rotation require Django User FK on OutstandingToken — incompatible with Mongo users.
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": False,
+    "UPDATE_LAST_LOGIN": False,
+    "TOKEN_REFRESH_SERIALIZER": "core.infrastructure.jwt_serializers.DatacubeTokenRefreshSerializer",
+    "CHECK_USER_IS_ACTIVE": False,
 }
 
+# --- Email (Resend) & OAuth (server-side PKCE code exchange) ---
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
+GOOGLE_OAUTH_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "")
+GITHUB_OAUTH_CLIENT_ID = os.getenv("GITHUB_OAUTH_CLIENT_ID", "")
+GITHUB_OAUTH_CLIENT_SECRET = os.getenv("GITHUB_OAUTH_CLIENT_SECRET", "")
 
+# Demo login: set DEMO_AUTO_ENSURE_USER=1 in development to auto-create a verified demo user in Mongo.
+DEMO_LOGIN_EMAIL = os.getenv("DEMO_LOGIN_EMAIL", "samanta@dowellresearch.se")
+DEMO_AUTO_ENSURE_USER = os.getenv("DEMO_AUTO_ENSURE_USER", "").lower() in ("1", "true", "yes")
 
+# When True, BaseAPIView._track skips telemetry for /api/v2/* (middleware already logs).
+ANALYTICS_DISABLE_VIEW_TELEMETRY_FOR_API_V2 = (
+    os.getenv("ANALYTICS_DISABLE_VIEW_TELEMETRY_FOR_API_V2", "true").lower()
+    in ("1", "true", "yes")
+)
 
-
-
-
-
-DEMO_PLAYGROUND_SECRET = os.getenv('DEMO_PLAYGROUND_SECRET', 'DEMO_PLAYGROUND_SECRET_DUMMY')
+DEMO_PLAYGROUND_SECRET = os.getenv("DEMO_PLAYGROUND_SECRET", "DEMO_PLAYGROUND_SECRET_DUMMY")
