@@ -4,28 +4,24 @@ on:
   push:
     branches:
       - main
+
 jobs:
   deploy:
-    name: Deploy Aplication
+    name: Deploy Application
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - name: Adding Known Hosts
-        run: |
-          mkdir ~/.ssh
-          chmod 700 ~/.ssh
-          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
-          # ssh-keyscan -p 22 -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Deploy with github
-        uses: appleboy/ssh-action@master
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.USER_NAME }}
-          key: ${{secrets.SSH_PRIVATE_KEY }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
           script: |
             cd ${{ secrets.WORKING_DIR }}
             git pull origin main
-            docker-compose -f docker-compose.prod down && docker-compose -f docker-compose.prod up -d --build
+            docker compose -f docker-compose.prod_enhanced.yml build
+            docker compose -f docker-compose.prod_enhanced.yml up -d
