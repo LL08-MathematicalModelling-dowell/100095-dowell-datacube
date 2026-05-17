@@ -4,9 +4,22 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "backend/**"
+      - ".github/workflows/ci.yml"
   pull_request:
     branches:
       - main
+    paths:
+      - "backend/**"
+      - ".github/workflows/ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   backend:
@@ -15,15 +28,26 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    env:
+      # Required at Django settings import (project.settings.common); no server needed for unit tests.
+      MONGODB_URI: mongodb://127.0.0.1:27017
+      MONGODB_DATABASE: datacube_ci
+      MONGODB_COLLECTION: metadata
+      DATACUBE_V2_AUTH_DB: datacube_auth_ci
+      FILE_STORAGE_DB_NAME: datacube_files_ci
+      SECRET_KEY: ci-not-secret-for-github-actions
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          python-version-file: backend/.python-version
 
       - name: Sync dependencies
-        run: uv sync --frozen
+        run: uv sync --frozen --all-groups
 
       - name: Run pytest
         run: uv run pytest

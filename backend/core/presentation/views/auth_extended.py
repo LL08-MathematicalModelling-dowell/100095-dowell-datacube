@@ -44,6 +44,10 @@ from core.presentation.serializers import (
 logger = logging.getLogger(__name__)
 
 
+def _first_name_from_user(user_doc: dict, email: str) -> str:
+    return (user_doc.get("firstName") or email.split("@")[0]).strip() or "there"
+
+
 def send_otp_email_challenge(email: str, purpose: OtpPurpose) -> Response:
     """Create OTP for an existing user and send via email (safe response if user missing)."""
     user_doc = user_manager.get_user_by_email(email)
@@ -71,7 +75,12 @@ def send_otp_email_challenge(email: str, purpose: OtpPurpose) -> Response:
     code = generate_numeric_code()
     save_otp_challenge(user_id=user_doc["_id"], purpose=purpose, code=code)
     try:
-        send_otp_email(to=email, code=code, purpose=purpose)
+        send_otp_email(
+            to_email=email,
+            first_name=_first_name_from_user(user_doc, email),
+            code=code,
+            purpose=purpose,
+        )
     except Exception as e:
         logger.exception("Failed to send OTP: %s", e)
         return Response(
@@ -110,7 +119,12 @@ class EmailOnlyRegistrationView(APIView):
         code = generate_numeric_code()
         save_otp_challenge(user_id=user_doc["_id"], purpose="register", code=code)
         try:
-            send_otp_email(to=user_doc["email"], code=code, purpose="register")
+            send_otp_email(
+                to_email=user_doc["email"],
+                first_name=_first_name_from_user(user_doc, user_doc["email"]),
+                code=code,
+                purpose="register",
+            )
         except Exception as e:
             logger.exception("Failed to send registration OTP: %s", e)
             return Response(

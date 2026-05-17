@@ -7,8 +7,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 import useAuthStore from '../store/authStore';
+import toast from 'react-hot-toast';
 import FilesSection from '../components/FileSection';
 import AnalyticsCharts from '../components/AnalyticsCharts';
+import { Card, PageHeader } from '../components/ui/Card';
 
 // Define validation schema
 const collectionFieldSchema = z.object({
@@ -55,11 +57,11 @@ const Overview = () => {
       queryClient.invalidateQueries({ queryKey: ['databases'] });
       setIsFormOpen(false);
       reset();
-      alert('Database created successfully!'); // Added success alert
+      toast.success('Database created successfully');
     },
     onError: (err) => {
       console.error('Failed to create database:', err);
-      alert('Failed to create database. Please check your input and try again.'); // More informative error
+      toast.error('Could not create database. Check the form and try again.');
     },
   });
 
@@ -79,103 +81,57 @@ const Overview = () => {
   };
 
   return (
-    <div className="bg-slate-900 text-slate-300 font-sans min-h-screen p-6 sm:p-10">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-bold text-white tracking-tight mb-8">
-          Dashboard Overview
-        </h1>
-        <p className="mt-4 text-lg text-slate-400 mb-10">
-          A quick glance at your API usage and managed databases.
-        </p>
+    <div className="max-w-6xl mx-auto pb-10">
+      <PageHeader
+        title="Overview"
+        description="Databases, analytics, and file storage for your workspace."
+      />
 
-        {/* API Usage Stats */}
-        {/* <section className="p-6 bg-slate-800/50 rounded-xl border border-slate-700/80 mb-8">
-          <h2 className="text-2xl font-semibold text-white tracking-tight mb-6">
-            API Usage & Statistics
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="bg-slate-700/40 p-5 rounded-lg border border-slate-600/50 flex flex-col justify-between">
-              <div>
-                <h3 className="text-sm font-medium text-slate-400 mb-2 flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 text-cyan-400"><path d="M4 14.899A7 7 0 0 1 15 12h3a5 5 0 0 1 0 10h-3.5" /><path d="M7 6l-3 3 3 3" /><path d="M10.5 9.5l3 3 3-3" /></svg>
-                  API Calls This Month
-                </h3>
-                <p className="text-3xl font-bold text-cyan-400">0</p>
-              </div>
-              <p className="text-xs text-slate-500 mt-3">Next update in 24 hours</p>
-            </div>
-            <div className="bg-slate-700/40 p-5 rounded-lg border border-slate-600/50 flex flex-col justify-between">
-              <div>
-                <h3 className="text-sm font-medium text-slate-400 mb-2 flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 text-emerald-400"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>
-                  Logical Databases
-                </h3>
-                <p className="text-3xl font-bold text-emerald-400">{databases?.length ?? 0}</p>
-              </div>
-              <p className="text-xs text-slate-500 mt-3">Total databases provisioned</p>
-            </div>
-            <div className="bg-slate-700/40 p-5 rounded-lg border border-slate-600/50 flex flex-col justify-between">
-              <div>
-                <h3 className="text-sm font-medium text-slate-400 mb-2 flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 text-purple-400"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
-                  Active Endpoints
-                </h3>
-                <p className="text-3xl font-bold text-purple-400">0</p>
-              </div>
-              <p className="text-xs text-slate-500 mt-3">Endpoints connected to your databases</p>
-            </div>
-          </div>
-        </section> */}
-
-        {/* Analytics Charts */}
-        <section className="p-6 bg-slate-800/50 rounded-xl border border-slate-700/80 mb-8">
-          <h2 className="text-2xl font-semibold text-white tracking-tight mb-6">
-            Analytics & Performance
-          </h2>
+        <Card title="Analytics & performance" subtitle="Live usage from the observability API" className="mb-8">
           <AnalyticsCharts />
-        </section>
+        </Card>
 
         <FilesSection />
 
-        {/* Databases List */}
-        <section className="p-6 bg-slate-800/50 rounded-xl border border-slate-700/80 mb-8">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-            <h2 className="text-2xl font-semibold text-white tracking-tight">Your Databases</h2>
+        <Card
+          title="Your databases"
+          subtitle="Logical databases mapped to your MongoDB namespaces"
+          className="mb-8"
+          action={
             <button
               onClick={() => setIsFormOpen(true)}
-              className="bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-3 px-6 rounded-md transition-colors duration-200 shadow-md flex-shrink-0"
-              aria-label="Create new database"
+              className="rounded-[var(--radius-md)] bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-transform hover:brightness-110 active:scale-[0.98]"
+              type="button"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline-block mr-2"><path d="M12 5v14M5 12h14" /></svg>
-              Create Database
+              Create database
             </button>
-          </div>
+          }
+        >
 
-          {isLoading && <p className="text-slate-400">Loading databases...</p>}
-          {error && <p className="text-red-400">Error loading databases. Please try again later.</p>}
+          {isLoading && <p className="text-[var(--text-muted)]">Loading databases…</p>}
+          {error && <p className="text-[var(--danger)]">Could not load databases.</p>}
 
           {!isLoading && !error && databases && databases.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="min-w-full table-auto">
                 <thead>
-                  <tr className="bg-slate-700/60">
-                    <th className="p-3 text-left text-sm font-semibold text-slate-200 rounded-tl-lg">Database Name</th>
-                    <th className="p-3 text-left text-sm font-semibold text-slate-200">Database ID</th>
-                    <th className="p-3 text-left text-sm font-semibold text-slate-200 rounded-tr-lg">Actions</th>
+                  <tr className="bg-[var(--surface-2)]/80">
+                    <th className="p-3 text-left text-sm font-semibold text-[var(--text-primary)] rounded-tl-lg">Name</th>
+                    <th className="p-3 text-left text-sm font-semibold text-[var(--text-primary)]">ID</th>
+                    <th className="p-3 text-left text-sm font-semibold text-[var(--text-primary)] rounded-tr-lg">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {databases?.map((db) => (
-                    <tr key={db.id} className="border-b border-slate-700/60 hover:bg-slate-700/40 transition-colors">
-                      <td className="p-3 text-slate-300 font-medium">{db.name}</td>
-                      <td className="p-3 font-mono text-sm text-slate-400">{db.id}</td>
+                    <tr key={db.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--surface-0)] transition-colors">
+                      <td className="p-3 font-medium text-[var(--text-primary)]">{db.name}</td>
+                      <td className="p-3 font-[var(--font-mono)] text-sm text-[var(--text-muted)]">{db.id}</td>
                       <td className="p-3">
                         <Link
                           to={`/dashboard/database/${db.id}`}
-                          className="text-cyan-500 hover:text-cyan-400 font-medium transition-colors"
+                          className="font-medium text-[var(--accent-bright)] hover:underline transition-colors"
                         >
-                          View Details
+                          Open
                         </Link>
                       </td>
                     </tr>
@@ -184,17 +140,17 @@ const Overview = () => {
               </table>
             </div>
           ) : (!isLoading && !error && databases?.length === 0) && (
-            <div className="text-center p-6 bg-slate-700/40 rounded-lg border border-slate-600/50">
-              <p className="text-slate-400 text-lg mb-4">You don't have any databases yet.</p>
+            <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--border)] bg-[var(--surface-0)] p-8 text-center">
+              <p className="text-[var(--text-muted)] mb-4">No databases yet.</p>
               <button
                 onClick={() => setIsFormOpen(true)}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-5 rounded-md transition-colors duration-200 shadow-md"
+                className="rounded-[var(--radius-md)] bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:brightness-110"
               >
-                Start by creating one!
+                Create your first database
               </button>
             </div>
           )}
-        </section>
+        </Card>
 
         {/* Create Database Form Modal */}
         {isFormOpen && (
@@ -305,7 +261,6 @@ const Overview = () => {
             </div>
           </div>
         )}
-      </div>
     </div>
   );
 };
@@ -359,7 +314,7 @@ const CollectionFields: React.FC<CollectionFieldsProps> = ({ collectionIndex, co
       <button
         type="button"
         onClick={() => appendField({ name: '', type: '' })}
-        className="mt-2 text-emerald-500 hover:text-emerald-400 font-medium transition-colors flex items-center gap-1"
+        className="mt-2 font-medium text-[var(--accent-bright)] transition-colors hover:opacity-90 flex items-center gap-1"
         aria-label="Add another field"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>

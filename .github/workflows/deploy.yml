@@ -1,27 +1,41 @@
-name: DataCube CI/CD deployment workflow
+name: Deploy
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Deploy Application
+    name: Deploy application
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.USER_NAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
+          script_stop: true
+          command_timeout: 45m
           script: |
-            cd ${{ secrets.WORKING_DIR }}
-            git pull origin main
+            set -euo pipefail
+            cd "${{ secrets.WORKING_DIR }}"
+            git fetch origin main
+            git checkout main
+            git reset --hard origin/main
             docker compose -f docker-compose.prod_enhanced.yml build
             docker compose -f docker-compose.prod_enhanced.yml up -d

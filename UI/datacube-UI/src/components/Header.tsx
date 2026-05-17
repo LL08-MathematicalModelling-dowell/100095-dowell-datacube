@@ -1,151 +1,216 @@
-// components/Header.tsx
 import { Link, useLocation } from "react-router-dom";
-import { useState } from "react";
+import { useThemeStore } from "../store/themeStore";
 import useAuthStore from "../store/authStore";
 import useUser from "../store/useUser";
-import { Menu, X, LogOut, Home, Key, CreditCard, FileText } from "lucide-react";
+import { useState } from "react";
+import { cn } from "../lib/cn";
+import { mobileNavItems } from "../lib/navConfig";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  Database,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Moon,
+  Sun,
+  X,
+} from "lucide-react";
 
-const Header = () => {
+type HeaderProps = {
+  onMenuClick?: () => void;
+};
+
+const Header = ({ onMenuClick }: HeaderProps) => {
   const { isAuthenticated, logout } = useAuthStore();
   const { user, isLoading } = useUser();
   const location = useLocation();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const { mode, toggle } = useThemeStore();
 
-  const isDashboardPath = location.pathname.startsWith("/dashboard");
+  const isDashboard = location.pathname.startsWith("/dashboard");
 
-  const navItems = [
-    { to: "/dashboard/overview", label: "Databases", icon: Home },
-    { to: "/dashboard/api-keys", label: "API Keys", icon: Key },
-    { to: "/dashboard/billing", label: "Billing", icon: CreditCard },
-    { to: "/api-docs", label: "API Reference", icon: FileText },
-  ];
+  const filteredMobile = mobileNavItems.filter(
+    (i) => !i.requireAuth || isAuthenticated
+  );
 
-  const NavLink = ({ to, label, icon: Icon }: { to: string; label: string; icon: any }) => {
-    const isActive = location.pathname === to;
+  const NavLinkRow = ({
+    to,
+    label,
+    icon: Icon,
+  }: {
+    to: string;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+  }) => {
+    const active = location.pathname === to;
     return (
       <Link
         to={to}
-        onClick={() => setMobileMenuOpen(false)}
-        className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 font-medium ${isActive
-          ? "bg-[var(--green-dark)]/20 text-[var(--green-dark)] border border-[var(--green-dark)]/30"
-          : "text-[var(--text-muted)] hover:bg-[var(--bg-dark-3)] hover:text-[var(--text-light)]"
-          }`}
+        onClick={() => setMobileOpen(false)}
+        className={cn(
+          "flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-3 text-sm font-medium transition-colors",
+          active
+            ? "bg-[var(--accent-soft)] text-[var(--accent-bright)]"
+            : "text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text-primary)]"
+        )}
       >
-        <Icon className="w-5 h-5" />
+        <Icon className="h-5 w-5 shrink-0" />
         {label}
       </Link>
     );
   };
 
   return (
-    <header className="bg-[var(--bg-dark-2)] border-b border-[var(--border-color)] px-6 py-4 flex items-center justify-between relative z-10 shadow-lg">
-      {/* Logo */}
-      <Link to="/" className="flex items-center gap-3 group">
-        <div className="p-2 bg-[var(--green-dark)]/20 rounded-lg group-hover:bg-[var(--green-dark)]/30 transition-all">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--green-dark)]">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-          </svg>
-        </div>
-        <h1 className="text-2xl sm:text-md font-bold text-[var(--green-dark)] tracking-tight">DataCube</h1>
-      </Link>
-
-      <div className="flex items-center gap-6">
-        {/* Auth Status (Right Side) */}
-          {isAuthenticated && (
-            <>
-        <div className="flex items-center gap-4">
-            <div className="hidden sm:flex items-center gap-3 text-sm">
-              {isLoading ? (
-                <span className="text-[var(--text-muted)]">Loading...</span>
-              ) : (
-                user?.firstName && (
-                  <span className="text-[var(--text-light)]">
-                    Hi, <span className="font-semibold text-[var(--green-dark)]">{user.firstName}</span>
-                  </span>
-                )
-              )}
-            </div>
-          
-        </div>
-        <nav className="hidden sm:block">
-          <ul className="flex items-center space-x-4">
-            {/* button to /dashboard */}
-            {!isDashboardPath && (
-              <li>
-                <Link to="/dashboard" className="text-slate-200 hover:text-cyan-400 transition-colors text-sm font-medium bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md shadow-md">
-                  Dashboard
-                </Link>
-              </li>
-            )}
-          </ul>
-        </nav>
-        </>
-        )}
-
-
-        {/* Desktop Navigation */}
-        <nav className="hidden lg:flex items-center gap-2">
-          {isAuthenticated && (
-            <>
-              {/* {navItems.map((item) => (
-              <NavLink key={item.to} to={item.to} label={item.label} icon={item.icon} />
-            ))} */}
-              <button
-                onClick={logout}
-                className="flex items-center gap-2 px-4 py-3 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all ml-4"
-              >
-                <LogOut className="w-5 h-5" />
-                Logout
-              </button>
-            </>
-          )}
-        </nav>
-
-        {/* Mobile Menu Button */}
-        {isAuthenticated ? (
+    <header className="relative z-30 flex items-center justify-between gap-4 border-b border-[var(--border-subtle)] bg-[var(--surface-1)]/95 px-4 py-3 backdrop-blur-md sm:px-6">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        {isAuthenticated && isDashboard && (
           <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="lg:hidden p-3 rounded-lg bg-[var(--bg-dark-3)] border border-[var(--border-color)] hover:border-[var(--green-dark)] transition-all"
-            aria-label="Toggle menu"
+            type="button"
+            className="inline-flex rounded-[var(--radius-md)] p-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text-primary)] lg:hidden"
+            aria-label="Open navigation"
+            onClick={onMenuClick}
           >
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            <Menu className="h-6 w-6" />
           </button>
-        ) : (
-          <Link
-            to="/login"
-            className="bg-[var(--green-dark)] hover:bg-[var(--green-dark)]/90 text-white font-semibold px-5 py-2.5 rounded-lg text-sm transition-all shadow-md"
-          >
-            Log In
-          </Link>
+        )}
+        <Link to="/" className="flex min-w-0 items-center gap-2 sm:gap-3 group">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--accent-soft)] border border-[var(--accent)]/25 transition-transform duration-200 group-hover:scale-[1.02]">
+            <Database className="h-5 w-5 text-[var(--accent-bright)]" />
+          </div>
+          <span className="truncate text-lg font-bold tracking-tight text-[var(--accent-bright)] sm:text-xl">
+            DataCube
+          </span>
+        </Link>
+      </div>
+
+      <div className="flex items-center gap-2 sm:gap-3">
+        <button
+          type="button"
+          onClick={toggle}
+          className="inline-flex rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-0)] p-2.5 text-[var(--text-muted)] transition-all hover:border-[var(--accent)]/30 hover:text-[var(--text-primary)]"
+          aria-label={mode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {mode === "dark" ? (
+            <Sun className="h-5 w-5" />
+          ) : (
+            <Moon className="h-5 w-5" />
+          )}
+        </button>
+
+        {isAuthenticated && (
+          <div className="hidden items-center gap-2 sm:flex text-sm text-[var(--text-muted)]">
+            {isLoading ? (
+              <span>…</span>
+            ) : user?.firstName ? (
+              <span>
+                Hi,{" "}
+                <span className="font-semibold text-[var(--accent-bright)]">
+                  {user.firstName}
+                </span>
+              </span>
+            ) : null}
+          </div>
         )}
 
-        {/* Mobile Dropdown Menu */}
-        {mobileMenuOpen && isAuthenticated && (
+        {!isAuthenticated ? (
+          <div className="flex items-center gap-2">
+            <Link
+              to="/login"
+              className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-0)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:border-[var(--accent)]/40 hover:bg-[var(--surface-2)] sm:px-4"
+            >
+              Sign in
+            </Link>
+            <Link
+              to="/register"
+              className="rounded-[var(--radius-md)] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:brightness-110 active:scale-[0.98]"
+            >
+              Register
+            </Link>
+          </div>
+        ) : (
           <>
-            <div
-              className="fixed inset-0 bg-black/70 z-40 lg:hidden"
-              onClick={() => setMobileMenuOpen(false)}
-            />
-            <div className="fixed top-16 left-4 right-4 bg-[var(--bg-dark-2)] border border-[var(--border-color)] rounded-xl shadow-2xl z-50 p-4">
-              <div className="space-y-1">
-                {navItems.map((item) => (
-                  <NavLink key={item.to} to={item.to} label={item.label} icon={item.icon} />
-                ))}
-                <button
-                  onClick={() => {
-                    logout();
-                    setMobileMenuOpen(false);
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all text-left"
-                >
-                  <LogOut className="w-5 h-5" />
-                  Logout
-                </button>
-              </div>
-            </div>
+            {!isDashboard && (
+              <Link
+                to="/dashboard/overview"
+                className="hidden items-center gap-2 rounded-[var(--radius-md)] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:brightness-110 active:scale-[0.98] sm:inline-flex"
+              >
+                <LayoutDashboard className="h-4 w-4" />
+                Dashboard
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={() => setMobileOpen((o) => !o)}
+              className="inline-flex rounded-[var(--radius-md)] border border-[var(--border-subtle)] p-2.5 text-[var(--text-muted)] hover:bg-[var(--surface-2)] lg:hidden"
+              aria-label="Account menu"
+            >
+              {mobileOpen ? (
+                <X className="h-5 w-5" />
+              ) : (
+                <Menu className="h-5 w-5" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={logout}
+              className="hidden items-center gap-2 rounded-[var(--radius-md)] border border-transparent px-3 py-2 text-sm font-medium text-[var(--danger)] transition-colors hover:bg-[var(--danger-soft)] lg:inline-flex"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="hidden xl:inline">Logout</span>
+            </button>
           </>
         )}
       </div>
+
+      <AnimatePresence>
+        {mobileOpen && isAuthenticated && (
+          <>
+            <motion.div
+              className="fixed inset-0 z-40 bg-[var(--overlay)] lg:hidden"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMobileOpen(false)}
+            />
+            <motion.div
+              className="fixed right-3 top-14 z-50 w-[min(92vw,280px)] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-1)] shadow-[var(--shadow-md)] lg:hidden"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18 }}
+            >
+              <div className="max-h-[70vh] space-y-1 overflow-y-auto p-2">
+                {!isDashboard && (
+                  <NavLinkRow
+                    to="/dashboard/overview"
+                    label="Dashboard"
+                    icon={LayoutDashboard}
+                  />
+                )}
+                {filteredMobile.map((item) => (
+                  <NavLinkRow
+                    key={item.to}
+                    to={item.to}
+                    label={item.label}
+                    icon={item.icon}
+                  />
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    logout();
+                    setMobileOpen(false);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-[var(--radius-md)] px-3 py-3 text-left text-sm font-medium text-[var(--danger)] hover:bg-[var(--danger-soft)]"
+                >
+                  <LogOut className="h-5 w-5" />
+                  Logout
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </header>
   );
 };

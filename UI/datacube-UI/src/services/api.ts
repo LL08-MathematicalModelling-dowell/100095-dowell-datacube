@@ -2,10 +2,11 @@ import axios, { AxiosError } from "axios";
 import type { AxiosRequestConfig } from "axios";
 import useAuthStore from "../store/authStore";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
+export const API_ORIGIN =
+  import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
 
 const api = axios.create({
-  baseURL: API_BASE,
+  baseURL: API_ORIGIN,
   headers: {
     "Content-Type": "application/json",
   },
@@ -77,7 +78,7 @@ api.interceptors.response.use(
 
       try {
         // Perform the refresh call (using a fresh axios instance or fetch to avoid interceptor loops)
-        const response = await axios.post(`${API_BASE}/core/auth/token/refresh/`, {
+        const response = await axios.post(`${API_ORIGIN}/core/auth/token/refresh/`, {
           refresh: refreshToken,
         });
 

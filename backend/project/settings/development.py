@@ -1,6 +1,9 @@
 """
 Django settings for the DataCube project in the development environment.
 """
+
+import os
+
 from .common import *
 
 # --- Development-Specific Settings ---
@@ -14,8 +17,9 @@ DEBUG = True
 CORS_ORIGIN_ALLOW_ALL = True
 
 # --- Email ---
-# Use the console backend to see emails printed in the terminal
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# OTP / verification: core.infrastructure.resend_client
+# With no RESEND_API_KEY, set ALLOW_STDOUT_EMAIL=true to log OTP codes in the terminal.
+ALLOW_STDOUT_EMAIL = os.getenv("ALLOW_STDOUT_EMAIL", "true").lower() in ("1", "true", "yes")
 
 # --- CORS ---
 # Allow all origins for easy frontend development

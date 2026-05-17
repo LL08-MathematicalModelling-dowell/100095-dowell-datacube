@@ -1,48 +1,44 @@
-import { useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
-import Header from '../components/Header.tsx';
-import Sidebar from '../components/Sidebar.tsx';
-import api from '../services/api.ts';
-import useAuthStore from '../store/authStore.ts';
+import { useEffect, useState } from "react";
+import { Outlet } from "react-router-dom";
+import Header from "../components/Header.tsx";
+import Sidebar from "../components/Sidebar.tsx";
+import api from "../services/api.ts";
+import useAuthStore from "../store/authStore.ts";
 
 const DashboardLayout = () => {
   const { accessToken, refreshToken, logout } = useAuthStore();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (accessToken && !refreshToken) {
-      console.warn(
-        'Authentication token mismatch: Access token present without Refresh token. Clearing session.'
-      );
       logout();
       return;
     }
 
-    // If both tokens exist, silently validate the session
     if (accessToken && refreshToken) {
-      api.get('/core/profile')
-        .then(() => {
-          console.log('Session validated successfully.');
-        })
-        .catch((error) => {
-          console.error('Initial profile validation failed. Session is expired.', error);
-        });
+      api.get("/core/profile").catch(() => {
+        /* refresh interceptor may redirect */
+      });
     }
-  }, [accessToken, refreshToken]);
+  }, [accessToken, refreshToken, logout]);
+
   return (
-    <div className="flex h-screen bg-[var(--bg-dark-1)] text-[var(--text-light)] font-[var(--font-sans)]">
-      {/* Sidebar */}
-      <Sidebar />
+    <div className="flex h-screen bg-[var(--surface-0)] text-[var(--text-primary)] font-[var(--font-sans)]">
+        <Sidebar
+          mobileOpen={sidebarOpen}
+          onMobileClose={() => setSidebarOpen(false)}
+        />
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <Header onMenuClick={() => setSidebarOpen(true)} />
 
-        {/* Page Content */}
-        <main className="flex-1 overflow-y-auto bg-[var(--bg-dark-1)] p-6 sm:p-8">
-          <Outlet />
-        </main>
+          <main className="flex-1 overflow-y-auto">
+            <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+              <Outlet />
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
   );
 };
 

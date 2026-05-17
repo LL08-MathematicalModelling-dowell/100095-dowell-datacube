@@ -1,517 +1,501 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Monaco } from "@monaco-editor/react";
 import Editor from "@monaco-editor/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { 
-    AlertCircle, CheckCircle,
-    ChevronLeft, ChevronRight,
-    Copy, Edit2, FileJson,
-    GitCompare, Loader2,
-    Save, Trash2, XCircle 
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  AlertCircle,
+  ArrowLeft,
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Edit2,
+  FileJson,
+  GitCompare,
+  Loader2,
+  RefreshCw,
+  Save,
+  Trash2,
+  XCircle,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { Link, useParams } from "react-router-dom";
+import { JsonTreeView } from "../components/documents/JsonTreeView";
+import { cn } from "../lib/cn";
 import api from "../services/api";
+import { useThemeStore } from "../store/themeStore";
 
 interface Document {
-    _id: string;
-    [key: string]: any;
+  _id: string;
+  [key: string]: any;
 }
 
 const CRUD_URL = "/api/v2/crud/";
 
 const CollectionDocuments = () => {
-    // === All hooks at the top — NEVER after conditional returns ===
-    const { dbId, collName } = useParams<{ dbId: string; collName: string }>();
-    // const navigate = useNavigate();
-    const queryClient = useQueryClient();
+  const { dbId, collName } = useParams<{ dbId: string; collName: string }>();
+  const queryClient = useQueryClient();
 
-    const [page, setPage] = useState(1);
-    const [search, ] = useState("");
-    const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
-    const [isEditing, setIsEditing] = useState(false);
-    const [, setEditValue] = useState("");
-    const [showDiff, setShowDiff] = useState(false);
-    const [isValidJson, setIsValidJson] = useState(true);
-    const [editorContent, setEditorContent] = useState("");
+  const [page, setPage] = useState(1);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [showDiff, setShowDiff] = useState(false);
+  const [isValidJson, setIsValidJson] = useState(true);
+  const [editorContent, setEditorContent] = useState("");
 
+  const originalJson = useRef<string>("");
+  const editorRef = useRef<any>(null);
+  const monacoRef = useRef<Monaco | null>(null);
 
-    const originalJson = useRef<string>("");
-    const editorRef = useRef<any>(null);
-    const monacoRef = useRef<Monaco | null>(null);
+  const { data, isLoading, error, isFetching } = useQuery({
+    queryKey: ["documents", dbId, collName, page],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        database_id: dbId!,
+        collection_name: collName!,
+        page: page.toString(),
+        page_size: "25",
+      });
+      return api.get(`${CRUD_URL}?${params}`);
+    },
+  });
 
-    // === Queries & Mutations ===
-    const { data, isLoading, error } = useQuery({
-        queryKey: ["documents", dbId, collName, page, search],
-        queryFn: async () => {
-            const params = new URLSearchParams({
-                database_id: dbId!,
-                collection_name: collName!,
-                page: page.toString(),
-                page_size: "20",
-                ...(search && { filters: JSON.stringify({ $text: { $search: search } }) }),
-            });
-            return api.get(`${CRUD_URL}?${params}`);
-        },
-    });
+  const deleteMutation = useMutation({
+    mutationFn: (docId: string) =>
+      api.delete(CRUD_URL, {
+        database_id: dbId,
+        collection_name: collName,
+        filters: { _id: docId },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+      toast.success("Document deleted");
+      setSelectedId(null);
+    },
+  });
 
-    const deleteMutation = useMutation({
-        mutationFn: (docId: string) =>
-            api.delete(CRUD_URL, {
-                database_id: dbId,
-                collection_name: collName,
-                filters: { _id: docId },
-            }),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["documents"] });
-            toast.success("Document deleted");
-        },
-    });
+  const updateMutation = useMutation({
+    mutationFn: (payload: { _id: string; body: Record<string, unknown> }) =>
+      api.put(CRUD_URL, {
+        database_id: dbId,
+        collection_name: collName,
+        filters: { _id: payload._id },
+        update_data: { $set: payload.body },
+        update_all_fields: false,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+      setIsEditing(false);
+      toast.success("Document updated");
+    },
+    onError: () => toast.error("Update failed — check JSON and permissions"),
+  });
 
-    const updateMutation = useMutation({
-        mutationFn: (doc: Document) =>
-            api.put(CRUD_URL, {
-                database_id: dbId,
-                collection_name: collName,
-                filters: { _id: doc._id },
-                update_data: doc,
-                update_all_fields: false,
-            }),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["documents"] });
-            setIsEditing(false);
-            toast.success("Document updated");
-        },
-        onError: () => toast.error("Invalid JSON or update failed"),
-    });
+  const docs: Document[] = data?.data || [];
+  const pagination = data?.pagination;
+  const selectedDoc = docs.find((d) => d._id === selectedId) ?? null;
 
-    // === Helper Functions ===
-    const docs: Document[] = data?.data || [];
-    const pagination = data?.pagination;
-
-    const copyToClipboard = (text: string) => {
-        navigator.clipboard.writeText(text);
-        toast.success("Copied to clipboard!");
-    };
-
-    const handleEditorDidMount = (editor: any, monaco: Monaco) => {
-        editorRef.current = editor;
-        monacoRef.current = monaco;
-
-        monaco.editor.defineTheme("datacube-dark", {
-            base: "vs-dark",
-            inherit: true,
-            rules: [],
-            colors: {
-                "editor.background": "#111827",
-                "editorLineNumber.foreground": "#4b5563",
-                "editorGutter.background": "#1f2937",
-            },
-        });
-        monaco.editor.setTheme("datacube-dark");
-    };
-
-    const handleEdit = (doc: Document) => {
-        setSelectedDoc(doc);
-        originalJson.current = JSON.stringify(doc, null, 2);
-        setEditValue(JSON.stringify(
-            Object.fromEntries(Object.entries(doc).filter(([k]) => k !== "_id")),
-            null,
-            2
-        ));
-        setIsEditing(true);
-        setShowDiff(false);
-        setIsValidJson(true);
-    };
-
-
-    const handleEditorChange = (value: string | undefined) => {
-        const newValue = value || "";
-        setEditorContent(newValue); // ← This is what gets saved
-
-        try {
-            JSON.parse(newValue);
-            setIsValidJson(true);
-        } catch {
-            setIsValidJson(false);
-        }
-    };
-
-    const handleSave = () => {
-        if (!isValidJson || !selectedDoc) return;
-
-        try {
-            const editedData = JSON.parse(editorContent); // ← Use state, not ref
-            const fullDocument = {
-                ...editedData,
-            };
-
-            updateMutation.mutate(fullDocument);
-        } catch (err) {
-            toast.error("Invalid JSON");
-        }
-    };
-
-    // === Early Returns (AFTER all hooks) ===
-    if (isLoading) {
-        return (
-            <div className="flex items-center justify-center h-96">
-                <Loader2 className="w-12 h-12 animate-spin text-[var(--green-dark)]" />
-            </div>
-        );
+  useEffect(() => {
+    if (!selectedId && docs.length > 0) {
+      setSelectedId(docs[0]._id);
     }
+  }, [docs, selectedId]);
 
-    if (error) {
-        return (
-            <div className="text-center py-20">
-                <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-                <p className="text-xl text-[var(--text-muted)]">Failed to load documents</p>
-            </div>
-        );
-    }
-    return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                    <Link
-                        to={`/dashboard/database/${dbId}`}
-                        className="text-[var(--green-dark)] hover:underline flex items-center gap-2 mb-2"
-                    >
-                        ← Back to Database
-                    </Link>
-                    <h1 className="text-3xl font-bold text-[var(--green-dark)]">
-                        Collection: <span className="font-mono text-[var(--text-light)]">{collName}</span>
-                    </h1>
-                    <p className="text-[var(--text-muted)] mt-1">
-                        {pagination?.total_items || 0} documents
-                    </p>
-                </div>
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success("Copied");
+  };
 
-                {/* <div className="flex items-center gap-4 w-full sm:w-auto">
-          <div className="relative flex-1 sm:flex-initial">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--text-muted)]" />
-            <input
-              type="text"
-              placeholder="Search documents..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="pl-10 pr-4 py-3 bg-[var(--bg-dark-2)] border border-[var(--border-color)] rounded-lg focus:outline-none focus:border-[var(--green-dark)] transition-colors w-full sm:w-80"
-            />
-          </div>
-        </div> */}
-            </div>
+  const applyMonacoTheme = useCallback(
+    (monaco: Monaco) => {
+      const isLight =
+        document.documentElement.dataset.theme === "light";
+      monaco.editor.defineTheme("datacube-dark", {
+        base: "vs-dark",
+        inherit: true,
+        rules: [],
+        colors: {
+          "editor.background": "#111827",
+          "editorLineNumber.foreground": "#4b5563",
+          "editorGutter.background": "#1f2937",
+        },
+      });
+      monaco.editor.defineTheme("datacube-light", {
+        base: "vs",
+        inherit: true,
+        rules: [],
+        colors: {
+          "editor.background": "#f8fafc",
+          "editorLineNumber.foreground": "#94a3b8",
+          "editorGutter.background": "#f1f5f9",
+        },
+      });
+      monaco.editor.setTheme(isLight ? "datacube-light" : "datacube-dark");
+    },
+    []
+  );
 
-            {/* Documents Table */}
-            {docs.length === 0 ? (
-                <div className="text-center py-20 bg-[var(--bg-dark-2)] rounded-xl border border-dashed border-[var(--border-color)]">
-                    <FileJson className="w-20 h-20 text-[var(--text-muted)] mx-auto mb-4 opacity-50" />
-                    <p className="text-xl text-[var(--text-muted)]">No documents found</p>
-                    <p className="text-[var(--text-muted)] mt-2">Try adjusting your search or add some data!</p>
-                </div>
-            ) : (
-                <div className="bg-[var(--bg-dark-2)] rounded-xl border border-[var(--border-color)] overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="w-full">
-                            <thead className="bg-[var(--bg-dark-3)]">
-                                <tr>
-                                    <th className="px-6 py-4 text-left text-sm font-medium text-[var(--text-muted)]">_id</th>
-                                    <th className="px-6 py-4 text-left text-sm font-medium text-[var(--text-muted)]">Preview</th>
-                                    <th className="px-6 py-4 text-right text-sm font-medium text-[var(--text-muted)]">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-[var(--border-color)]">
-                                {docs.map((doc) => (
-                                    <tr key={doc._id} className="hover:bg-[var(--bg-dark-3)]/50 transition-colors">
-                                        <td className="px-6 py-4 font-mono text-sm text-[var(--text-light)]">
-                                            <div className="flex items-center gap-2">
-                                                <span className="truncate max-w-xs">{doc._id}</span>
-                                                <button
-                                                    onClick={() => copyToClipboard(doc._id)}
-                                                    className="text-[var(--text-muted)] hover:text-[var(--green-dark)]"
-                                                >
-                                                    <Copy className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <pre className="text-xs text-[var(--text-muted)] font-mono truncate max-w-2xl">
-                                                {/* {JSON.stringify({ ...doc, _id: undefined }, null, 2)} */}
-                                                {/* use uneditatble  Editor from "@monaco-editor/react";*/}
-                                                <Editor
-                                                    height="100px"
-                                                    defaultLanguage="json"
-                                                    value={JSON.stringify(
-                                                        Object.fromEntries(
-                                                            Object.entries(doc).filter(([key]) => key !== "_id")
-                                                        ),
-                                                        null,
-                                                        2
-                                                    )}
-                                                    theme="datacube-dark"
-                                                    options={{
-                                                        minimap: { enabled: false },
-                                                        scrollBeyondLastLine: false,
-                                                        fontSize: 12,
-                                                        wordWrap: "on",
-                                                        automaticLayout: true,
-                                                        folding: true,
-                                                        renderValidationDecorations: "off",
-                                                        readOnly: true,
-                                                        lineNumbers: "off",
-                                                        glyphMargin: false,
-                                                        lineDecorationsWidth: 0,
-                                                        overviewRulerLanes: 0,
-                                                    }}
-                                                />
-                                            </pre>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <button
-                                                onClick={() => handleEdit(doc)}
-                                                className="text-cyan-400 hover:text-cyan-300 mr-4"
-                                            >
-                                                <Edit2 className="w-5 h-5" />
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    if (confirm("Delete this document?")) {
-                                                        deleteMutation.mutate(doc._id);
-                                                    }
-                                                }}
-                                                className="text-red-500 hover:text-red-400"
-                                            >
-                                                <Trash2 className="w-5 h-5" />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+  const handleEditorDidMount = (editor: any, monaco: Monaco) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+    applyMonacoTheme(monaco);
+  };
 
-                    {/* Pagination */}
-                    {pagination && pagination.total_pages > 1 && (
-                        <div className="flex items-center justify-between px-6 py-4 border-t border-[var(--border-color)]">
-                            <p className="text-sm text-[var(--text-muted)]">
-                                Showing {(page - 1) * 20 + 1} to {Math.min(page * 20, pagination.total_items)} of {pagination.total_items} documents
-                            </p>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                                    disabled={page === 1}
-                                    className="p-2 rounded-lg bg-[var(--bg-dark-3)] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--bg-dark-3)]/80 transition-colors"
-                                >
-                                    <ChevronLeft className="w-5 h-5" />
-                                </button>
-                                <button
-                                    onClick={() => setPage(p => Math.min(pagination.total_pages, p + 1))}
-                                    disabled={page === pagination.total_pages}
-                                    className="p-2 rounded-lg bg-[var(--bg-dark-3)] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--bg-dark-3)]/80 transition-colors"
-                                >
-                                    <ChevronRight className="w-5 h-5" />
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
+  const themeMode = useThemeStore((s) => s.mode);
 
-            {/* Edit Modal */}
-            {isEditing && selectedDoc && (
-                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-                    <div className="bg-[var(--bg-dark-2)] rounded-xl border border-[var(--border-color)] max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-                        <div className="p-6 border-b border-[var(--border-color)] flex justify-between items-center">
-                            <h2 className="text-2xl font-bold text-[var(--green-dark)]">Edit Document</h2>
-                            <button
-                                onClick={() => setIsEditing(false)}
-                                className="text-[var(--text-muted)] hover:text-[var(--text-light)] text-2xl"
-                            >
-                                ×
-                            </button>
-                        </div>
+  useEffect(() => {
+    if (monacoRef.current) applyMonacoTheme(monacoRef.current);
+  }, [themeMode, applyMonacoTheme]);
 
-                        {/* Edit Modal */}
-                        {isEditing && selectedDoc && (
-                            <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-                                <div className="bg-[var(--bg-dark-2)] rounded-2xl border border-[var(--border-color)] w-full max-w-6xl h-[90vh] flex flex-col">
-                                    {/* Header */}
-                                    <div className="p-6 border-b border-[var(--border-color)] flex justify-between items-center">
-                                        <div className="flex items-center gap-4">
-                                            <h2 className="text-2xl font-bold text-[var(--green-dark)]">
-                                                Edit Document: {selectedDoc._id}
-                                            </h2>
-                                            <div className="flex items-center gap-2">
-                                                {isValidJson ? (
-                                                    <span className="flex items-center gap-2 text-green-400">
-                                                        <CheckCircle className="w-5 h-5" /> Valid JSON
-                                                    </span>
-                                                ) : (
-                                                    <span className="flex items-center gap-2 text-red-400">
-                                                        <XCircle className="w-5 h-5" /> Invalid JSON
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <button
-                                                onClick={() => setShowDiff(!showDiff)}
-                                                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${showDiff
-                                                    ? "bg-[var(--green-dark)] text-white"
-                                                    : "bg-[var(--bg-dark-3)] hover:bg-[var(--bg-dark-3)]/80"
-                                                    }`}
-                                            >
-                                                <GitCompare className="w-5 h-5" />
-                                                Diff View
-                                            </button>
-                                            <button
-                                                onClick={handleSave}
-                                                disabled={!isValidJson || updateMutation.isPending}
-                                                className="bg-[var(--green-dark)] hover:bg-[var(--green-dark)]/90 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-semibold flex items-center gap-2 transition-all"
-                                            >
-                                                {updateMutation.isPending ? (
-                                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                                ) : (
-                                                    <Save className="w-5 h-5" />
-                                                )}
-                                                Save
-                                            </button>
-                                            <button
-                                                onClick={() => setIsEditing(false)}
-                                                className="text-[var(--text-muted)] hover:text-[var(--text-light)] text-3xl"
-                                            >
-                                                ×
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {/* Editor */}
-                                    <div className="flex-1 flex overflow-hidden">
-                                        {/* Original (Diff View) */}
-                                        {/* Current Editor - _id is read-only */}
-                                        <div className={showDiff ? "w-1/2 p-4" : "w-full p-4"}>
-                                            <h3 className="text-sm font-semibold text-[var(--text-muted)] mb-2">
-                                                {showDiff ? "New Document" : "Current"}
-                                            </h3>
-                                            <div className="h-full flex flex-col">
-                                                {/* Read-only _id field */}
-                                                <div className="mb-4 p-4 bg-[var(--bg-dark-3)] rounded-lg border border-[var(--border-color)]">
-                                                    <div className="flex items-center justify-between">
-                                                        <div>
-                                                            <span className="text-sm text-[var(--text-muted)]">Document ID (_id)</span>
-                                                            <div className="flex items-center gap-3 mt-2">
-                                                                <code className="font-mono text-sm text-[var(--text-light)] break-all">
-                                                                    {selectedDoc?._id}
-                                                                </code>
-                                                                <button
-                                                                    onClick={() => {
-                                                                        navigator.clipboard.writeText(selectedDoc?._id || "");
-                                                                        toast.success("ID copied!");
-                                                                    }}
-                                                                    className="text-[var(--text-muted)] hover:text-[var(--green-dark)]"
-                                                                >
-                                                                    <Copy className="w-4 h-4" />
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                        <span className="text-xs text-[var(--text-muted)] bg-[var(--bg-dark-1)] px-3 py-1 rounded-full">
-                                                            Read-only
-                                                        </span>
-                                                    </div>
-                                                </div>
-
-                                                {/* Editable JSON (without _id) */}
-                                                <div className="flex-1 bg-[var(--bg-dark-1)] rounded-lg border border-[var(--border-color)] overflow-hidden">
-                                                    <Editor
-                                                        height="100%"
-                                                        defaultLanguage="json"
-                                                        value={JSON.stringify(
-                                                            Object.fromEntries(
-                                                                Object.entries(selectedDoc || {}).filter(([key]) => key !== "_id")
-                                                            ),
-                                                            null,
-                                                            2
-                                                        )}
-                                                        onChange={handleEditorChange}
-                                                        onMount={handleEditorDidMount}
-                                                        theme="datacube-dark"
-                                                        options={{
-                                                            minimap: { enabled: false },
-                                                            scrollBeyondLastLine: false,
-                                                            fontSize: 14,
-                                                            wordWrap: "on",
-                                                            automaticLayout: true,
-                                                            folding: true,
-                                                            renderValidationDecorations: "on",
-                                                            readOnly: false,
-                                                        }}
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Current */}
-                                        {showDiff && (
-                                        <div className={showDiff ? "w-1/2 p-4" : "w-full p-4"}>
-                                            <h3 className="text-sm font-semibold text-[var(--text-muted)] mb-2">
-                                                Current
-                                            </h3>
-                                            <Editor
-                                                height="100%"
-                                                defaultLanguage="json"
-                                                value={JSON.stringify(
-                                                    Object.fromEntries(
-                                                        Object.entries(selectedDoc || {}).filter(([key]) => key !== "_id")
-                                                    ),
-                                                    null,
-                                                    2
-                                                )}
-                                                // onChange={handleEditorChange}
-                                                onMount={handleEditorDidMount}
-                                                theme="datacube-dark"
-                                                options={{
-                                                    minimap: { enabled: false },
-                                                    scrollBeyondLastLine: false,
-                                                    fontSize: 14,
-                                                    wordWrap: "on",
-                                                    automaticLayout: true,
-                                                    folding: true,
-                                                    renderValidationDecorations: "on",
-                                                }}
-                                            />
-                                        </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                        <div className="p-6 border-t border-[var(--border-color)] flex justify-end gap-4">
-                            <button
-                                onClick={() => setIsEditing(false)}
-                                className="px-6 py-3 rounded-lg bg-[var(--bg-dark-3)] hover:bg-[var(--bg-dark-3)]/80 transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={() => handleSave()}
-                                disabled={updateMutation.isPending}
-                                className="px-8 py-3 rounded-lg bg-[var(--green-dark)] hover:bg-[var(--green-dark)]/90 text-white font-semibold transition-all flex items-center gap-2"
-                            >
-                                {updateMutation.isPending ? (
-                                    <>Saving...</>
-                                ) : (
-                                    <>Save Document</>
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
+  const openEdit = (doc: Document) => {
+    setSelectedId(doc._id);
+    const withoutId = Object.fromEntries(
+      Object.entries(doc).filter(([k]) => k !== "_id")
     );
+    const json = JSON.stringify(withoutId, null, 2);
+    originalJson.current = json;
+    setEditorContent(json);
+    setIsValidJson(true);
+    setShowDiff(false);
+    setIsEditing(true);
+  };
+
+  const handleEditorChange = (value: string | undefined) => {
+    const v = value ?? "";
+    setEditorContent(v);
+    try {
+      JSON.parse(v);
+      setIsValidJson(true);
+    } catch {
+      setIsValidJson(false);
+    }
+  };
+
+  const handleSave = () => {
+    if (!isValidJson || !selectedDoc) return;
+    try {
+      const body = JSON.parse(editorContent);
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        toast.error("Root must be a JSON object");
+        return;
+      }
+      updateMutation.mutate({ _id: selectedDoc._id, body });
+    } catch {
+      toast.error("Invalid JSON");
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex h-[50vh] items-center justify-center">
+        <Loader2 className="h-10 w-10 animate-spin text-[var(--accent-bright)]" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="py-20 text-center">
+        <AlertCircle className="mx-auto mb-4 h-14 w-14 text-[var(--danger)]" />
+        <p className="text-lg text-[var(--text-muted)]">Could not load documents</p>
+      </div>
+    );
+  }
+
+  const displayDoc =
+    selectedDoc ?? (docs[0] || null);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <Link
+            to={`/dashboard/database/${dbId}`}
+            className="mb-3 inline-flex items-center gap-2 text-sm font-medium text-[var(--accent-bright)] transition-colors hover:underline"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to database
+          </Link>
+          <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)]">
+            <span className="font-[var(--font-mono)] text-[var(--accent-bright)]">
+              {collName}
+            </span>
+          </h1>
+          <p className="mt-1 text-[var(--text-muted)]">
+            {pagination?.total_items ?? 0} documents
+            {isFetching && (
+              <RefreshCw className="ml-2 inline h-3.5 w-3.5 animate-spin" />
+            )}
+          </p>
+        </div>
+      </div>
+
+      {docs.length === 0 ? (
+        <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--border)] bg-[var(--surface-1)] py-20 text-center">
+          <FileJson className="mx-auto mb-4 h-16 w-16 text-[var(--text-subtle)] opacity-40" />
+          <p className="text-[var(--text-muted)]">No documents in this collection</p>
+        </div>
+      ) : (
+        <div className="grid min-h-[560px] gap-4 lg:grid-cols-[minmax(260px,320px)_1fr]">
+          {/* Document list — Compass-style */}
+          <aside className="flex flex-col rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-1)] shadow-[var(--shadow-sm)]">
+            <div className="border-b border-[var(--border-subtle)] px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-subtle)]">
+                Documents
+              </p>
+            </div>
+            <ul className="flex-1 overflow-y-auto p-2">
+              {docs.map((doc) => {
+                const active = doc._id === (selectedId || displayDoc?._id);
+                return (
+                  <li key={doc._id}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(doc._id)}
+                      className={cn(
+                        "mb-1 flex w-full flex-col rounded-[var(--radius-md)] border px-3 py-2.5 text-left transition-all duration-150",
+                        active
+                          ? "border-[var(--accent)]/40 bg-[var(--accent-soft)]"
+                          : "border-transparent hover:bg-[var(--surface-2)]/60"
+                      )}
+                    >
+                      <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-subtle)]">
+                        _id
+                      </span>
+                      <span className="truncate font-[var(--font-mono)] text-xs text-[var(--text-primary)]">
+                        {doc._id}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            {pagination && pagination.total_pages > 1 && (
+              <div className="flex items-center justify-between border-t border-[var(--border-subtle)] px-3 py-2">
+                <span className="text-xs text-[var(--text-muted)]">
+                  Page {page} / {pagination.total_pages}
+                </span>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="rounded-md p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-2)] disabled:opacity-40"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPage((p) =>
+                        Math.min(pagination.total_pages, p + 1)
+                      )
+                    }
+                    disabled={page === pagination.total_pages}
+                    className="rounded-md p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-2)] disabled:opacity-40"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </aside>
+
+          {/* Detail panel */}
+          {displayDoc && (
+            <section className="flex flex-col rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-1)] shadow-[var(--shadow-sm)] overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-subtle)] bg-[var(--surface-0)]/50 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-semibold uppercase text-[var(--text-subtle)]">
+                    BSON preview
+                  </p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <code className="truncate font-[var(--font-mono)] text-sm text-[var(--accent-bright)]">
+                      {displayDoc._id}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(displayDoc._id)}
+                      className="shrink-0 rounded p-1 text-[var(--text-muted)] hover:text-[var(--accent-bright)]"
+                      aria-label="Copy id"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openEdit(displayDoc)}
+                    className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-white shadow-sm transition-transform hover:brightness-110 active:scale-[0.98]"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (
+                        confirm(
+                          "Delete this document? This may be a soft-delete depending on server settings."
+                        )
+                      ) {
+                        deleteMutation.mutate(displayDoc._id);
+                      }
+                    }}
+                    className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--danger-soft)] px-3 py-2 text-sm font-medium text-[var(--danger)] transition-colors hover:bg-[var(--danger-soft)]"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-auto p-4">
+                <JsonTreeView
+                  data={
+                    Object.fromEntries(
+                      Object.entries(displayDoc).filter(([k]) => k !== "_id")
+                    )
+                  }
+                  maxDepth={10}
+                  className="max-h-none min-h-[320px]"
+                />
+              </div>
+            </section>
+          )}
+        </div>
+      )}
+
+      <AnimatePresence>
+        {isEditing && selectedDoc && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-1)] shadow-[var(--shadow-md)]"
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 380, damping: 28 }}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-subtle)] px-4 py-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+                    Edit document
+                  </h2>
+                  <p className="font-[var(--font-mono)] text-xs text-[var(--text-muted)]">
+                    {selectedDoc._id}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {isValidJson ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--chart-1)]">
+                      <CheckCircle className="h-4 w-4" /> Valid JSON
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--danger)]">
+                      <XCircle className="h-4 w-4" /> Invalid
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowDiff((d) => !d)}
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium transition-colors",
+                      showDiff
+                        ? "bg-[var(--accent-soft)] text-[var(--accent-bright)]"
+                        : "bg-[var(--surface-2)] text-[var(--text-primary)]"
+                    )}
+                  >
+                    <GitCompare className="h-4 w-4" />
+                    Diff
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={!isValidJson || updateMutation.isPending}
+                    className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {updateMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(false)}
+                    className="rounded-[var(--radius-md)] px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-2)]"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid min-h-[420px] flex-1 grid-cols-1 overflow-hidden md:grid-cols-2">
+                <div className={cn("border-[var(--border-subtle)] md:border-r", showDiff ? "block" : "md:col-span-2")}>
+                  <p className="bg-[var(--surface-0)] px-3 py-2 text-[11px] font-semibold uppercase text-[var(--text-subtle)]">
+                    {showDiff ? "New ($set)" : "Editor"}
+                  </p>
+                  <div className="h-[min(50vh,420px)]">
+                    <Editor
+                      height="100%"
+                      defaultLanguage="json"
+                      value={editorContent}
+                      onChange={handleEditorChange}
+                      onMount={handleEditorDidMount}
+                      theme="vs-dark"
+                      options={{
+                        minimap: { enabled: false },
+                        scrollBeyondLastLine: false,
+                        fontSize: 13,
+                        fontFamily: "var(--font-mono)",
+                        wordWrap: "on",
+                        automaticLayout: true,
+                        folding: true,
+                        lineNumbers: "on",
+                        tabSize: 2,
+                      }}
+                    />
+                  </div>
+                </div>
+                {showDiff && (
+                  <div>
+                    <p className="bg-[var(--surface-0)] px-3 py-2 text-[11px] font-semibold uppercase text-[var(--text-subtle)]">
+                      Original
+                    </p>
+                    <div className="h-[min(50vh,420px)]">
+                      <Editor
+                        height="100%"
+                        defaultLanguage="json"
+                        value={originalJson.current}
+                        onMount={(_e, m) => applyMonacoTheme(m)}
+                        theme="vs-dark"
+                        options={{
+                          readOnly: true,
+                          minimap: { enabled: false },
+                          fontSize: 13,
+                          fontFamily: "var(--font-mono)",
+                          wordWrap: "on",
+                          automaticLayout: true,
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 };
 
 export default CollectionDocuments;

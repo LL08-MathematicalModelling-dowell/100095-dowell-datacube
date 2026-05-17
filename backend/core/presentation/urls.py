@@ -42,6 +42,8 @@ urlpatterns = [
     re_path(r"^auth/oauth/github/?$", GitHubOAuthPKCEView.as_view(), name="oauth_github"),
     re_path(r"^login/?$", LoginView.as_view(), name="login"),
     re_path(r"^auth/token/refresh/?$", TokenRefreshView.as_view(), name="token_refresh"),
+    # Must be before verify-email/<token>/ — otherwise "resend" is captured as the token.
+    re_path(r"^verify-email/resend/?$", ResendVerificationEmailView.as_view(), name="resend_verification"),
     re_path(r"^verify-email/(?P<token>[^/]+)/?$", EmailVerificationView.as_view(), name="email-verify"),
     re_path(r"^profile/?$", UserProfileView.as_view(), name="user_profile"),
     re_path(r"^profile/avatar/?$", UserAvatarView.as_view(), name="user_avatar"),
@@ -53,7 +55,6 @@ urlpatterns = [
     re_path(r"^api/v1/keys/(?P<key_id>[^/]+)/?$", APIKeyAPIView.as_view(), name="api_key_delete"),
     re_path(r"^password-reset/request/?$", PasswordResetRequestView.as_view(), name="password_reset_request"),
     re_path(r"^password-reset/confirm/?$", PasswordResetConfirmView.as_view(), name="password_reset_confirm"),
-    re_path(r"^verify-email/resend/?$", ResendVerificationEmailView.as_view(), name="resend_verification"),
     re_path(r"^admin/users/role/?$", AdminSetUserRoleView.as_view(), name="admin_set_user_role"),
 ]
 

@@ -58,7 +58,8 @@ venv/
 .idea/
 .vscode/
 .env
-.env*
+.env.*
+!.env.example
 
 api_test.http
 api_test.http*

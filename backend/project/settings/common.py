@@ -169,9 +169,20 @@ SIMPLE_JWT = {
     "CHECK_USER_IS_ACTIVE": False,
 }
 
+# --- OTP (hashed at rest with OTP_PEPPER) ---
+OTP_LENGTH = int(os.getenv("OTP_LENGTH", "6"))
+OTP_EXPIRES_MINUTES = int(os.getenv("OTP_EXPIRES_MINUTES", "10"))
+OTP_MAX_ATTEMPTS = int(os.getenv("OTP_MAX_ATTEMPTS", "5"))
+OTP_PEPPER = os.getenv(
+    "OTP_PEPPER",
+    "dev-only-otp-pepper-change-me-please-change-me-please",
+)
+
 # --- Email (Resend) & OAuth (server-side PKCE code exchange) ---
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+RESEND_FROM_NAME = os.getenv("RESEND_FROM_NAME", "DataCube")
+ALLOW_STDOUT_EMAIL = os.getenv("ALLOW_STDOUT_EMAIL", "").lower() in ("1", "true", "yes")
 GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
 GOOGLE_OAUTH_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "")
 GITHUB_OAUTH_CLIENT_ID = os.getenv("GITHUB_OAUTH_CLIENT_ID", "")
