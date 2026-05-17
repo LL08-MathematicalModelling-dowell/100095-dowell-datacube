@@ -1,37 +1,62 @@
-"""Email OTP: generate, hash, verify (bcrypt)."""
+"""Email OTP: generate, hash (pepper + SHA-256), verify."""
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-import bcrypt
 from bson import ObjectId
-from bson.binary import Binary
+from django.conf import settings
 
 from core.infrastructure.db import mongo_conn
 
 OtpPurpose = Literal["register", "login_email", "reset_password"]
 
-_OTP_TTL_MINUTES = 15
-_MAX_ATTEMPTS = 5
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
-def _hash_code(code: str) -> bytes:
-    return bcrypt.hashpw(code.strip().encode("utf-8"), bcrypt.gensalt())
+def _as_utc_aware(value: datetime) -> datetime:
+    """MongoDB often returns naive datetimes; treat them as UTC for comparisons."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
-def _codes_match(plain: str, stored: bytes) -> bool:
-    try:
-        return bcrypt.checkpw(plain.strip().encode("utf-8"), stored)
-    except Exception:
-        return False
+def _otp_length() -> int:
+    return int(getattr(settings, "OTP_LENGTH", 6))
 
 
-def generate_numeric_code(length: int = 6) -> str:
-    n = secrets.randbelow(10**length)
-    return f"{n:0{length}d}"
+def _otp_expires_minutes() -> int:
+    return int(getattr(settings, "OTP_EXPIRES_MINUTES", 10))
+
+
+def _otp_max_attempts() -> int:
+    return int(getattr(settings, "OTP_MAX_ATTEMPTS", 5))
+
+
+def _otp_pepper() -> bytes:
+    pepper = getattr(settings, "OTP_PEPPER", "") or ""
+    return str(pepper).encode("utf-8")
+
+
+def _hash_code(code: str) -> str:
+    """Salt the code with the server-side pepper and hash with SHA-256."""
+    return hashlib.sha256(_otp_pepper() + code.strip().encode("utf-8")).hexdigest()
+
+
+def _codes_match(code: str, code_hash: str) -> bool:
+    return hmac.compare_digest(_hash_code(code), code_hash)
+
+
+def generate_numeric_code(length: int | None = None) -> str:
+    n = length if length is not None else _otp_length()
+    upper = 10**n
+    return f"{secrets.randbelow(upper):0{n}d}"
 
 
 def save_otp_challenge(
@@ -46,10 +71,10 @@ def save_otp_challenge(
         {
             "$set": {
                 "otp_hash": _hash_code(code),
-                "otp_expires_at": datetime.now(timezone.utc) + timedelta(minutes=_OTP_TTL_MINUTES),
+                "otp_expires_at": _utc_now() + timedelta(minutes=_otp_expires_minutes()),
                 "otp_purpose": purpose,
                 "otp_attempts": 0,
-                "updated_at": datetime.now(timezone.utc),
+                "updated_at": _utc_now(),
             }
         },
     )
@@ -62,30 +87,33 @@ def verify_otp_challenge(*, user_id: ObjectId, purpose: OtpPurpose, code: str) -
         return False
     if doc.get("otp_purpose") != purpose:
         return False
+
     expires = doc.get("otp_expires_at")
-    if not expires or expires < datetime.now(timezone.utc):
-        users.update_one(
-            {"_id": user_id},
-            {"$unset": {"otp_hash": "", "otp_expires_at": "", "otp_purpose": "", "otp_attempts": ""}},
-        )
+    if not expires or _as_utc_aware(expires) < _utc_now():
+        clear_otp(user_id)
         return False
+
     attempts = int(doc.get("otp_attempts") or 0)
-    if attempts >= _MAX_ATTEMPTS:
+    max_attempts = _otp_max_attempts()
+    if attempts >= max_attempts:
+        clear_otp(user_id)
         return False
+
     otp_hash = doc.get("otp_hash")
     if not otp_hash:
         return False
-    if isinstance(otp_hash, Binary):
-        otp_hash = bytes(otp_hash)
-    elif isinstance(otp_hash, str):
-        otp_hash = otp_hash.encode("utf-8")
+    if not isinstance(otp_hash, str):
+        otp_hash = str(otp_hash)
+
     if not _codes_match(code, otp_hash):
-        users.update_one({"_id": user_id}, {"$inc": {"otp_attempts": 1}})
+        new_attempts = attempts + 1
+        if new_attempts >= max_attempts:
+            clear_otp(user_id)
+        else:
+            users.update_one({"_id": user_id}, {"$inc": {"otp_attempts": 1}})
         return False
-    users.update_one(
-        {"_id": user_id},
-        {"$unset": {"otp_hash": "", "otp_expires_at": "", "otp_purpose": "", "otp_attempts": ""}},
-    )
+
+    clear_otp(user_id)
     return True
 
 

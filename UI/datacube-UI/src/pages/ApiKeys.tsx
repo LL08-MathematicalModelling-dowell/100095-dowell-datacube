@@ -1,7 +1,11 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import api from '../services/api';
-import useAuthStore from '../store/authStore';
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import toast from "react-hot-toast";
+import { Card, PageHeader } from "../components/ui/Card.tsx";
+import { cn } from "../lib/cn.ts";
+import { btnPrimaryCn, inputCn } from "../lib/uiClasses.ts";
+import api from "../services/api";
+import useAuthStore from "../store/authStore";
 
 interface ApiKey {
   _id: string;
@@ -22,27 +26,58 @@ interface NewKeyResponse {
 const CopyButton: React.FC<{ text: string }> = ({ text }) => {
   const [isCopied, setIsCopied] = useState(false);
   const handleCopy = () => {
-    navigator.clipboard.writeText(text)
+    navigator.clipboard
+      .writeText(text)
       .then(() => {
         setIsCopied(true);
+        toast.success("Copied to clipboard");
         setTimeout(() => setIsCopied(false), 2000);
       })
-      .catch((err) => {
-        console.error('Failed to copy text: ', err);
-        alert('Failed to copy key.');
+      .catch(() => {
+        toast.error("Could not copy");
       });
   };
 
   return (
     <button
+      type="button"
       onClick={handleCopy}
-      className="ml-3 p-1.5 bg-slate-700/80 rounded-md text-slate-400 hover:text-white hover:bg-slate-600/80 transition-all duration-200 flex-shrink-0"
+      className={cn(
+        "ml-3 shrink-0 rounded-[var(--radius-sm)] p-1.5 transition-colors",
+        "bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-primary)]"
+      )}
       aria-label="Copy to clipboard"
     >
       {isCopied ? (
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-400"><path d="M20 6 9 17l-5-5" /></svg>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="text-[var(--accent-bright)]"
+        >
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
       ) : (
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+          <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+        </svg>
       )}
     </button>
   );
@@ -52,50 +87,46 @@ const ApiKeys = () => {
   const { accessToken } = useAuthStore();
   const queryClient = useQueryClient();
   const [newKey, setNewKey] = useState<NewKeyResponse | null>(null);
-  const [keyName, setKeyName] = useState('');
+  const [keyName, setKeyName] = useState("");
 
-  // Fetch API keys
   const { data: keys, isLoading, error } = useQuery<ApiKey[]>({
-    queryKey: ['apiKeys'],
+    queryKey: ["apiKeys"],
     queryFn: async () => {
-      const response = await api.get('/core/api/v1/keys/');
+      const response = await api.get("/core/api/v1/keys/");
       return response;
     },
-    enabled: !!accessToken, // Only fetch if authenticated
+    enabled: !!accessToken,
   });
 
-  // Generate new API key
   const generateKeyMutation = useMutation({
     mutationFn: async () => {
-      const response = await api.post(
-        '/core/api/v1/keys/',
-        { name: keyName || `Key_${new Date().toISOString()}` }
-      );
+      const response = await api.post("/core/api/v1/keys/", {
+        name: keyName || `Key_${new Date().toISOString()}`,
+      });
       return response;
     },
     onSuccess: (data: NewKeyResponse) => {
       setNewKey(data);
-      queryClient.invalidateQueries({ queryKey: ['apiKeys'] });
-      setKeyName('');
+      queryClient.invalidateQueries({ queryKey: ["apiKeys"] });
+      setKeyName("");
+      toast.success("API key created");
     },
-    onError: (err) => {
-      console.error('Failed to generate key:', err);
-      alert('Failed to generate key. Please try again.');
+    onError: () => {
+      toast.error("Failed to generate key");
     },
   });
 
-  // Delete API key
   const deleteKeyMutation = useMutation({
     mutationFn: async (id: string) => {
       const response = await api.delete(`/core/api/v1/keys/${id}`);
       return response;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['apiKeys'] });
+      queryClient.invalidateQueries({ queryKey: ["apiKeys"] });
+      toast.success("API key removed");
     },
-    onError: (err) => {
-      console.error('Failed to delete key:', err);
-      alert('Failed to delete key. Please try again.');
+    onError: () => {
+      toast.error("Failed to delete key");
     },
   });
 
@@ -104,115 +135,156 @@ const ApiKeys = () => {
   };
 
   const handleDeleteKey = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this API key? This action cannot be undone.')) {
+    if (
+      window.confirm(
+        "Delete this API key? Apps using it will lose access immediately."
+      )
+    ) {
       deleteKeyMutation.mutate(id);
     }
   };
 
   return (
-    <div className="bg-slate-900 text-slate-300 font-sans min-h-screen p-6 sm:p-10">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-bold text-white tracking-tight mb-4">API Keys</h1>
-        <p className="mt-4 text-lg text-slate-400 mb-8">
-          Manage your API keys to securely authenticate your programmatic requests to the DataCube API.
-        </p>
+    <div className="min-h-0 font-[var(--font-sans)] text-[var(--text-primary)]">
+      <PageHeader
+        title="API keys"
+        description="Create and revoke keys for programmatic access to the DataCube API."
+      />
 
-        {/* Generate New Key Section */}
-        <div className="p-6 bg-slate-800/50 rounded-xl border border-slate-700/80 mb-8">
-          <h2 className="text-2xl font-semibold text-white tracking-tight mb-4">Generate New API Key</h2>
-          <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
-            <input
-              type="text"
-              value={keyName}
-              onChange={(e) => setKeyName(e.target.value)}
-              placeholder="Key Name (e.g., 'My_App_Key')"
-              className="flex-grow p-3 bg-slate-700/50 border border-slate-600 rounded-md text-slate-200 placeholder-slate-400 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors"
-            />
-            <button
-              onClick={handleGenerateKey}
-              disabled={generateKeyMutation.isPending}
-              className="bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-3 px-6 rounded-md transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+      <Card
+        title="Generate key"
+        subtitle="Choose a label you will recognize in logs and dashboards."
+        className="mb-8"
+      >
+        <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center">
+          <input
+            type="text"
+            value={keyName}
+            onChange={(e) => setKeyName(e.target.value)}
+            placeholder="e.g. production-etl"
+            className={cn(inputCn(), "flex-1")}
+          />
+          <button
+            type="button"
+            onClick={handleGenerateKey}
+            disabled={generateKeyMutation.isPending}
+            className={btnPrimaryCn("w-full shrink-0 sm:w-auto")}
+          >
+            {generateKeyMutation.isPending ? "Generating…" : "Generate key"}
+          </button>
+        </div>
+        {generateKeyMutation.isError && (
+          <p className="mt-3 text-sm text-[var(--danger)]">
+            Something went wrong. Try again.
+          </p>
+        )}
+      </Card>
+
+      <Card title="Your keys" subtitle="Full secrets are only shown once after creation.">
+        {isLoading && (
+          <p className="text-[var(--text-muted)]">Loading…</p>
+        )}
+        {error && (
+          <p className="text-[var(--danger)]">
+            Could not load keys. Refresh and try again.
+          </p>
+        )}
+
+        {!isLoading && !error && keys && keys.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full table-auto text-left text-sm">
+              <thead>
+                <tr className="border-b border-[var(--border-subtle)] bg-[var(--surface-0)]">
+                  <th className="p-3 font-semibold text-[var(--text-primary)]">
+                    Name
+                  </th>
+                  <th className="p-3 font-semibold text-[var(--text-primary)]">
+                    Preview
+                  </th>
+                  <th className="p-3 font-semibold text-[var(--text-primary)]">
+                    Created
+                  </th>
+                  <th className="p-3 font-semibold text-[var(--text-primary)]">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {keys.map((key) => (
+                  <tr
+                    key={key._id}
+                    className="border-b border-[var(--border-subtle)] transition-colors hover:bg-[var(--surface-0)]/80"
+                  >
+                    <td className="p-3 text-[var(--text-primary)]">{key.name}</td>
+                    <td className="p-3">
+                      <code className="font-mono text-xs break-all text-[var(--text-muted)] sm:text-sm">
+                        {key.key_display}
+                      </code>
+                    </td>
+                    <td className="p-3 text-[var(--text-muted)]">
+                      {new Date(key.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="p-3">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteKey(key._id)}
+                        disabled={deleteKeyMutation.isPending}
+                        className="font-medium text-[var(--danger)] transition-colors hover:underline disabled:opacity-50"
+                      >
+                        {deleteKeyMutation.isPending ? "…" : "Delete"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
+        {!isLoading && !error && (!keys || keys.length === 0) ? (
+          <p className="text-[var(--text-muted)]">
+            No keys yet. Generate one to call the API from scripts or services.
+          </p>
+        ) : null}
+      </Card>
+
+      {newKey && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="new-key-title"
+        >
+          <div
+            className={cn(
+              "w-full max-w-lg rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-1)] p-8 text-center shadow-[var(--shadow-md)]"
+            )}
+          >
+            <h2
+              id="new-key-title"
+              className="mb-4 text-2xl font-bold text-[var(--text-primary)]"
             >
-              {generateKeyMutation.isPending ? 'Generating...' : 'Generate New Key'}
+              Save this secret
+            </h2>
+            <p className="mb-6 leading-relaxed text-[var(--text-muted)]">
+              Copy your key now. For security, it will not be shown again.
+            </p>
+            <div className="mb-6 flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4">
+              <code className="grow break-all font-mono text-sm text-[var(--text-primary)]">
+                {newKey.key}
+              </code>
+              <CopyButton text={newKey.key} />
+            </div>
+            <button
+              type="button"
+              onClick={() => setNewKey(null)}
+              className={btnPrimaryCn("mx-auto w-auto px-8")}
+            >
+              Done
             </button>
           </div>
-          {generateKeyMutation.isError && (
-            <p className="text-red-400 text-sm mt-3">Error generating key. Please try again.</p>
-          )}
         </div>
-
-        {/* API Keys Table */}
-        <div className="bg-slate-800/50 rounded-xl border border-slate-700/80 p-6">
-          <h2 className="text-2xl font-semibold text-white tracking-tight mb-4">Your Existing API Keys</h2>
-          {isLoading && <p className="text-slate-400">Loading API keys...</p>}
-          {error && <p className="text-red-400">Error loading API keys. Please try again later.</p>}
-
-          {!isLoading && !error && keys && keys.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full table-auto">
-                <thead>
-                  <tr className="bg-slate-700/60">
-                    <th className="p-3 text-left text-sm font-semibold text-slate-200 rounded-tl-lg">Name</th>
-                    <th className="p-3 text-left text-sm font-semibold text-slate-200">Key</th>
-                    <th className="p-3 text-left text-sm font-semibold text-slate-200">Created On</th>
-                    <th className="p-3 text-left text-sm font-semibold text-slate-200 rounded-tr-lg">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {keys.map((key) => (
-                    <tr key={key._id} className="border-b border-slate-700/60 hover:bg-slate-700/40 transition-colors">
-                      <td className="p-3 text-slate-300">{key.name}</td>
-                      <td className="p-3">
-                        <div className="flex items-center">
-                          <code className="text-slate-200 text-sm sm:text-base font-mono overflow-x-auto break-all">
-                            {key.key_display}
-                          </code>
-                        </div>
-                      </td>
-                      <td className="p-3 text-slate-400">{new Date(key.created_at).toLocaleDateString()}</td>
-                      <td className="p-3">
-                        <button
-                          onClick={() => handleDeleteKey(key._id)}
-                          disabled={deleteKeyMutation.isPending}
-                          className="text-red-500 hover:text-red-400 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {deleteKeyMutation.isPending ? 'Deleting...' : 'Delete'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : !isLoading && !error && (
-            <p className="text-slate-400">No API keys found. Generate one to get started!</p>
-          )}
-        </div>
-
-        {/* New Key Modal */}
-        {newKey && (
-          <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800/90 p-8 rounded-lg shadow-2xl border border-cyan-700 max-w-lg w-full text-center">
-              <h2 className="text-3xl font-bold text-white mb-4">API Key Generated!</h2>
-              <p className="mb-6 text-slate-300 leading-relaxed">
-                Please copy your new API key immediately. For security reasons, this is the **only time** it will be displayed. Do not lose it!
-              </p>
-              <div className="bg-slate-900/70 p-4 rounded-lg flex items-center justify-between gap-3 mb-6 border border-cyan-800">
-                <code className="flex-grow text-slate-200 text-sm sm:text-base font-mono overflow-x-auto break-all">
-                  {newKey.key}
-                </code>
-                <CopyButton text={newKey.key} />
-              </div>
-              <button
-                onClick={() => setNewKey(null)}
-                className="bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-3 px-8 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              >
-                I have copied my key
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 };

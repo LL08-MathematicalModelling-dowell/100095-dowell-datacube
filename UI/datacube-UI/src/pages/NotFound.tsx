@@ -1,144 +1,210 @@
-import React, { useEffect, useState } from 'react';
-import useAuthStore from '../store/authStore';
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import useAuthStore from "../store/authStore";
+import { cn } from "../lib/cn.ts";
 
-// Main NotFound Component
 const NotFound = () => {
-  // --- STATE ---
-  // State to control the fade-in and slide-up animation on load
   const [isMounted, setIsMounted] = useState(false);
   const { isAuthenticated } = useAuthStore();
 
-  // --- EFFECTS ---
-  // On component mount, trigger the animation and log a fun message to the console
   useEffect(() => {
-    // Set a timeout to allow the component to render before starting the animation
     const timer = setTimeout(() => setIsMounted(true), 100);
-
-    // Easter egg for curious developers
-    console.log(
-      "🛸 Houston, we have a console log! It seems you've discovered a hidden message in this 404 nebula. No secret commands here, but feel free to explore the DOM!"
-    );
-
-    // Cleanup the timer on unmount
     return () => clearTimeout(timer);
   }, []);
 
-  // --- HANDLERS ---
-  // Navigate to the previous page in the browser's history
-  const handleGoBack = () => {
-    window.history.back();
-  };
-
-  // A small helper component for the navigation links to avoid repetition
-  const IconLink = ({ href, icon, title, subtitle }: { href: string; icon: React.ReactNode; title: string; subtitle: string; }) => (
-    <a
-      href={href}
-      className="group flex items-center p-4 rounded-lg bg-slate-800/50 hover:bg-slate-700/60 border border-slate-700/80 transition-all duration-300 transform hover:-translate-y-1"
-      aria-label={`Maps to ${title}`}
+  const IconLink = ({
+    to,
+    icon,
+    title,
+    subtitle,
+  }: {
+    to: string;
+    icon: React.ReactNode;
+    title: string;
+    subtitle: string;
+  }) => (
+    <Link
+      to={to}
+      className={cn(
+        "group flex items-center rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-1)] p-4 transition-all duration-300",
+        "hover:-translate-y-0.5 hover:border-[var(--accent)]/35 hover:shadow-[var(--shadow-sm)]"
+      )}
     >
-      <div className="flex-shrink-0 w-12 h-12 bg-slate-700/50 text-cyan-400 rounded-md flex items-center justify-center mr-4 group-hover:bg-cyan-400 group-hover:text-slate-900 transition-colors duration-300">
+      <div
+        className={cn(
+          "mr-4 flex h-12 w-12 shrink-0 items-center justify-center rounded-[var(--radius-sm)]",
+          "bg-[var(--surface-0)] text-[var(--accent-bright)] transition-colors",
+          "group-hover:bg-[var(--accent)] group-hover:text-white"
+        )}
+      >
         {icon}
       </div>
       <div>
-        <p className="font-semibold text-slate-200">{title}</p>
-        <p className="text-sm text-slate-400">{subtitle}</p>
+        <p className="font-semibold text-[var(--text-primary)]">{title}</p>
+        <p className="text-sm text-[var(--text-muted)]">{subtitle}</p>
       </div>
-    </a>
+    </Link>
   );
 
-  // --- RENDER ---
   return (
     <>
-      <main className="relative flex items-center justify-center min-h-screen w-full bg-slate-900 text-white font-sans overflow-hidden">
-        {/* Background decorative elements for a "galaxy" feel */}
-        <div className="absolute top-0 left-0 w-72 h-72 bg-cyan-500/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
+      <main className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-[var(--surface-0)] font-[var(--font-sans)] text-[var(--text-primary)]">
+        <div className="pointer-events-none absolute left-0 top-0 h-72 w-72 animate-pulse rounded-full bg-[var(--accent-soft)] blur-3xl" />
+        <div
+          className="pointer-events-none absolute bottom-0 right-0 h-96 w-96 rounded-full bg-[var(--info)]/10 blur-3xl"
+          style={{ animation: "pulse 6s cubic-bezier(0.4, 0, 0.6, 1) infinite" }}
+        />
 
         <div
-          className={`
-            relative z-10 max-w-2xl w-full mx-4 p-8 sm:p-10 bg-slate-800/50 backdrop-blur-lg 
-            rounded-2xl shadow-2xl border border-slate-700/80 transition-all duration-700 ease-out
-            ${isMounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}
-          `}
+          className={cn(
+            "relative z-10 mx-4 w-full max-w-2xl rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)]/95 p-8 shadow-[var(--shadow-md)] backdrop-blur-lg transition-all duration-700 ease-out sm:p-10",
+            isMounted ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"
+          )}
         >
-          {/* SVG Illustration: A lost satellite */}
-          <div className="flex justify-center mb-6">
+          <div className="mb-6 flex justify-center">
             <svg
-              className="w-24 h-24 text-cyan-400"
-              style={{ animation: 'float 4s ease-in-out infinite' }}
-              viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"
+              className="h-24 w-24 text-[var(--accent-bright)]"
+              style={{ animation: "float 4s ease-in-out infinite" }}
+              viewBox="0 0 64 64"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden
             >
-              <path d="M48.752 34.331C53.31 35.533 56 36.69 56 38.002C56 39.313 53.31 40.47 48.752 41.671L37.333 44.5L32 56L26.667 44.5L15.248 41.671C10.69 40.47 8 39.313 8 38.002C8 36.69 10.69 35.533 15.248 34.331L26.667 31.5L32 20L37.333 31.5L48.752 34.331Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M32 8V20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M22.05 22.05L26.667 26.667" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M8 32H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path
+                d="M48.752 34.331C53.31 35.533 56 36.69 56 38.002C56 39.313 53.31 40.47 48.752 41.671L37.333 44.5L32 56L26.667 44.5L15.248 41.671C10.69 40.47 8 39.313 8 38.002C8 36.69 10.69 35.533 15.248 34.331L26.667 31.5L32 20L37.333 31.5L48.752 34.331Z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M32 8V20"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M22.05 22.05L26.667 26.667"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M8 32H20"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
               <circle cx="48" cy="16" r="4" fill="currentColor" fillOpacity="0.3" />
               <circle cx="12" cy="52" r="2" fill="currentColor" fillOpacity="0.3" />
             </svg>
           </div>
 
-          <h1 className="text-4xl sm:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-500 mb-4 text-center tracking-tight">
-            404 - Lost in Space
+          <h1 className="mb-4 bg-gradient-to-r from-[var(--accent-bright)] to-[var(--info)] bg-clip-text text-center text-4xl font-bold tracking-tight text-transparent sm:text-5xl">
+            404 — Page not found
           </h1>
 
-          <p className="mb-8 text-base sm:text-lg text-slate-400 leading-relaxed text-center max-w-md mx-auto">
-            It seems you've drifted into an uncharted quadrant of the web. The page you're looking for might have been moved, deleted, or perhaps it never existed.
+          <p className="mx-auto mb-8 max-w-md text-center text-base leading-relaxed text-[var(--text-muted)] sm:text-lg">
+            This URL doesn&apos;t match any route. Check the address or use the
+            links below.
           </p>
 
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mb-10">
+          <div className="mb-10 flex flex-col items-stretch justify-center gap-4 sm:flex-row">
             <button
-              onClick={handleGoBack}
-              className="w-full sm:w-auto bg-cyan-500 text-slate-900 font-semibold px-6 py-3 rounded-lg hover:bg-cyan-400 transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-cyan-500/50"
-              aria-label="Go back to the previous page"
+              type="button"
+              onClick={() => window.history.back()}
+              className={cn(
+                "w-full rounded-[var(--radius-md)] bg-[var(--accent)] px-6 py-3 font-semibold text-white transition-transform hover:opacity-95 sm:w-auto",
+                "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-ring)]"
+              )}
             >
-              Go Back
+              Go back
             </button>
-            <a
-              href="/"
-              className="w-full sm:w-auto bg-slate-700/80 text-white font-semibold px-6 py-3 rounded-lg hover:bg-slate-600/80 transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-slate-500/50"
-              aria-label="Go to the homepage"
+            <Link
+              to="/"
+              className={cn(
+                "w-full rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-0)] px-6 py-3 text-center font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-2)] sm:w-auto"
+              )}
             >
-              Return Home
-            </a>
+              Home
+            </Link>
           </div>
 
-          {/* Suggested Links */}
           <div className="space-y-4">
             <IconLink
-              href="/api-docs"
-              title="API Documentation"
-              subtitle="Your mission control for data."
+              to="/api-docs"
+              title="API reference"
+              subtitle="Endpoint shapes and examples"
               icon={
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v11.494m-9-5.747h18" /></svg>
+                <svg
+                  className="h-6 w-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 6.253v11.494m-9-5.747h18"
+                  />
+                </svg>
               }
             />
-            {isAuthenticated && (
+            {isAuthenticated ? (
               <>
                 <IconLink
-                  href="/dashboard/api-keys"
-                  title="Manage API Keys"
-                  subtitle="Your access codes to the galaxy."
+                  to="/dashboard/api-keys"
+                  title="API keys"
+                  subtitle="Tokens for automation"
                   icon={
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7h3a5 5 0 015 5 5 5 0 01-5 5h-3m-6 0H6a5 5 0 01-5-5 5 5 0 015-5h3" /></svg>
+                    <svg
+                      className="h-6 w-6"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      aria-hidden
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 7h3a5 5 0 015 5 5 5 0 01-5 5h-3m-6 0H6a5 5 0 01-5-5 5 5 0 015-5h3"
+                      />
+                    </svg>
                   }
                 />
                 <IconLink
-                  href="/dashboard/billing"
-                  title="Billing & Subscriptions"
-                  subtitle="Refuel your journey here."
+                  to="/dashboard/billing"
+                  title="Billing"
+                  subtitle="Plan and invoices"
                   icon={
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                    <svg
+                      className="h-6 w-6"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      aria-hidden
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
+                      />
+                    </svg>
                   }
                 />
-              </>)
-            }
-
+              </>
+            ) : null}
           </div>
         </div>
       </main>
 
-      {/* CSS for custom animations not easily done with Tailwind */}
       <style>
         {`
           @keyframes float {
@@ -146,20 +212,13 @@ const NotFound = () => {
             50% { transform: translateY(-15px); }
             100% { transform: translateY(0px); }
           }
-          /* A subtle animation for the background gradients */
-          .animate-pulse {
-             animation: pulse 6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-           }
-           @keyframes pulse {
-             50% {
-               opacity: 0.5;
-             }
-           }
+          @keyframes pulse {
+            50% { opacity: 0.5; }
+          }
         `}
       </style>
     </>
   );
-}
-
+};
 
 export default NotFound;

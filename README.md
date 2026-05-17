@@ -34,6 +34,8 @@ Views inherit from `BaseAPIView` in `api.presentation.views.base`, which wires a
 
 DRF is configured to use `core.infrastructure.authentication.CustomJWTAuthentication` and `APIKeyAuthentication`.
 
+**API reference for frontend teams:** [backend/docs/FRONTEND_API_GUIDE.md](backend/docs/FRONTEND_API_GUIDE.md).
+
 ### `analytics`
 
 Task and middleware code for usage logging and dashboard APIs; URLs live in `analytics/urls.py` under the global prefix `analytics/api/v2/`.

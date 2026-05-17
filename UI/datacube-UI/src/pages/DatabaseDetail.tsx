@@ -7,6 +7,7 @@ import { Link, useParams } from 'react-router-dom';
 import { z } from 'zod';
 import api from '../services/api';
 import useAuthStore from '../store/authStore';
+import toast from 'react-hot-toast';
 
 
 // Zod schema for collection fields
@@ -71,11 +72,11 @@ const DatabaseDetail = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['database', dbId] }); // Invalidate specific database to refetch collections
-      alert('Collection deleted successfully!');
+      toast.success('Collection deleted');
     },
     onError: (err) => {
       console.error('Failed to delete collection:', err);
-      alert('Failed to delete collection. Please try again.');
+      toast.error('Could not delete collection');
     },
   });
 
@@ -117,11 +118,11 @@ const DatabaseDetail = () => {
       queryClient.invalidateQueries({ queryKey: ['database', dbId] });
       setIsCreateCollectionModalOpen(false);
       reset();
-      alert('Collections created successfully!');
+      toast.success('Collections added');
     },
     onError: (err) => {
       console.error('Failed to create collections:', err);
-      alert('Failed to create collections. Please check your input and try again.');
+      toast.error('Could not add collections');
     },
   });
 
@@ -147,10 +148,10 @@ const DatabaseDetail = () => {
             <div className="bg-slate-700/40 p-5 rounded-lg border border-slate-600/50 flex flex-col justify-between">
               <div>
                 <h3 className="text-sm font-medium text-slate-400 mb-2 flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 text-emerald-400"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 text-[var(--accent-bright)]"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>
                   Number of Collections
                 </h3>
-                <p className="text-3xl font-bold text-emerald-400">{data?.stats.collection_count ?? 0}</p>
+                <p className="text-3xl font-bold text-[var(--accent-bright)]">{data?.stats.collection_count ?? 0}</p>
               </div>
               <p className="text-xs text-slate-500 mt-3">Total collections in this database</p>
             </div>
@@ -397,7 +398,7 @@ const CollectionFields: React.FC<CollectionFieldsProps> = ({ collectionIndex, co
       <button
         type="button"
         onClick={() => appendField({ name: '', type: '' })}
-        className="mt-2 text-emerald-500 hover:text-emerald-400 font-medium transition-colors flex items-center gap-1"
+        className="mt-2 font-medium text-[var(--accent-bright)] transition-colors hover:opacity-90 flex items-center gap-1"
         aria-label="Add another field"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>

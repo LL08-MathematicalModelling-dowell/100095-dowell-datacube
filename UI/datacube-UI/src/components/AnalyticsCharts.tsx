@@ -1,318 +1,455 @@
-/* eslint-disable @typescript/no-explicit-any */
-import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useQuery } from "@tanstack/react-query";
+import { format, parseISO, isValid } from "date-fns";
+import { useMemo, useState } from "react";
 import {
-    Bar,
-    BarChart,
-    CartesianGrid,
-    Cell,
-    Legend,
-    Line,
-    LineChart,
-    Pie,
-    PieChart,
-    ResponsiveContainer,
-    Tooltip,
-    XAxis, YAxis
-} from 'recharts';
-import api from '../services/api';
+  Area,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ComposedChart,
+  Legend,
+  Line,
+  Pie,
+  PieChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
+  Activity,
+  BarChart3,
+  Database,
+  LayoutDashboard,
+  PieChart as PieIcon,
+} from "lucide-react";
+import api from "../services/api";
+import { cn } from "../lib/cn";
+import { useThemeStore } from "../store/themeStore";
 
+const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
+const unwrapData = (response: any) => {
+  const inner = response?.data ?? response;
+  if (inner && typeof inner === "object" && "success" in inner && inner.success === true) {
+    return inner;
+  }
+  return inner;
+};
+
+function formatTickDate(value: string) {
+  try {
+    const d = parseISO(value);
+    if (!isValid(d)) return value;
+    return format(d, "MMM d");
+  } catch {
+    return value;
+  }
+}
+
+const tabConfig = [
+  { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "performance", label: "Performance", icon: Activity },
+  { id: "errors", label: "Errors", icon: PieIcon },
+  { id: "collections", label: "Collections", icon: Database },
+] as const;
+
+type TabId = (typeof tabConfig)[number]["id"];
 
 const AnalyticsCharts = () => {
-    const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const themeMode = useThemeStore((s) => s.mode);
 
-    // Helper to safely unwrap API response
-    const unwrapData = (response: any) => {
-        // If the response has a 'data' property (axios interceptor)
-        const inner = response.data ?? response;
-        // If the inner object has a 'success' flag and 'data' property
-        if (inner && typeof inner === 'object' && 'success' in inner && inner.success === true) {
-            return inner.data ?? inner;
-        }
-        return inner;
-    };
+  const axisProps = useMemo(
+    () => ({
+      stroke: "var(--chart-axis)",
+      tick: { fill: "var(--text-muted)", fontSize: 11 },
+    }),
+    []
+  );
 
-    // Dashboard query
-    const { data: dashboardRaw, isLoading: dashboardLoading, error: dashboardError} = useQuery({
-        queryKey: ['analytics', 'dashboard'],
-        queryFn: async () => {
-            const res = await api.get('/analytics/api/v2/dashboard/');
-            const unwrapped = unwrapData(res);
-            // Ensure we return at least an empty object
-            return unwrapped || { overview: null, daily_requests: null };
-        },
-        retry: 1,
-    });
+  const { data: dashboardRaw, isLoading: dashboardLoading, error: dashboardError } = useQuery({
+    queryKey: ["analytics", "dashboard"],
+    queryFn: async () => {
+      const res = await api.get("/analytics/api/v2/dashboard/");
+      return unwrapData(res) || { overview: null, daily_requests: null };
+    },
+    retry: 1,
+  });
 
-    // Performance query
-    const { data: performanceRaw, isLoading: perfLoading, error: perfError} = useQuery({
-        queryKey: ['analytics', 'performance'],
-        queryFn: async () => {
-            const res = await api.get('/analytics/api/v2/performance/');
-            const unwrapped = unwrapData(res);
-            return unwrapped || { percentiles_ms: null, throughput_last_24h: [] };
-        },
-        retry: 1,
-    });
+  const { data: performanceRaw, isLoading: perfLoading, error: perfError } = useQuery({
+    queryKey: ["analytics", "performance"],
+    queryFn: async () => {
+      const res = await api.get("/analytics/api/v2/performance/");
+      return unwrapData(res) || { percentiles_ms: {}, throughput_last_24h: [] };
+    },
+    retry: 1,
+  });
 
-    // Errors query
-    const { data: errorsRaw, isLoading: errorsLoading, error: errorsError} = useQuery({
-        queryKey: ['analytics', 'errors'],
-        queryFn: async () => {
-            const res = await api.get('/analytics/api/v2/errors/');
-            const unwrapped = unwrapData(res);
-            return unwrapped || { errors_by_status_code: {}, top_error_endpoints: [], error_types: {} };
-        },
-        retry: 1,
-    });
+  const { data: errorsRaw, isLoading: errorsLoading, error: errorsErr } = useQuery({
+    queryKey: ["analytics", "errors"],
+    queryFn: async () => {
+      const res = await api.get("/analytics/api/v2/errors/");
+      return unwrapData(res) || {
+        errors_by_status_code: {},
+        top_error_endpoints: [],
+        error_types: {},
+      };
+    },
+    retry: 1,
+  });
 
-    // Top collections query
-    const { data: topCollectionsRaw, isLoading: topLoading, error: topError} = useQuery({
-        queryKey: ['analytics', 'top-collections'],
-        queryFn: async () => {
-            const res = await api.get('/analytics/api/v2/top-collections/');
-            const unwrapped = unwrapData(res);
-            // Ensure we always return an object with top_collections array
-            if (Array.isArray(unwrapped)) {
-                return { top_collections: unwrapped };
-            }
-            if (unwrapped && unwrapped.top_collections) {
-                return unwrapped;
-            }
-            return { top_collections: [] };
-        },
-        retry: 1,
-    });
-    const dashboard = dashboardRaw || { overview: null, daily_requests: null };
-    const performance = performanceRaw || { percentiles_ms: null, throughput_last_24h: [] };
-    const errors = errorsRaw || { errors_by_status_code: {}, top_error_endpoints: [], error_types: {} };
-    const topCollections = topCollectionsRaw?.top_collections || [];
+  const { data: topCollectionsRaw, isLoading: topLoading, error: topErr } = useQuery({
+    queryKey: ["analytics", "top-collections"],
+    queryFn: async () => {
+      const res = await api.get("/analytics/api/v2/top-collections/");
+      const u = unwrapData(res);
+      if (Array.isArray(u)) return { top_collections: u };
+      if (u?.top_collections) return u;
+      return { top_collections: [] };
+    },
+    retry: 1,
+  });
 
-    const isLoading = dashboardLoading || perfLoading || errorsLoading || topLoading;
-    const hasError = dashboardError || perfError || errorsError || topError;
+  const dashboard = dashboardRaw || {};
+  const performance = performanceRaw || {};
+  const errors = errorsRaw || {};
+  const topCollections = topCollectionsRaw?.top_collections || [];
 
-    if (isLoading) {
-        return <div className="text-slate-400">Loading analytics data...</div>;
-    }
+  const isLoading = dashboardLoading || perfLoading || errorsLoading || topLoading;
+  const hasError = dashboardError || perfError || errorsErr || topErr;
 
-    if (hasError) {
-        console.error('Analytics errors:', { dashboardError, perfError, errorsError, topError });
-        return (
-            <div className="text-red-400 p-4 bg-red-900/20 rounded-lg">
-                Failed to load analytics. Please try again later.
-                <button
-                    onClick={() => window.location.reload()}
-                    className="ml-4 underline hover:text-red-300"
-                >
-                    Retry
-                </button>
-            </div>
-        );
-    }
+  const dailyData = useMemo(() => {
+    const dr = (dashboard as any)?.daily_requests;
+    if (!dr?.dates || !Array.isArray(dr.dates)) return [];
+    return dr.dates.map((date: string, idx: number) => ({
+      date,
+      label: formatTickDate(date),
+      requests: dr.counts?.[idx] ?? 0,
+      avgDuration: Math.round(dr.avg_durations_ms?.[idx] ?? 0),
+    }));
+  }, [dashboard]);
 
-    // Prepare data (handle empty arrays)
-    const dailyData = dashboard?.daily_requests.dates.map((date: any, idx: string | number) => ({
-        date,
-        requests: dashboard.daily_requests.counts[idx],
-        avgDuration: dashboard.daily_requests.avg_durations_ms[idx],
-    })) || [];
+  const throughputData = useMemo(() => {
+    const raw = (performance as any)?.throughput_last_24h || [];
+    return raw.map((row: any) => ({
+      ...row,
+      label: row.hour?.replace(" ", "\n") ?? row.hour,
+    }));
+  }, [performance]);
 
-    const throughputData = performance?.throughput_last_24h || [];
+  const errorStatusData = errors?.errors_by_status_code
+    ? Object.entries(errors.errors_by_status_code).map(([code, count]) => ({
+        name: String(code),
+        value: count as number,
+      }))
+    : [];
 
-    const errorStatusData = errors?.errors_by_status_code
-        ? Object.entries(errors.errors_by_status_code).map(([code, count]) => ({ name: code, value: count }))
-        : [];
+  const topEndpoints = errors?.top_error_endpoints || [];
+  const percentiles = (performance as any)?.percentiles_ms;
 
-    const topEndpoints = errors?.top_error_endpoints || [];
-
-    const percentiles = performance?.percentiles_ms;
-
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
     return (
-        <div>
-            {/* Tabs */}
-            <div className="border-b border-slate-700 mb-6">
-                <nav className="flex space-x-4">
-                    {['overview', 'performance', 'errors', 'collections'].map((tab) => (
-                        <button
-                            key={tab}
-                            onClick={() => setActiveTab(tab)}
-                            className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors ${activeTab === tab
-                                    ? 'text-cyan-400 border-b-2 border-cyan-400 bg-slate-800/30'
-                                    : 'text-slate-400 hover:text-slate-200'
-                                }`}
-                        >
-                            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                        </button>
-                    ))}
-                </nav>
-            </div>
-
-            {/* Tab content */}
-            <div className="space-y-6">
-                {/* Overview Tab */}
-                {activeTab === 'overview' && (
-                    <>
-                        {/* KPI Cards */}
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
-                                <h3 className="text-sm font-medium text-slate-400">Total Requests (7d)</h3>
-                                <p className="text-2xl font-bold text-cyan-400">
-                                    {dashboard?.overview.total_requests?.toLocaleString() ?? 0}
-                                </p>
-                            </div>
-                            <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
-                                <h3 className="text-sm font-medium text-slate-400">Avg Response Time</h3>
-                                <p className="text-2xl font-bold text-emerald-400">
-                                    {dashboard?.overview.avg_response_time_ms ?? 0} ms
-                                </p>
-                            </div>
-                            <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
-                                <h3 className="text-sm font-medium text-slate-400">Error Rate</h3>
-                                <p className="text-2xl font-bold text-rose-400">
-                                    {dashboard?.overview.error_rate_percent ?? 0}%
-                                </p>
-                            </div>
-                            <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
-                                <h3 className="text-sm font-medium text-slate-400">Storage Used</h3>
-                                <p className="text-2xl font-bold text-purple-400">
-                                    {dashboard?.overview.total_storage_mb ?? 0} MB
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Daily Requests & Avg Duration */}
-                        <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-                            <h2 className="text-xl font-semibold text-white mb-4">Daily API Requests & Response Time</h2>
-                            {dailyData.length > 0 ? (
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <LineChart data={dailyData}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                                        <XAxis dataKey="date" stroke="#94A3B8" />
-                                        <YAxis yAxisId="left" stroke="#94A3B8" />
-                                        <YAxis yAxisId="right" orientation="right" stroke="#94A3B8" />
-                                        <Tooltip contentStyle={{ backgroundColor: '#1E293B', border: 'none' }} />
-                                        <Legend />
-                                        <Line yAxisId="left" type="monotone" dataKey="requests" stroke="#38BDF8" name="Requests" strokeWidth={2} />
-                                        <Line yAxisId="right" type="monotone" dataKey="avgDuration" stroke="#10B981" name="Avg Duration (ms)" strokeWidth={2} />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            ) : (
-                                <div className="text-slate-400 text-center py-8">No request data available for the period.</div>
-                            )}
-                        </div>
-                    </>
-                )}
-
-                {/* Performance Tab */}
-                {activeTab === 'performance' && (
-                    <>
-                        {/* Percentiles */}
-                        {percentiles && (
-                            <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-                                <h2 className="text-xl font-semibold text-white mb-4">Response Time Percentiles (ms)</h2>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    {Object.entries(percentiles).map(([key, value]) => (
-                                        <div key={key} className="bg-slate-800 p-3 rounded text-center">
-                                            <div className="text-xs text-slate-400 uppercase">{key}</div>
-                                            <div className="text-xl font-bold text-cyan-400">{value as number} ms</div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Throughput */}
-                        <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-                            <h2 className="text-xl font-semibold text-white mb-4">Throughput (Requests per hour, last 24h)</h2>
-                            {throughputData.length > 0 ? (
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <BarChart data={throughputData}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                                        <XAxis dataKey="hour" stroke="#94A3B8" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={60} />
-                                        <YAxis stroke="#94A3B8" />
-                                        <Tooltip contentStyle={{ backgroundColor: '#1E293B', border: 'none' }} />
-                                        <Bar dataKey="requests" fill="#38BDF8" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            ) : (
-                                <div className="text-slate-400 text-center py-8">No throughput data available.</div>
-                            )}
-                        </div>
-                    </>
-                )}
-
-                {/* Errors Tab */}
-                {activeTab === 'errors' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-                            <h2 className="text-xl font-semibold text-white mb-4">Errors by Status Code</h2>
-                            {errorStatusData.length > 0 ? (
-                                <ResponsiveContainer width="100%" height={250}>
-                                    <PieChart>
-                                        <Pie
-                                            data={errorStatusData}
-                                            cx="50%"
-                                            cy="50%"
-                                            labelLine={false}
-                                            label={({ name, percent }) => `${name}: ${((percent ?? 0) * 100).toFixed(0)}%`}
-                                            outerRadius={80}
-                                            fill="#8884d8"
-                                            dataKey="value"
-                                        >
-                                            {errorStatusData.map((_entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip contentStyle={{ backgroundColor: '#1E293B', border: 'none' }} />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            ) : (
-                                <div className="text-slate-400 text-center py-8">No errors recorded in the last 7 days.</div>
-                            )}
-                        </div>
-                        <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-                            <h2 className="text-xl font-semibold text-white mb-4">Top Error‑Prone Endpoints</h2>
-                            {topEndpoints.length > 0 ? (
-                                <ResponsiveContainer width="100%" height={250}>
-                                    <BarChart data={topEndpoints} layout="vertical">
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                                        <XAxis type="number" stroke="#94A3B8" />
-                                        <YAxis type="category" dataKey="path" stroke="#94A3B8" width={150} tick={{ fontSize: 11 }} />
-                                        <Tooltip contentStyle={{ backgroundColor: '#1E293B', border: 'none' }} />
-                                        <Bar dataKey="errors" fill="#EF4444" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            ) : (
-                                <div className="text-slate-400 text-center py-8">No error endpoints to display.</div>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                {/* Collections Tab */}
-                {activeTab === 'collections' && (
-                    <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-                        <h2 className="text-xl font-semibold text-white mb-4">Most Active Collections (by operations)</h2>
-                        {topCollections && topCollections.length > 0 ? (
-                            <ResponsiveContainer width="100%" height={300}>
-                                <BarChart data={topCollections}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                                    <XAxis dataKey="name" stroke="#94A3B8" />
-                                    <YAxis stroke="#94A3B8" />
-                                    <Tooltip contentStyle={{ backgroundColor: '#1E293B', border: 'none' }} />
-                                    <Bar dataKey="operations" fill="#A855F7" />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        ) : (
-                            <div className="text-slate-400 text-center py-8">No collection activity yet.</div>
-                        )}
-                    </div>
-                )}
-            </div>
-        </div>
+      <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-3 py-2 text-xs shadow-[var(--shadow-md)]">
+        <p className="mb-1 font-semibold text-[var(--text-primary)]">{label}</p>
+        {payload.map((p: any) => (
+          <p key={p.dataKey} className="text-[var(--text-muted)]">
+            <span style={{ color: p.color }}>{p.name}:</span>{" "}
+            <span className="font-mono text-[var(--text-primary)]">{p.value}</span>
+          </p>
+        ))}
+      </div>
     );
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[200px] items-center justify-center text-[var(--text-muted)]">
+        <div className="flex items-center gap-3">
+          <BarChart3 className="h-6 w-6 animate-pulse text-[var(--accent-bright)]" />
+          Loading analytics…
+        </div>
+      </div>
+    );
+  }
+
+  if (hasError) {
+    return (
+      <div className="rounded-[var(--radius-md)] border border-[var(--danger-soft)] bg-[var(--danger-soft)] px-4 py-3 text-[var(--danger)]">
+        Could not load analytics. Check your connection and try again.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6" data-theme={themeMode}>
+      <div className="flex flex-wrap gap-2 border-b border-[var(--border-subtle)] pb-1 rounded-t-[var(--radius-md)]">
+        {tabConfig.map((tab) => {
+          const Icon = tab.icon;
+          const active = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-t-[var(--radius-md)] px-4 py-2.5 text-sm font-medium transition-all duration-200",
+                active
+                  ? "bg-[var(--accent-soft)] text-[var(--accent-bright)] shadow-sm"
+                  : "text-[var(--text-muted)] hover:bg-[var(--surface-2)]/60 hover:text-[var(--text-primary)]"
+              )}
+            >
+              <Icon className="h-4 w-4 opacity-80" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {activeTab === "overview" && (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              {
+                k: "Requests (7d)",
+                v: (dashboard as any)?.overview?.total_requests ?? 0,
+                suf: "",
+                tone: "text-[var(--chart-2)]",
+              },
+              {
+                k: "Avg latency",
+                v: (dashboard as any)?.overview?.avg_response_time_ms ?? 0,
+                suf: " ms",
+                tone: "text-[var(--chart-1)]",
+              },
+              {
+                k: "Error rate",
+                v: (dashboard as any)?.overview?.error_rate_percent ?? 0,
+                suf: "%",
+                tone: "text-[var(--danger)]",
+              },
+              {
+                k: "Storage",
+                v: (dashboard as any)?.overview?.total_storage_mb ?? 0,
+                suf: " MB",
+                tone: "text-[var(--chart-3)]",
+              },
+            ].map((card) => (
+              <div
+                key={card.k}
+                className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-0)] px-4 py-4 transition-transform duration-200 hover:shadow-[var(--shadow-sm)]"
+              >
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--text-subtle)]">
+                  {card.k}
+                </p>
+                <p className={cn("mt-2 text-2xl font-bold tabular-nums", card.tone)}>
+                  {typeof card.v === "number" ? card.v.toLocaleString() : card.v}
+                  {card.suf}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4 sm:p-5">
+            <h3 className="mb-1 text-base font-semibold text-[var(--text-primary)]">
+              Traffic & latency trend
+            </h3>
+            <p className="mb-4 text-sm text-[var(--text-muted)]">
+              Daily request volume vs average response time (last 7 days)
+            </p>
+            {dailyData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <ComposedChart data={dailyData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="reqFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--chart-2)" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="var(--chart-2)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="label" {...axisProps} tickLine={false} axisLine={false} />
+                  <YAxis yAxisId="l" {...axisProps} tickLine={false} axisLine={false} />
+                  <YAxis
+                    yAxisId="r"
+                    orientation="right"
+                    {...axisProps}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend />
+                  <Area
+                    yAxisId="l"
+                    type="monotone"
+                    dataKey="requests"
+                    name="Requests"
+                    stroke="var(--chart-2)"
+                    fill="url(#reqFill)"
+                    strokeWidth={2}
+                  />
+                  <Line
+                    yAxisId="r"
+                    type="monotone"
+                    dataKey="avgDuration"
+                    name="Avg ms"
+                    stroke="var(--chart-1)"
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                  <ReferenceLine
+                    yAxisId="r"
+                    y={500}
+                    stroke="var(--warning)"
+                    strokeDasharray="4 4"
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="py-12 text-center text-[var(--text-muted)]">
+                No traffic data for this period yet. Make API calls to populate analytics.
+              </p>
+            )}
+          </div>
+        </>
+      )}
+
+      {activeTab === "performance" && (
+        <>
+          {percentiles && Object.keys(percentiles).length > 0 && (
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              {Object.entries(percentiles).map(([key, value]) => (
+                <div
+                  key={key}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4 text-center"
+                >
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-subtle)]">
+                    {key}
+                  </div>
+                  <div className="mt-1 text-xl font-bold tabular-nums text-[var(--chart-2)]">
+                    {String(value)} ms
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4 sm:p-5">
+            <h3 className="mb-1 text-base font-semibold text-[var(--text-primary)]">
+              Hourly throughput
+            </h3>
+            <p className="mb-4 text-sm text-[var(--text-muted)]">
+              Request count by hour (last 24h)
+            </p>
+            {throughputData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={throughputData}>
+                  <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="3 3" vertical={false} />
+                  <XAxis
+                    dataKey="hour"
+                    {...axisProps}
+                    tick={{ ...axisProps.tick, fontSize: 9 }}
+                    angle={-35}
+                    textAnchor="end"
+                    height={70}
+                    interval={0}
+                    tickFormatter={(v) => (typeof v === "string" && v.length > 13 ? v.slice(0, 13) + "…" : v)}
+                  />
+                  <YAxis {...axisProps} tickLine={false} axisLine={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="requests" name="Requests" fill="var(--chart-2)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="py-12 text-center text-[var(--text-muted)]">
+                No throughput samples yet.
+              </p>
+            )}
+          </div>
+        </>
+      )}
+
+      {activeTab === "errors" && (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4">
+            <h3 className="mb-4 text-base font-semibold text-[var(--text-primary)]">
+              Errors by HTTP status
+            </h3>
+            {errorStatusData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart>
+                  <Pie
+                    data={errorStatusData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={58}
+                    outerRadius={88}
+                    paddingAngle={2}
+                    dataKey="value"
+                    label={({ name, percent }) =>
+                      `${name} (${((percent ?? 0) * 100).toFixed(0)}%)`
+                    }
+                  >
+                    {errorStatusData.map((_e, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="py-10 text-center text-[var(--text-muted)]">No errors — great job.</p>
+            )}
+          </div>
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4">
+            <h3 className="mb-4 text-base font-semibold text-[var(--text-primary)]">
+              Noisiest endpoints
+            </h3>
+            {topEndpoints.length > 0 ? (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={topEndpoints} layout="vertical" margin={{ left: 8 }}>
+                  <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="3 3" horizontal />
+                  <XAxis type="number" {...axisProps} tickLine={false} />
+                  <YAxis type="category" dataKey="path" width={120} tick={{ ...axisProps.tick, fontSize: 10 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="errors" name="Errors" fill="var(--danger)" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="py-10 text-center text-[var(--text-muted)]">No failing routes in range.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "collections" && (
+        <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4 sm:p-5">
+          <h3 className="mb-1 text-base font-semibold text-[var(--text-primary)]">
+            Hottest collections
+          </h3>
+          <p className="mb-4 text-sm text-[var(--text-muted)]">
+            MongoDB operations logged per collection (7-day window)
+          </p>
+          {topCollections.length > 0 ? (
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={topCollections}>
+                <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" {...axisProps} tickLine={false} axisLine={false} />
+                <YAxis {...axisProps} tickLine={false} axisLine={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="operations" name="Ops" fill="var(--chart-3)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="py-12 text-center text-[var(--text-muted)]">No collection ops recorded yet.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default AnalyticsCharts;

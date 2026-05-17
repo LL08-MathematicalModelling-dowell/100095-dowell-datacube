@@ -1,20 +1,146 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap");
 
+/* Brand teal — shared naming (maps to accent tokens below) */
 :root {
-  --green-light: #abf7b1;
-  --green: #2ecc71;
-  --green-dark: #25a25a;
-  --bg-dark-1: #111827;
-  --bg-dark-2: #1f2937;
-  --bg-dark-3: #374151;
-  --text-light: #f9fafb;
-  --text-muted: #9ca3af;
-  --border-color: #4b5563;
-  --font-sans: 'Inter', sans-serif;
-  --font-mono: 'Fira Code', monospace;
-  --sidebar-width: 260px;
+  --brand-teal-light: #5eead4;
+  --brand-teal: #2dd4bf;
+  --brand-teal-deep: #0d9488;
+  --brand-teal-dark: #115e59;
+  /* Legacy names — kept for older classes; point to teal */
+  --green-light: var(--brand-teal-light);
+  --green: var(--brand-teal);
+  --green-dark: var(--brand-teal-deep);
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  --sidebar-width: 280px;
+  --radius-lg: 12px;
+  --radius-md: 10px;
+  --radius-sm: 8px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-glow-teal: 0 0 24px rgba(45, 212, 191, 0.08);
+  /* HTTP verb chips (docs) */
+  --verb-get: rgba(45, 212, 191, 0.2);
+  --verb-get-text: #5eead4;
+  --verb-post: rgba(56, 189, 248, 0.2);
+  --verb-post-text: #7dd3fc;
+  --verb-put: rgba(251, 191, 36, 0.2);
+  --verb-put-text: #fcd34d;
+  --verb-delete: rgba(248, 113, 113, 0.2);
+  --verb-delete-text: #fca5a5;
+  --verb-patch: rgba(167, 139, 250, 0.2);
+  --verb-patch-text: #c4b5fd;
 }
 
+/* Dark theme (default) — professional blue-teal surfaces */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0: #0a1628;
+  --surface-1: #0f2338;
+  --surface-2: #153048;
+  --surface-elevated: #1a3a52;
+  --text-primary: #ecf8f8;
+  --text-muted: #8eadb8;
+  --text-subtle: #6b8a94;
+  --border: rgba(94, 234, 212, 0.22);
+  --border-subtle: rgba(94, 234, 212, 0.12);
+  --accent: var(--brand-teal-deep);
+  --accent-bright: var(--brand-teal);
+  --accent-soft: rgba(45, 212, 191, 0.14);
+  --accent-ring: rgba(94, 234, 212, 0.45);
+  --danger: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.12);
+  --warning: #fbbf24;
+  --info: #38bdf8;
+  --chart-1: #2dd4bf;
+  --chart-2: #22d3ee;
+  --chart-3: #67e8f9;
+  --chart-4: #5eead4;
+  --chart-5: #14b8a6;
+  --chart-grid: rgba(94, 234, 212, 0.12);
+  --chart-axis: #8eadb8;
+  --overlay: rgba(6, 12, 22, 0.72);
+  --bg-dark-1: var(--surface-0);
+  --bg-dark-2: var(--surface-1);
+  --bg-dark-3: var(--surface-2);
+  --text-light: var(--text-primary);
+  --border-color: var(--border);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --surface-0: #f0fdfa;
+  --surface-1: #ffffff;
+  --surface-2: #ccfbf1;
+  --surface-elevated: #ffffff;
+  --text-primary: #0f172a;
+  --text-muted: #475569;
+  --text-subtle: #64748b;
+  --border: #99f6e4;
+  --border-subtle: rgba(13, 148, 136, 0.2);
+  --accent: #0d9488;
+  --accent-bright: #0f766e;
+  --accent-soft: rgba(13, 148, 136, 0.1);
+  --accent-ring: rgba(13, 148, 136, 0.35);
+  --danger: #dc2626;
+  --danger-soft: rgba(220, 38, 38, 0.08);
+  --warning: #d97706;
+  --info: #0284c7;
+  --chart-1: #0d9488;
+  --chart-2: #0891b2;
+  --chart-3: #0e7490;
+  --chart-4: #14b8a6;
+  --chart-5: #115e59;
+  --chart-grid: #ccfbf1;
+  --chart-axis: #64748b;
+  --overlay: rgba(15, 23, 42, 0.45);
+  --bg-dark-1: var(--surface-0);
+  --bg-dark-2: var(--surface-1);
+  --bg-dark-3: var(--surface-2);
+  --text-light: var(--text-primary);
+  --border-color: var(--border);
+}
 
 @import "tailwindcss";
+
+html {
+  font-family: var(--font-sans);
+}
+
+body {
+  margin: 0;
+  background: var(--surface-0);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 2px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: var(--surface-elevated);
+  border-radius: 99px;
+}
+[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: var(--surface-0);
+}
+
+[data-theme="light"] ::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 99px;
+}
+[data-theme="light"] ::-webkit-scrollbar-track {
+  background: var(--surface-0);
+}

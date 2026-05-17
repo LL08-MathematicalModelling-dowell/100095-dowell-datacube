@@ -19,6 +19,11 @@ The `analytics` app keeps its own layout (tasks, middleware, `views/analytics_vi
 |----------------|--------|
 | `api/v2/` | `api.presentation.urls_v2` |
 | `core/` | `core.presentation.urls` |
+| `analytics/api/v2/` | `analytics.urls` |
+
+### Frontend / mobile API guide
+
+See **[docs/FRONTEND_API_GUIDE.md](docs/FRONTEND_API_GUIDE.md)** for base URLs, authentication (JWT, API keys, OAuth, OTP), routes, roles, and example payloads.
 
 ## Public data API (`/api/v2/`)
 
@@ -47,11 +52,11 @@ Replace `<HOST>` and tokens with your values.
 # Health (no auth)
 curl -sS "https://<HOST>/api/v2/health_check/"
 
-# CRUD create (JWT)
+# CRUD create (JWT) — body field is `documents`, not `data`
 curl -X POST "https://<HOST>/api/v2/crud/" \
   -H "Authorization: Bearer <ACCESS_TOKEN>" \
   -H "Content-Type: application/json" \
-  -d '{"database_id":"<DB_ID>","collection_name":"users","data":[{"username":"alice"}]}'
+  -d '{"database_id":"<DB_ID>","collection_name":"users","documents":[{"username":"alice"}]}'
 ```
 
 ## Dependencies (uv)
