@@ -20,6 +20,7 @@ const Overview = lazy(() => import("./pages/Overview"));
 const FileDetail = lazy(() => import("./pages/FileDetail"));
 const DatabaseDetail = lazy(() => import("./pages/DatabaseDetail"));
 const CollectionDocuments = lazy(() => import("./pages/CollectionDocuments"));
+const Profile = lazy(() => import("./pages/Profile"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const ProtectedRoute = () => {
@@ -63,6 +64,7 @@ function App() {
               <Route path="/dashboard/api-keys" element={<ApiKeys />} />
               <Route path="/dashboard/billing" element={<Billing />} />
               <Route path="/dashboard/overview" element={<Overview />} />
+              <Route path="/dashboard/profile" element={<Profile />} />
               <Route path="/dashboard/files/:fileId" element={<FileDetail />} />
               <Route
                 path="/dashboard/database/:dbId"

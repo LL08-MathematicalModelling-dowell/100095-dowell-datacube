@@ -128,6 +128,10 @@ const apiWrapper = {
     const response = await api.put(url, data, config);
     return response.data;
   },
+  patch: async (url: string, data?: any, config?: AxiosRequestConfig) => {
+    const response = await api.patch(url, data, config);
+    return response.data;
+  },
   delete: async (url: string, data?: any, config?: AxiosRequestConfig) => {
     const deleteConfig: AxiosRequestConfig = { ...config };
 
