@@ -7,6 +7,15 @@ from pymongo.errors import OperationFailure
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
+from analytics.services.platform_stats import (
+    aggregate_file_storage,
+    aggregate_http_methods,
+    aggregate_metadata_counts,
+    count_slow_queries,
+    file_storage_trend,
+    get_usage_snapshot,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -51,14 +60,12 @@ class DashboardOverviewView(AnalyticsBaseView):
         error_count = req_result[0]["error_count"] if req_result else 0
         error_rate = round((error_count / total_requests) * 100, 2) if total_requests > 0 else 0
 
-        # 2. Total storage used from file_metadata (if collection exists)
-        file_pipeline = [
-            {"$match": {"user_id": user_id}},
-            {"$group": {"_id": None, "total_bytes": {"$sum": "$file_size_bytes"}}}
-        ]
-        cursor = await db["file_metadata"].aggregate(file_pipeline)
-        file_result = await cursor.to_list(length=1)
-        total_storage_mb = round((file_result[0]["total_bytes"] / (1024*1024)) if file_result else 0, 2)
+        storage = await aggregate_file_storage(user_id)
+        meta_counts = await aggregate_metadata_counts(user_id)
+        usage = get_usage_snapshot(user_id)
+        methods_7d = await aggregate_http_methods(user_id)
+        slow_queries_7d = await count_slow_queries(user_id)
+        total_storage_mb = round(storage["total_bytes"] / (1024 * 1024), 2)
 
         # 3. Requests per day (last 7 days)
         pipeline_daily = [
@@ -83,7 +90,15 @@ class DashboardOverviewView(AnalyticsBaseView):
                 "avg_response_time_ms": avg_duration,
                 "error_rate_percent": error_rate,
                 "total_storage_mb": total_storage_mb,
+                "file_count": storage["file_count"],
+                "database_count": meta_counts["database_count"],
+                "collection_count": meta_counts["collection_count"],
+                "api_calls_current_month": usage.get("api_calls_current_month", 0),
+                "subscription_plan": usage.get("subscription_plan", "free"),
+                "role": usage.get("role", "developer"),
+                "slow_queries_7d": slow_queries_7d,
             },
+            "methods_7d": methods_7d,
             "daily_requests": {
                 "dates": dates,
                 "counts": counts,
@@ -348,16 +363,5 @@ class UserStorageTrendView(AnalyticsBaseView):
         end = datetime.now(timezone.utc)
         start = end - timedelta(days=30)
 
-        # Use file_metadata with upload_date field
-        pipeline = [
-            {"$match": {"user_id": user_id, "upload_date": {"$gte": start, "$lte": end}}},
-            {"$group": {
-                "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$upload_date"}},
-                "total_bytes": {"$sum": "$file_size_bytes"}
-            }},
-            {"$sort": {"_id": 1}}
-        ]
-        cursor = await db["file_metadata"].aggregate(pipeline)
-        result = await cursor.to_list(length=100)
-        trend = [{"date": d["_id"], "storage_mb": round(d["total_bytes"] / (1024*1024), 2)} for d in result]
+        trend = await file_storage_trend(user_id, start=start, end=end)
         return Response({"success": True, "storage_trend_mb": trend})
