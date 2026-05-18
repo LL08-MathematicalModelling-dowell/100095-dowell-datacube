@@ -21,7 +21,7 @@ def _user_oid(user_id: str) -> ObjectId:
 
 async def aggregate_file_storage(user_id: str) -> dict[str, Any]:
     """Total bytes and file count from METADATA_DB.file_metadata."""
-    coll = settings.METADATA_DB[settings.FILE_METADATA_COLLECTION]
+    coll = settings.FILE_METADATA_COLLECTION
     pipeline = [
         {"$match": {"user_id": _user_oid(user_id)}},
         {
@@ -73,7 +73,7 @@ async def file_storage_trend(
     end: datetime,
 ) -> list[dict[str, Any]]:
     """Daily uploaded bytes (from file metadata uploaded_at)."""
-    coll = settings.METADATA_DB[settings.FILE_METADATA_COLLECTION]
+    coll = settings.FILE_METADATA_COLLECTION
     pipeline = [
         {
             "$match": {
