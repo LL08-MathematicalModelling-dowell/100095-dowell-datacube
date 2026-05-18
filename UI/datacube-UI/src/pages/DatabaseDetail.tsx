@@ -1,26 +1,38 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  AlertCircle,
+  ArrowLeft,
+  Loader2,
+  RefreshCw,
+} from 'lucide-react';
 import { useState } from 'react';
 import type { Control, FieldErrors, UseFormRegister } from 'react-hook-form';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { Link, useParams } from 'react-router-dom';
 import { z } from 'zod';
+import { Card } from '../components/ui/Card';
+import { QueryErrorBlock, RefreshButton } from '../components/ui/QueryRefresh';
+import { cn } from '../lib/cn';
 import api from '../services/api';
 import useAuthStore from '../store/authStore';
 import toast from 'react-hot-toast';
 
-
-// Zod schema for collection fields
 const collectionFieldSchema = z.object({
   name: z.string().min(1, 'Field name is required'),
   type: z.string().min(1, 'Field type is required'),
 });
 
-// Zod schema for creating a collection
 const createCollectionSchema = z.object({
   collections: z.array(
     z.object({
-      name: z.string().min(1, 'Collection name is required').regex(/^[a-zA-Z0-9_-]+$/, 'Collection name can only contain letters, numbers, underscores, and hyphens'),
+      name: z
+        .string()
+        .min(1, 'Collection name is required')
+        .regex(
+          /^[a-zA-Z0-9_-]+$/,
+          'Collection name can only contain letters, numbers, underscores, and hyphens'
+        ),
       fields: z.array(collectionFieldSchema).min(1, 'At least one field is required'),
     })
   ).min(1, 'At least one collection is required'),
@@ -48,71 +60,105 @@ interface Database {
   };
 }
 
+function StatTile({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: number;
+  hint: string;
+}) {
+  return (
+    <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-2)]/40 p-5">
+      <p className="text-xs font-medium uppercase tracking-wide text-[var(--text-subtle)]">
+        {label}
+      </p>
+      <p className="mt-2 text-3xl font-bold tabular-nums text-[var(--accent-bright)]">
+        {value.toLocaleString()}
+      </p>
+      <p className="mt-2 text-xs text-[var(--text-muted)]">{hint}</p>
+    </div>
+  );
+}
+
 const DatabaseDetail = () => {
   const { dbId } = useParams<{ dbId: string }>();
   const queryClient = useQueryClient();
   const { refreshToken } = useAuthStore();
   const [isCreateCollectionModalOpen, setIsCreateCollectionModalOpen] = useState(false);
 
-  // Fetch database details
-  const { data, isLoading, error } = useQuery<Database>({
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    isFetching,
+    refetch,
+  } = useQuery<Database>({
     queryKey: ['database', dbId],
-    queryFn: async () => {
-      const response = await api.get(`/core/api/v1/database/${dbId}`);
-      return response;
-    },
+    queryFn: async () => api.get(`/core/api/v1/database/${dbId}`),
     enabled: !!refreshToken && !!dbId,
   });
 
-  // Delete collection mutation
+  const isRefreshing = isFetching && !isLoading;
+
   const deleteMutation = useMutation({
     mutationFn: async ({ collection_name }: { collection_name: string }) => {
-      if (!data) return;
-      await api.delete('/api/v2/drop_collections/', { database_id: dbId, collection_names: [collection_name] });
+      await api.delete('/api/v2/drop_collections/', {
+        database_id: dbId,
+        collection_names: [collection_name],
+      });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['database', dbId] }); // Invalidate specific database to refetch collections
+      queryClient.invalidateQueries({ queryKey: ['database', dbId] });
       toast.success('Collection deleted');
     },
-    onError: (err) => {
-      console.error('Failed to delete collection:', err);
+    onError: () => {
       toast.error('Could not delete collection');
     },
   });
 
   const handleDelete = ({ collection_name }: { collection_name: string }) => {
-    if (window.confirm(`Are you sure you want to delete "${collection_name}"? This action cannot be undone.`)) {
+    if (
+      window.confirm(
+        `Are you sure you want to delete "${collection_name}"? This action cannot be undone.`
+      )
+    ) {
       deleteMutation.mutate({ collection_name });
     }
   };
 
-  // Form setup for creating collections
-  const { register, control, handleSubmit, reset, formState: { errors } } = useForm<CreateCollectionForm>({
-    resolver: zodResolver(createCollectionSchema),
-    defaultValues: { collections: [{ name: '', fields: [{ name: '', type: '' }] }] },
-  });
+  const { register, control, handleSubmit, reset, formState: { errors } } =
+    useForm<CreateCollectionForm>({
+      resolver: zodResolver(createCollectionSchema),
+      defaultValues: {
+        collections: [{ name: '', fields: [{ name: '', type: '' }] }],
+      },
+    });
 
-  const { fields: collections, append: appendCollection, remove: removeCollection } = useFieldArray({
+  const {
+    fields: collections,
+    append: appendCollection,
+    remove: removeCollection,
+  } = useFieldArray({
     control,
     name: 'collections',
   });
 
-  // Create collections mutation
   const createCollectionsMutation = useMutation({
     mutationFn: async (formData: CreateCollectionForm) => {
       if (!dbId) throw new Error('Database ID is missing.');
-      const payload = {
+      return api.post('/api/v2/add_collection/', {
         database_id: dbId,
-        collections: formData.collections.map(col => ({
+        collections: formData.collections.map((col) => ({
           name: col.name,
-          fields: col.fields.map(field => ({
+          fields: col.fields.map((field) => ({
             name: field.name,
             type: field.type,
           })),
         })),
-      };
-      const response = await api.post('/api/v2/add_collection/', payload);
-      return response;
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['database', dbId] });
@@ -120,8 +166,7 @@ const DatabaseDetail = () => {
       reset();
       toast.success('Collections added');
     },
-    onError: (err) => {
-      console.error('Failed to create collections:', err);
+    onError: () => {
       toast.error('Could not add collections');
     },
   });
@@ -130,135 +175,228 @@ const DatabaseDetail = () => {
     createCollectionsMutation.mutate(formData);
   };
 
+  const refreshStats = () => void refetch();
+  const refreshCollections = () => void refetch();
+
+  if (isLoading && !data) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <Loader2 className="h-10 w-10 animate-spin text-[var(--accent-bright)]" />
+      </div>
+    );
+  }
+
+  if (isError && !data) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-6 py-8">
+        <Link
+          to="/dashboard/overview"
+          className="inline-flex items-center gap-2 text-sm font-medium text-[var(--accent-bright)] hover:underline"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to overview
+        </Link>
+        <div className="rounded-[var(--radius-lg)] border border-[var(--danger-soft)] bg-[var(--danger-soft)]/30 px-6 py-10 text-center">
+          <AlertCircle className="mx-auto mb-3 h-10 w-10 text-[var(--danger)]" />
+          <p className="text-[var(--text-primary)]">Could not load this database.</p>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            {(error as Error)?.message || 'Check your connection and try again.'}
+          </p>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isRefreshing}
+            className="mt-4 inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+          >
+            <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-slate-900 text-slate-300 font-sans min-h-screen p-6 sm:p-10">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-bold text-white tracking-tight mb-8">
-          {isLoading ? 'Loading Database...' : data?.database.displayName || 'Database Details'}
-        </h1>
-        <p className="mt-4 text-lg text-slate-400 mb-10">
-          Overview of your database, including collections and their statistics.
-        </p>
-
-        {/* Database Stats */}
-        <section className="p-6 bg-slate-800/50 rounded-xl border border-slate-700/80 mb-8">
-          <h2 className="text-2xl font-semibold text-white tracking-tight mb-6">Database Statistics</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-slate-700/40 p-5 rounded-lg border border-slate-600/50 flex flex-col justify-between">
-              <div>
-                <h3 className="text-sm font-medium text-slate-400 mb-2 flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 text-[var(--accent-bright)]"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>
-                  Number of Collections
-                </h3>
-                <p className="text-3xl font-bold text-[var(--accent-bright)]">{data?.stats.collection_count ?? 0}</p>
-              </div>
-              <p className="text-xs text-slate-500 mt-3">Total collections in this database</p>
-            </div>
-            <div className="bg-slate-700/40 p-5 rounded-lg border border-slate-600/50 flex flex-col justify-between">
-              <div>
-                <h3 className="text-sm font-medium text-slate-400 mb-2 flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 text-purple-400"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
-                  Total Fields Across Collections
-                </h3>
-                <p className="text-3xl font-bold text-purple-400">{data?.stats.total_fields ?? 0}</p>
-              </div>
-              <p className="text-xs text-slate-500 mt-3">Sum of all fields defined in all collections</p>
-            </div>
-          </div>
-        </section>
-
-        {/* Collections Table */}
-        <section className="p-6 bg-slate-800/50 rounded-xl border border-slate-700/80 mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-semibold text-white tracking-tight">Collections in "{data?.database.displayName || 'this database'}"</h2>
-            <button
-              onClick={() => setIsCreateCollectionModalOpen(true)}
-              className="bg-cyan-600 hover:bg-cyan-700 text-white font-semibold px-4 py-2 rounded-md transition-colors duration-200 shadow-md"
-              aria-label="Add new collection"
-            >
-              Add Collection
-            </button>
-          </div>
-          {isLoading ? (
-            <p className="text-slate-400">Loading collections...</p>
-          ) : error ? (
-            <p className="text-red-400">Error loading collections. Please try again later.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full table-auto">
-                <thead>
-                  <tr className="bg-slate-700/60">
-                    <th className="p-3 text-left text-sm font-semibold text-slate-200 rounded-tl-lg">Collection Name</th>
-                    <th className="p-3 text-left text-sm font-semibold text-slate-200">Fields Defined</th>
-                    <th className="p-3 text-left text-sm font-semibold text-slate-200">Documents Created</th>
-                    <th className="p-3 text-left text-sm font-semibold text-slate-200 rounded-tr-lg">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data?.collections?.length ? (
-                    data.collections.map((collection) => (
-                      <tr key={collection.name} className="border-b border-slate-700/60 hover:bg-slate-700/40 transition-colors">
-                        <td className="p-3 text-slate-300 font-medium">{collection.name}</td>
-                        <td className="p-3 text-slate-400">{collection.field_count}</td>
-                        <td className="p-3 text-slate-400">{collection.num_documents}</td>
-                        <td className="p-3">
-                          <Link
-                            to={`/dashboard/database/${dbId}/collection/${collection.name}`}
-                            className="text-cyan-400 hover:text-cyan-300 font-medium transition-colors mr-6"
-                          >
-                            View Documents
-                          </Link>
-                          <button
-                            onClick={() => handleDelete({ collection_name: collection.name })}
-                            className="text-red-500 hover:text-red-400 font-medium transition-colors border-l border-slate-700/60 pl-4">
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={4} className="p-6 text-center text-slate-400 bg-slate-700/40 rounded-b-lg">
-                        No collections found in this database.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-
-        {/* Danger Zone (unchanged) */}
-        <section className="p-6 bg-slate-800/50 rounded-xl border border-red-700/80 mb-8">
-          <h2 className="text-2xl font-semibold text-red-400 tracking-tight mb-6">Danger Zone</h2>
-          <div className="bg-red-900/20 p-5 rounded-lg border border-red-700/50">
-            <p className="text-base text-red-300 mb-4">
-              Delete this database. Once you delete a database, there is no going back. This action is irreversible and all data will be lost. Please be absolutely certain.
-            </p>
-            <button
-              disabled={true} // Keep disabled as original example
-              className="bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-2.5 rounded-md transition-colors duration-200 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-              aria-label="Delete database"
-            >
-              {'Delete Database'}
-            </button>
-          </div>
-        </section>
+    <div className="mx-auto max-w-4xl space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <Link
+            to="/dashboard/overview"
+            className="mb-3 inline-flex items-center gap-2 text-sm font-medium text-[var(--accent-bright)] transition-colors hover:underline"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to overview
+          </Link>
+          <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)]">
+            {data?.database.displayName || 'Database'}
+          </h1>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            Collections and statistics for this database
+            {isRefreshing && (
+              <RefreshCw className="ml-2 inline h-3.5 w-3.5 animate-spin align-middle" />
+            )}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          disabled={isRefreshing}
+          className="inline-flex items-center gap-2 self-start rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-1)] px-3 py-2 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-2)] disabled:opacity-50"
+          aria-label="Refresh database details"
+        >
+          <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
+          Refresh
+        </button>
       </div>
 
-      {/* Create Collection Modal */}
+      <Card
+        title="Database statistics"
+        action={
+          <RefreshButton
+            onClick={refreshStats}
+            isRefreshing={isRefreshing}
+            label="Reload stats"
+          />
+        }
+      >
+        {isError ? (
+          <QueryErrorBlock
+            message="Failed to load statistics."
+            onRetry={refreshStats}
+            isRefreshing={isRefreshing}
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <StatTile
+              label="Collections"
+              value={data?.stats.collection_count ?? 0}
+              hint="Total collections in this database"
+            />
+            <StatTile
+              label="Fields defined"
+              value={data?.stats.total_fields ?? 0}
+              hint="Sum of schema fields across collections"
+            />
+          </div>
+        )}
+      </Card>
+
+      <Card
+        title={`Collections in "${data?.database.displayName || 'this database'}"`}
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <RefreshButton
+              onClick={refreshCollections}
+              isRefreshing={isRefreshing}
+              label="Reload list"
+            />
+            <button
+              type="button"
+              onClick={() => setIsCreateCollectionModalOpen(true)}
+              className="rounded-[var(--radius-md)] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+              aria-label="Add new collection"
+            >
+              Add collection
+            </button>
+          </div>
+        }
+      >
+        {isError ? (
+          <QueryErrorBlock
+            message="Failed to load collections."
+            onRetry={refreshCollections}
+            isRefreshing={isRefreshing}
+          />
+        ) : (
+          <div className={cn('overflow-x-auto', isRefreshing && 'opacity-70')}>
+            <table className="min-w-full table-auto text-sm">
+              <thead>
+                <tr className="border-b border-[var(--border-subtle)] text-left text-[var(--text-subtle)]">
+                  <th className="p-3 font-semibold">Collection</th>
+                  <th className="p-3 font-semibold">Fields</th>
+                  <th className="p-3 font-semibold">Documents</th>
+                  <th className="p-3 font-semibold">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data?.collections?.length ? (
+                  data.collections.map((collection) => (
+                    <tr
+                      key={collection.name}
+                      className="border-b border-[var(--border-subtle)] transition-colors hover:bg-[var(--surface-2)]/50"
+                    >
+                      <td className="p-3 font-medium text-[var(--text-primary)]">
+                        {collection.name}
+                      </td>
+                      <td className="p-3 text-[var(--text-muted)]">
+                        {collection.field_count}
+                      </td>
+                      <td className="p-3 text-[var(--text-muted)]">
+                        {collection.num_documents}
+                      </td>
+                      <td className="p-3">
+                        <Link
+                          to={`/dashboard/database/${dbId}/collection/${collection.name}`}
+                          className="mr-4 font-medium text-[var(--accent-bright)] hover:underline"
+                        >
+                          View documents
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleDelete({ collection_name: collection.name })
+                          }
+                          className="font-medium text-[var(--danger)] hover:underline"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      className="p-8 text-center text-[var(--text-muted)]"
+                    >
+                      No collections yet. Add one to get started.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <section className="rounded-[var(--radius-lg)] border border-red-700/50 bg-[var(--surface-1)] p-6">
+        <h2 className="mb-4 text-lg font-semibold text-[var(--danger)]">Danger zone</h2>
+        <div className="rounded-[var(--radius-md)] border border-red-700/40 bg-red-950/20 p-5">
+          <p className="mb-4 text-sm text-[var(--text-muted)]">
+            Delete this database permanently. All collections and documents will be lost.
+          </p>
+          <button
+            type="button"
+            disabled
+            className="rounded-[var(--radius-md)] bg-[var(--danger)] px-6 py-2.5 text-sm font-semibold text-white opacity-50"
+            aria-label="Delete database"
+          >
+            Delete database
+          </button>
+        </div>
+      </section>
+
       {isCreateCollectionModalOpen && (
-        <div className="fixed inset-0 bg-opacity-70 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-slate-800/90 p-6 sm:p-8 rounded-xl max-w-2xl w-full mx-auto border border-cyan-700 shadow-2xl relative">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-white tracking-tight">
-                Add New Collection(s)
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4">
+          <div className="relative mx-auto w-full max-w-2xl rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-1)] p-6 shadow-2xl sm:p-8">
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
+                Add new collection(s)
               </h2>
               <button
+                type="button"
                 onClick={() => setIsCreateCollectionModalOpen(false)}
-                className="text-slate-400 hover:text-white transition-colors text-2xl"
+                className="text-2xl text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
                 aria-label="Close form"
               >
                 &times;
@@ -267,80 +405,87 @@ const DatabaseDetail = () => {
             <form onSubmit={handleSubmit(onSubmitCreateCollections)} className="space-y-6">
               <div>
                 {errors.collections && (
-                  <p className="text-red-400 text-sm mb-3">{errors.collections.message}</p>
+                  <p className="mb-3 text-sm text-[var(--danger)]">
+                    {errors.collections.message}
+                  </p>
                 )}
                 <div className="space-y-4">
                   {collections.map((collection, index) => (
-                    <div key={collection.id} className="p-5 bg-slate-700/40 rounded-lg border border-slate-600/50 relative">
-                      <label htmlFor={`collections.${index}.name`} className="block text-sm font-medium text-slate-300 mb-2">
-                        Collection Name <span className="text-red-400">*</span>
+                    <div
+                      key={collection.id}
+                      className="relative rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-2)]/40 p-5"
+                    >
+                      <label
+                        htmlFor={`collections.${index}.name`}
+                        className="mb-2 block text-sm font-medium text-[var(--text-primary)]"
+                      >
+                        Collection name <span className="text-[var(--danger)]">*</span>
                       </label>
                       <input
                         id={`collections.${index}.name`}
                         {...register(`collections.${index}.name`)}
-                        placeholder="Collection Name (e.g., 'users')"
-                        className="w-full p-2 bg-slate-600/50 border border-slate-500 rounded-md text-slate-200 placeholder-slate-400 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors mb-3"
-                        aria-invalid={errors.collections?.[index]?.name ? 'true' : 'false'}
+                        placeholder="e.g. users"
+                        className="mb-3 w-full rounded-md border border-[var(--border-subtle)] bg-[var(--surface-0)] p-2 text-[var(--text-primary)] placeholder:text-[var(--text-subtle)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
                       />
                       {errors.collections?.[index]?.name && (
-                        <p className="text-red-400 text-sm mb-3">{errors.collections[index].name?.message}</p>
+                        <p className="mb-3 text-sm text-[var(--danger)]">
+                          {errors.collections[index].name?.message}
+                        </p>
                       )}
 
-                      <h4 className="text-sm font-medium text-slate-300 mb-2">Fields for "{collection.name || 'New Collection'}" <span className="text-red-400">*</span></h4>
+                      <h4 className="mb-2 text-sm font-medium text-[var(--text-primary)]">
+                        Fields for &quot;{collection.name || 'new collection'}&quot;{' '}
+                        <span className="text-[var(--danger)]">*</span>
+                      </h4>
                       {errors.collections?.[index]?.fields && (
-                        <p className="text-red-400 text-sm mb-3">{errors.collections[index].fields?.message}</p>
+                        <p className="mb-3 text-sm text-[var(--danger)]">
+                          {errors.collections[index].fields?.message}
+                        </p>
                       )}
 
-                      <div className="space-y-2">
-                        <CollectionFields
-                          collectionIndex={index}
-                          control={control}
-                          register={register}
-                          errors={errors}
-                        />
-                      </div>
+                      <CollectionFields
+                        collectionIndex={index}
+                        control={control}
+                        register={register}
+                        errors={errors}
+                      />
 
                       <button
                         type="button"
                         onClick={() => removeCollection(index)}
-                        className="absolute top-3 right-3 text-slate-400 hover:text-red-500 transition-colors"
+                        className="absolute right-3 top-3 text-[var(--text-muted)] transition-colors hover:text-[var(--danger)]"
                         aria-label="Remove collection"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                        &times;
                       </button>
                     </div>
                   ))}
                 </div>
-                {errors.collections && (
-                  <p className="text-red-400 text-sm mt-3">{errors.collections.message}</p>
-                )}
                 <button
                   type="button"
-                  onClick={() => appendCollection({ name: '', fields: [{ name: '', type: '' }] })}
-                  className="mt-4 text-cyan-500 hover:text-cyan-400 font-medium transition-colors flex items-center gap-1"
-                  aria-label="Add another collection"
+                  onClick={() =>
+                    appendCollection({ name: '', fields: [{ name: '', type: '' }] })
+                  }
+                  className="mt-4 flex items-center gap-1 font-medium text-[var(--accent-bright)] hover:underline"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-                  Add Another Collection
+                  + Add another collection
                 </button>
               </div>
 
-              <div className="flex justify-end gap-4 mt-8 pt-6 border-t border-slate-700/60">
+              <div className="mt-8 flex justify-end gap-4 border-t border-[var(--border-subtle)] pt-6">
                 <button
                   type="button"
                   onClick={() => setIsCreateCollectionModalOpen(false)}
-                  className="bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white px-5 py-2.5 rounded-md text-sm font-medium transition-colors duration-200"
-                  aria-label="Cancel"
+                  className="rounded-md px-5 py-2.5 text-sm font-medium text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-2)]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={createCollectionsMutation.isPending}
-                  className="bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-2.5 px-6 rounded-md text-sm transition-colors duration-200 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-                  aria-label="Create collections"
+                  className="rounded-md bg-[var(--accent)] px-6 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
-                  {createCollectionsMutation.isPending ? 'Adding...' : 'Add Collection(s)'}
+                  {createCollectionsMutation.isPending ? 'Adding…' : 'Add collection(s)'}
                 </button>
               </div>
             </form>
@@ -360,8 +505,17 @@ interface CollectionFieldsProps {
   errors: FieldErrors<CreateCollectionForm>;
 }
 
-const CollectionFields: React.FC<CollectionFieldsProps> = ({ collectionIndex, control, register, errors }) => {
-  const { fields: fieldArrayFields, append: appendField, remove: removeField } = useFieldArray({
+const CollectionFields: React.FC<CollectionFieldsProps> = ({
+  collectionIndex,
+  control,
+  register,
+  errors,
+}) => {
+  const {
+    fields: fieldArrayFields,
+    append: appendField,
+    remove: removeField,
+  } = useFieldArray({
     control,
     name: `collections.${collectionIndex}.fields`,
   });
@@ -369,40 +523,38 @@ const CollectionFields: React.FC<CollectionFieldsProps> = ({ collectionIndex, co
   return (
     <div className="space-y-2">
       {fieldArrayFields.map((field, fieldIndex) => (
-        <div key={field.id} className="flex gap-2 items-center">
+        <div key={field.id} className="flex items-center gap-2">
           <input
             {...register(`collections.${collectionIndex}.fields.${fieldIndex}.name`)}
-            placeholder="Field Name"
-            className="flex-grow p-2 bg-slate-600/50 border border-slate-500 rounded-md text-slate-200 placeholder-slate-400 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors"
-            aria-invalid={errors.collections?.[collectionIndex]?.fields?.[fieldIndex]?.name ? 'true' : 'false'}
+            placeholder="Field name"
+            className="flex-grow rounded-md border border-[var(--border-subtle)] bg-[var(--surface-0)] p-2 text-[var(--text-primary)] placeholder:text-[var(--text-subtle)] focus:border-[var(--accent)] focus:outline-none"
           />
           <input
             {...register(`collections.${collectionIndex}.fields.${fieldIndex}.type`)}
-            placeholder="Field Type (e.g., 'string', 'number')"
-            className="flex-grow p-2 bg-slate-600/50 border border-slate-500 rounded-md text-slate-200 placeholder-slate-400 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors"
-            aria-invalid={errors.collections?.[collectionIndex]?.fields?.[fieldIndex]?.type ? 'true' : 'false'}
+            placeholder="Field type"
+            className="flex-grow rounded-md border border-[var(--border-subtle)] bg-[var(--surface-0)] p-2 text-[var(--text-primary)] placeholder:text-[var(--text-subtle)] focus:border-[var(--accent)] focus:outline-none"
           />
           <button
             type="button"
             onClick={() => removeField(fieldIndex)}
-            className="text-slate-400 hover:text-red-500 transition-colors p-1"
+            className="p-1 text-[var(--text-muted)] hover:text-[var(--danger)]"
             aria-label="Remove field"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+            &times;
           </button>
         </div>
       ))}
       {typeof errors.collections?.[collectionIndex]?.fields?.message === 'string' && (
-        <p className="text-red-400 text-sm mt-1">{errors.collections[collectionIndex].fields?.message}</p>
+        <p className="mt-1 text-sm text-[var(--danger)]">
+          {errors.collections[collectionIndex].fields?.message}
+        </p>
       )}
       <button
         type="button"
         onClick={() => appendField({ name: '', type: '' })}
-        className="mt-2 font-medium text-[var(--accent-bright)] transition-colors hover:opacity-90 flex items-center gap-1"
-        aria-label="Add another field"
+        className="mt-2 font-medium text-[var(--accent-bright)] hover:underline"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-        Add Field
+        + Add field
       </button>
     </div>
   );
