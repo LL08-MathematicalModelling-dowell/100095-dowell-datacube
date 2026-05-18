@@ -1,15 +1,13 @@
-import { useMutation } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { AuthShell } from "../components/auth/AuthShell.tsx";
 import { btnPrimaryCn } from "../lib/uiClasses.ts";
 import { cn } from "../lib/cn.ts";
-import api from "../services/api.ts";
 import useAuthStore from "../store/authStore.ts";
 import {
   clearPkceSession,
-  getOAuthRedirectUri,
+  exchangeOAuthTokens,
   readPkceSession,
 } from "../lib/oauthPkce.ts";
 import { getApiErrorMessage } from "../lib/apiErrors.ts";
@@ -20,33 +18,9 @@ export default function OAuthCallbackPage() {
   const [searchParams] = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
-  const started = useRef(false);
-
-  const exchangeMutation = useMutation({
-    mutationFn: async (payload: {
-      provider: "google" | "github";
-      code: string;
-      verifier: string;
-    }) => {
-      const path =
-        payload.provider === "google"
-          ? "/core/auth/oauth/google/"
-          : "/core/auth/oauth/github/";
-      return api.post(path, {
-        code: payload.code,
-        code_verifier: payload.verifier,
-        redirect_uri: getOAuthRedirectUri(),
-      }) as Promise<{
-        access: string;
-        refresh: string;
-        firstName: string;
-      }>;
-    },
-  });
 
   useEffect(() => {
-    if (started.current) return;
-    started.current = true;
+    let active = true;
 
     const providerErr = searchParams.get("error");
     const providerDesc = searchParams.get("error_description");
@@ -79,24 +53,25 @@ export default function OAuthCallbackPage() {
       return;
     }
 
-    exchangeMutation.mutate(
-      { provider: session.provider, code, verifier: session.verifier },
-      {
-        onSuccess: (data) => {
-          clearPkceSession();
-          setAuth(data.access, data.refresh, data.firstName);
-          toast.success("Signed in");
-          navigate("/dashboard/overview", { replace: true });
-        },
-        onError: (err) => {
-          clearPkceSession();
-          setBusy(false);
-          setError(getApiErrorMessage(err));
-        },
-      }
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void exchangeOAuthTokens(session.provider, code, session.verifier)
+      .then((data) => {
+        if (!active) return;
+        clearPkceSession();
+        setAuth(data.access, data.refresh, data.firstName);
+        toast.success("Signed in");
+        navigate("/dashboard/overview", { replace: true });
+      })
+      .catch((err) => {
+        if (!active) return;
+        clearPkceSession();
+        setBusy(false);
+        setError(getApiErrorMessage(err));
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [navigate, searchParams, setAuth]);
 
   return (
     <AuthShell
