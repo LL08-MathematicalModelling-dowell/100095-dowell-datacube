@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { Link } from "react-router-dom";
+import { CodeSampleTabs } from "../components/docs/CodeSampleTabs.tsx";
 import { apiDocs, type ApiGroup } from "../data/apiReference";
+import type { AuthMode } from "../lib/apiSamples";
 import { cn } from "../lib/cn";
 import useAuthStore from "../store/authStore";
 
@@ -235,8 +237,8 @@ export default function ApiDocsPage() {
               Official guide
             </p>
             <p className="mt-2">
-              This page mirrors <code className="text-[var(--accent-bright)]">docs/FRONTEND_API_GUIDE.md</code>{" "}
-              in the backend repo.
+              Integration endpoints only. Full platform reference (auth UI flows, analytics, admin):{" "}
+              <code className="text-[var(--accent-bright)]">datacube_documentation.md</code> in the repo root.
             </p>
             <Link
               to={isAuthenticated ? "/dashboard/overview" : "/register"}
@@ -253,13 +255,10 @@ export default function ApiDocsPage() {
               API reference
             </h1>
             <p className="mt-4 text-base text-[var(--text-muted)] sm:text-lg">
-              REST surface for Datacube: JSON bodies, Mongo ObjectIds as
-              24-character hex strings, optional trailing slashes on paths.
-              Throttled auth endpoints may return{" "}
-              <code className="rounded bg-[var(--surface-2)] px-1 font-mono text-sm">
-                429
-              </code>
-              — back off exponentially.
+              REST reference for <strong className="font-medium text-[var(--text-primary)]">developers</strong>{" "}
+              integrating with Datacube: authentication, data CRUD, and files. Each operation includes
+              copy-paste samples in cURL, Python, TypeScript, and JavaScript. Mongo ObjectIds are
+              24-character hex strings; trailing slashes are optional on paths.
             </p>
 
             <div className="mt-8 grid gap-4 sm:grid-cols-2">
@@ -280,13 +279,9 @@ export default function ApiDocsPage() {
                   <strong className="text-[var(--text-primary)]">Auth:</strong>{" "}
                   <code className="font-mono text-xs">/core/</code>
                 </p>
-                <p className="mt-2">
-                  <strong className="text-[var(--text-primary)]">
-                    Analytics:
-                  </strong>{" "}
-                  <code className="font-mono text-xs">
-                    /analytics/api/v2/
-                  </code>
+                <p className="mt-2 text-[var(--text-subtle)]">
+                  Dashboard analytics (<code className="font-mono text-xs">/analytics/api/v2/</code>) are
+                  internal to the SPA — see full docs.
                 </p>
               </div>
             </div>
@@ -341,7 +336,13 @@ export default function ApiDocsPage() {
                         </p>
 
                         <div className="mt-6 space-y-6">
-                          {endpoint.methods.map((method, idx) => (
+                          {endpoint.methods.map((method, idx) => {
+                            const authMode: AuthMode =
+                              method.auth_mode ??
+                              endpoint.auth_mode ??
+                              group.default_auth_mode ??
+                              "bearer";
+                            return (
                             <div
                               key={`${method.method}-${idx}`}
                               className={
@@ -384,6 +385,15 @@ export default function ApiDocsPage() {
                                   <CodeBlock code={method.body} />
                                 </div>
                               ) : null}
+                              <CodeSampleTabs
+                                baseUrl={API_ORIGIN}
+                                method={method.method}
+                                path={endpoint.url}
+                                authMode={authMode}
+                                query={method.params}
+                                body={method.body}
+                                multipart={method.multipart}
+                              />
                               <div className="mt-4">
                                 <h4 className="text-sm font-medium text-[var(--text-primary)]">
                                   Example response
@@ -391,7 +401,8 @@ export default function ApiDocsPage() {
                                 <CodeBlock code={method.response} />
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
 
                         {endpoint.notes ? (
