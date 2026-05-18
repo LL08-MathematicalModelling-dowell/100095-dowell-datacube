@@ -4,6 +4,7 @@ import {
   FileText,
   Home,
   KeyRound,
+  UserCircle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -19,6 +20,7 @@ export const dashboardNavGroups: { label: string; items: NavItem[] }[] = [
     label: "Workspace",
     items: [
       { to: "/dashboard/overview", label: "Databases", icon: Home, requireAuth: true },
+      { to: "/dashboard/profile", label: "Profile", icon: UserCircle, requireAuth: true },
       { to: "/dashboard/api-keys", label: "API Keys", icon: KeyRound, requireAuth: true },
       { to: "/dashboard/billing", label: "Billing", icon: CreditCard, requireAuth: true },
     ],
@@ -31,6 +33,7 @@ export const dashboardNavGroups: { label: string; items: NavItem[] }[] = [
 
 export const mobileNavItems: NavItem[] = [
   { to: "/dashboard/overview", label: "Home", icon: Database, requireAuth: true },
+  { to: "/dashboard/profile", label: "Profile", icon: UserCircle, requireAuth: true },
   { to: "/dashboard/api-keys", label: "Keys", icon: KeyRound, requireAuth: true },
   { to: "/dashboard/billing", label: "Billing", icon: CreditCard, requireAuth: true },
   { to: "/api-docs", label: "Docs", icon: FileText },

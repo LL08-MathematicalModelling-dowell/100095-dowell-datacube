@@ -6,7 +6,9 @@ import {
   PanelLeftClose,
   PanelLeft,
 } from "lucide-react";
+import { UserAvatar } from "./profile/UserAvatar.tsx";
 import useAuthStore from "../store/authStore";
+import useUser from "../store/useUser";
 import { cn } from "../lib/cn";
 import { dashboardNavGroups } from "../lib/navConfig";
 import { useState } from "react";
@@ -18,8 +20,10 @@ type SidebarProps = {
 
 const Sidebar = ({ mobileOpen, onMobileClose }: SidebarProps) => {
   const { isAuthenticated } = useAuthStore();
+  const { user } = useUser();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  const profileActive = location.pathname.startsWith("/dashboard/profile");
 
   const filteredGroups = dashboardNavGroups
     .map((g) => ({
@@ -119,6 +123,39 @@ const Sidebar = ({ mobileOpen, onMobileClose }: SidebarProps) => {
           </div>
         ))}
       </nav>
+
+      {isAuthenticated && (
+        <div
+          className={cn(
+            "border-t border-[var(--border-subtle)] p-3",
+            collapsed && "flex justify-center"
+          )}
+        >
+          <Link
+            to="/dashboard/profile"
+            onClick={onMobileClose}
+            title="Profile & account"
+            className={cn(
+              "flex items-center gap-3 rounded-[var(--radius-md)] px-2 py-2 transition-colors",
+              profileActive
+                ? "bg-[var(--accent-soft)] text-[var(--accent-bright)]"
+                : "text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text-primary)]"
+            )}
+          >
+            <UserAvatar profile={user} size="sm" />
+            {!collapsed && (
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-[var(--text-primary)]">
+                  {user?.firstName || user?.email || "Account"}
+                </p>
+                <p className="truncate text-[11px] text-[var(--text-subtle)]">
+                  Profile & settings
+                </p>
+              </div>
+            )}
+          </Link>
+        </div>
+      )}
 
       <footer
         className={cn(

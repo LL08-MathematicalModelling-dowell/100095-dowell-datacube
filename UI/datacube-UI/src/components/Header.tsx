@@ -13,8 +13,10 @@ import {
   Menu,
   Moon,
   Sun,
+  UserCircle,
   X,
 } from "lucide-react";
+import { UserAvatar } from "./profile/UserAvatar.tsx";
 
 type HeaderProps = {
   onMenuClick?: () => void;
@@ -98,18 +100,24 @@ const Header = ({ onMenuClick }: HeaderProps) => {
         </button>
 
         {isAuthenticated && (
-          <div className="hidden items-center gap-2 sm:flex text-sm text-[var(--text-muted)]">
+          <Link
+            to="/dashboard/profile"
+            className="hidden items-center gap-2 rounded-[var(--radius-md)] border border-transparent px-2 py-1.5 text-sm text-[var(--text-muted)] transition-colors hover:border-[var(--border-subtle)] hover:bg-[var(--surface-2)] sm:flex"
+          >
             {isLoading ? (
-              <span>…</span>
-            ) : user?.firstName ? (
-              <span>
-                Hi,{" "}
-                <span className="font-semibold text-[var(--accent-bright)]">
-                  {user.firstName}
+              <span className="px-2">…</span>
+            ) : (
+              <>
+                <UserAvatar profile={user} size="sm" />
+                <span>
+                  Hi,{" "}
+                  <span className="font-semibold text-[var(--accent-bright)]">
+                    {user?.firstName || "there"}
+                  </span>
                 </span>
-              </span>
-            ) : null}
-          </div>
+              </>
+            )}
+          </Link>
         )}
 
         {!isAuthenticated ? (
@@ -187,6 +195,11 @@ const Header = ({ onMenuClick }: HeaderProps) => {
                     icon={LayoutDashboard}
                   />
                 )}
+                <NavLinkRow
+                  to="/dashboard/profile"
+                  label="Profile"
+                  icon={UserCircle}
+                />
                 {filteredMobile.map((item) => (
                   <NavLinkRow
                     key={item.to}

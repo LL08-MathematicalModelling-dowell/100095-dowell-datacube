@@ -1,52 +1,41 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../services/api";
-import useAuthStore from "../store/authStore";
-
-interface UserResponse {
-  user_id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-}
+import {
+  fetchProfile,
+  PROFILE_QUERY_KEY,
+  type UserProfile,
+} from "../services/profile";
+import useAuthStore from "./authStore";
 
 const useUser = () => {
   const navigate = useNavigate();
-  const { accessToken, logout, firstName } = useAuthStore();
-  
-  const { setAuth } = useAuthStore.getState(); 
+  const { accessToken, logout, setFirstName } = useAuthStore();
 
-  // --- TanStack Query Logic ---
-  const { data, isLoading, error } = useQuery<UserResponse>({
-    queryKey: ["user"],
-    queryFn: async () => {
-      const res = await api.get("/core/profile");
-      return res;
-    },
-    enabled: !!accessToken && !firstName,
+  const { data, isLoading, error, isFetching, refetch } = useQuery<UserProfile>({
+    queryKey: PROFILE_QUERY_KEY,
+    queryFn: fetchProfile,
+    enabled: !!accessToken,
     retry: false,
-    staleTime: 1000 * 60 * 10, // 10 minutes
+    staleTime: 1000 * 60 * 5,
   });
 
   useEffect(() => {
-    const { setFirstName } = useAuthStore.getState();
-
-    if (data && !firstName) {
-      setFirstName(data.firstName); 
+    if (data?.firstName) {
+      setFirstName(data.firstName);
     }
     if (error) {
       logout();
-      navigate("/login", { replace: true }); 
+      navigate("/login", { replace: true });
     }
-  }, [data, error, firstName, logout, navigate, setAuth]); 
-
-  const user = data || (firstName ? { firstName } : null);
+  }, [data, error, logout, navigate, setFirstName]);
 
   return {
-    user,
-    isLoading: isLoading && !!accessToken, 
+    user: data ?? null,
+    isLoading: isLoading && !!accessToken,
+    isFetching,
     error,
+    refetch,
   };
 };
 
