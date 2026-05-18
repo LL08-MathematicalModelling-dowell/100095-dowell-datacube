@@ -206,6 +206,15 @@ def _oauth_error(message: str, status_code=status.HTTP_400_BAD_REQUEST):
     return Response({"error": message}, status=status_code)
 
 
+def _oauth_token_error(token_payload: dict, provider: str):
+    if token_payload.get("access_token"):
+        return None
+    detail = token_payload.get("error_description") or token_payload.get("error")
+    if detail:
+        return _oauth_error(f"{provider} OAuth: {detail}")
+    return _oauth_error(f"{provider} did not return an access token.")
+
+
 class GoogleOAuthPKCEView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
@@ -233,9 +242,10 @@ class GoogleOAuthPKCEView(APIView):
             logger.warning("Google token exchange failed: %s", e)
             return _oauth_error("Google sign-in failed.")
 
-        access_token = token_payload.get("access_token")
-        if not access_token:
-            return _oauth_error("Google did not return an access token.")
+        err = _oauth_token_error(token_payload, "Google")
+        if err:
+            return err
+        access_token = token_payload["access_token"]
 
         try:
             info = google_userinfo(access_token)
@@ -302,9 +312,10 @@ class GitHubOAuthPKCEView(APIView):
             logger.warning("GitHub token exchange failed: %s", e)
             return _oauth_error("GitHub sign-in failed.")
 
-        access_token = token_payload.get("access_token")
-        if not access_token:
-            return _oauth_error("GitHub did not return an access token.")
+        err = _oauth_token_error(token_payload, "GitHub")
+        if err:
+            return err
+        access_token = token_payload["access_token"]
 
         try:
             profile = github_profile(access_token)
