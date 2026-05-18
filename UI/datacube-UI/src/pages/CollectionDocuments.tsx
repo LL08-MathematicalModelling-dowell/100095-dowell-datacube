@@ -82,8 +82,8 @@ const CollectionDocuments = () => {
         database_id: dbId,
         collection_name: collName,
         filters: { _id: payload._id },
-        update_data: { $set: payload.body },
-        update_all_fields: false,
+        update_data: payload.body,
+        update_all_fields: true,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["documents"] });
