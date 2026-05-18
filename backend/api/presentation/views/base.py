@@ -98,6 +98,12 @@ class BaseAPIView(AsyncAPIView):
                         {"success": False, "error": "Forbidden", "detail": str(e)},
                         status=status.HTTP_403_FORBIDDEN,
                     )
+                except PermissionError as e:
+                    BaseAPIView._track(request, None, start_time, error=e)
+                    return Response(
+                        {"success": False, "error": "Forbidden", "detail": str(e)},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
                 except (ValueError, KeyError, TypeError) as e:
                     BaseAPIView._track(request, None, start_time, error=e)
                     return Response({"success": False, "error": "ValidationError", "detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -133,6 +139,18 @@ class BaseAPIView(AsyncAPIView):
                 BaseAPIView._track(request, None, start_time, error=e)
                 status_code = getattr(e, 'status_code', status.HTTP_404_NOT_FOUND if isinstance(e, Http404) else 500)
                 return Response({"success": False, "error": type(e).__name__, "detail": getattr(e, 'detail', str(e))}, status=status_code)
+            except ReadOnlyRoleError as e:
+                BaseAPIView._track(request, None, start_time, error=e)
+                return Response(
+                    {"success": False, "error": "Forbidden", "detail": str(e)},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            except PermissionError as e:
+                BaseAPIView._track(request, None, start_time, error=e)
+                return Response(
+                    {"success": False, "error": "Forbidden", "detail": str(e)},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
             except (ValueError, KeyError, TypeError) as e:
                 BaseAPIView._track(request, None, start_time, error=e)
                 return Response({"success": False, "error": "ValidationError", "detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)

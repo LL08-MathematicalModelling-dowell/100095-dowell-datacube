@@ -19,10 +19,11 @@ from api.presentation.serializers import (
     DocumentQuerySerializer,
 )
 from api.infrastructure.mongodb import (
-    safe_load_filters, 
-    jsonify_object_ids, 
-    normalize_id_filter
+    safe_load_filters,
+    jsonify_object_ids,
+    normalize_id_filter,
 )
+from api.infrastructure.query_safety import validate_filter
 from api.application.document_service import DocumentService
 
 # Analytics tasks
@@ -161,6 +162,8 @@ class DataCrudView(BaseAPIView):
         page_size = params.get("page_size", 50)
         
         filt = safe_load_filters(params.get("filters", "{}"))
+        if filt:
+            validate_filter(filt)
 
         total, docs = await self.doc_svc.list_docs(
             db_id, coll_name, filt, page, page_size
@@ -208,12 +211,12 @@ class DataCrudView(BaseAPIView):
             coll_name=coll_name,
             filt=filt,
             update_data=payload["update_data"],
-            bulk=payload.get("update_all_fields", False)
+            allow_new_fields=payload.get("update_all_fields", False),
+            update_many=payload.get("update_many", False),
+            upsert=payload.get("upsert", False),
         )
 
-        # Count how many documents were updated (estimate from filter complexity)
-        # We don't know exact count before update, but we can pass 0 or use result.modified_count
-        doc_count = result.modified_count  # This is the number of documents modified
+        doc_count = result.modified_count
 
         self._capture_mongo_analytics(
             request, db_id, coll_name,
@@ -223,10 +226,14 @@ class DataCrudView(BaseAPIView):
             start_time=op_start
         )
 
-        return Response({
-            "success": True, 
-            "modified_count": result.modified_count
-        }, status=status.HTTP_200_OK)
+        body = {
+            "success": True,
+            "modified_count": result.modified_count,
+            "matched_count": result.matched_count,
+        }
+        if getattr(result, "upserted_id", None):
+            body["upserted_id"] = str(result.upserted_id)
+        return Response(body, status=status.HTTP_200_OK)
 
     @BaseAPIView.handle_errors
     async def delete(self, request):

@@ -143,7 +143,8 @@ class AsyncPostDocumentSerializer(DocumentBaseSerializer):
     documents = serializers.ListField(
         child=serializers.DictField(),
         min_length=1,
-        help_text="A list containing one or more documents (as JSON objects) to insert."
+        max_length=500,
+        help_text="One to 500 documents (JSON objects) to insert per request.",
     )
 
 
@@ -151,27 +152,68 @@ class UpdateDocumentSerializer(DocumentBaseSerializer):
     """Validates the request for updating documents."""
     
     filters = serializers.JSONField(
-        help_text="A MongoDB query object to select which documents to update."
+        help_text="MongoDB query; must be non-empty. Single-doc updates require _id or id."
     )
     
     update_data = serializers.JSONField(
-        help_text="A MongoDB update object (e.g., using $set)."
+        help_text="Plain field map or allowed update operators ($set, $inc, …)."
     )
     
     update_all_fields = serializers.BooleanField(
         default=False,
-        help_text="Set to true to use $set, otherwise only existing fields are updated."
+        help_text=(
+            "If true, apply update_data with $set/operators (may add new fields). "
+            "If false, only change fields that already exist on each document."
+        ),
+    )
+
+    update_many = serializers.BooleanField(
+        default=False,
+        help_text="If true, update all documents matching filters; otherwise update one.",
+    )
+
+    upsert = serializers.BooleanField(
+        default=False,
+        help_text="If true and filters include _id/id, insert when no document matches (single update only).",
     )
 
     def validate_filters(self, value):
         if not isinstance(value, dict):
             raise serializers.ValidationError("Filters must be a valid JSON object/dictionary.")
+        if not value:
+            raise serializers.ValidationError("filters must not be empty.")
         return value
 
     def validate_update_data(self, value):
         if not isinstance(value, dict):
             raise serializers.ValidationError("Update data must be a valid JSON object/dictionary.")
+        if not value:
+            raise serializers.ValidationError("update_data must not be empty.")
         return value
+
+    def validate(self, attrs):
+        filters = attrs.get("filters") or {}
+        upsert = attrs.get("upsert", False)
+        update_many = attrs.get("update_many", False)
+
+        if upsert and update_many:
+            raise serializers.ValidationError(
+                {"upsert": "Cannot combine upsert with update_many."}
+            )
+        if upsert and "_id" not in filters and "id" not in filters:
+            raise serializers.ValidationError(
+                {"upsert": "Requires _id or id in filters."}
+            )
+        if not update_many and "_id" not in filters and "id" not in filters:
+            raise serializers.ValidationError(
+                {
+                    "filters": (
+                        "Single-document update requires _id or id in filters, "
+                        "or set update_many to true."
+                    )
+                }
+            )
+        return attrs
 
 
 class DeleteDocumentSerializer(DocumentBaseSerializer):
@@ -189,6 +231,8 @@ class DeleteDocumentSerializer(DocumentBaseSerializer):
     def validate_filters(self, value):
         if not isinstance(value, dict):
             raise serializers.ValidationError("Filters must be a valid JSON object/dictionary.")
+        if not value:
+            raise serializers.ValidationError("filters must not be empty.")
         return value
 
 

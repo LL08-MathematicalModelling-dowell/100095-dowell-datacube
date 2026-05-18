@@ -160,47 +160,72 @@ class CollectionService:
             return None
         return await self.db[coll_name].insert_many(docs, session=session)
    
-    async def update_one(self, coll_name: str, filt: Dict, update: Dict, session=None):
-        """Updates exactly one document, following global safety filters."""
+    async def update_one_raw(
+        self,
+        coll_name: str,
+        filt: Dict,
+        update_doc: Dict,
+        *,
+        upsert: bool = False,
+        session=None,
+    ):
+        """Apply a MongoDB update document to at most one non-deleted document."""
         safe_filt = await self._prepare_filter(filt)
-        
         result = await self.db[coll_name].update_one(
-            safe_filt, 
-            {"$set": update}, 
-            session=session
+            safe_filt,
+            update_doc,
+            upsert=upsert,
+            session=session,
         )
-        
-        if result.matched_count == 0:
+        if result.matched_count == 0 and not upsert:
             logger.debug("No document matched filter %s in %s", safe_filt, coll_name)
         elif result.modified_count == 0:
-            logger.debug("Document matched but no fields changed (idempotent update) in %s", coll_name)
-            
+            logger.debug("Document matched but no fields changed in %s", coll_name)
         return result
 
-    async def update_many(self, coll_name: str, filt: Dict, update: Dict, session=None):
-        """Batch updates multiple documents."""
+    async def update_many_raw(self, coll_name: str, filt: Dict, update_doc: Dict, session=None):
+        """Apply a MongoDB update document to all matching non-deleted documents."""
         safe_filt = await self._prepare_filter(filt)
-        
         return await self.db[coll_name].update_many(
             safe_filt,
-            {"$set": update}, 
-            session=session
+            update_doc,
+            session=session,
         )
 
-    async def update_many_existing(self, coll_name: str, filt: Dict, update_data: Dict, session=None):
-        """
-        Optimized pipeline update: Uses build_existing_fields_update_pipeline
-        to ensure only existing fields are modified.
-        """
-        pipeline = build_existing_fields_update_pipeline(update_data)
-        new_filt = self.filter_helper.convert_filter_ids(filt or {})
+    async def update_one_existing_fields(
+        self, coll_name: str, filt: Dict, field_values: Dict, session=None
+    ):
+        """Update only fields that already exist on the matched document (pipeline $set)."""
+        safe_filt = await self._prepare_filter(filt)
+        pipeline = build_existing_fields_update_pipeline(field_values)
+        return await self.db[coll_name].update_one(
+            safe_filt,
+            pipeline,
+            session=session,
+        )
+
+    async def update_many_existing_fields(
+        self, coll_name: str, filt: Dict, field_values: Dict, session=None
+    ):
+        """Batch pipeline update: only modify fields that already exist on each document."""
+        safe_filt = await self._prepare_filter(filt)
+        pipeline = build_existing_fields_update_pipeline(field_values)
         return await self.db[coll_name].update_many(
-            new_filt, 
-            pipeline, 
-            session=session
+            safe_filt,
+            pipeline,
+            session=session,
         )
 
     async def delete_many(self, coll_name: str, filt: Dict, session=None):
-        """Standard batch deletion."""
+        """Hard-delete documents matching filter (includes soft-deleted rows)."""
         new_filt = self.filter_helper.convert_filter_ids(filt or {})
         return await self.db[coll_name].delete_many(new_filt, session=session)
+
+    async def soft_delete_many(self, coll_name: str, filt: Dict, payload: Dict, session=None):
+        """Soft-delete via $set; excludes already-deleted documents."""
+        safe_filt = await self._prepare_filter(filt)
+        return await self.db[coll_name].update_many(
+            safe_filt,
+            {"$set": payload},
+            session=session,
+        )

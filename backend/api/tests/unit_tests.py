@@ -156,3 +156,42 @@ class TestDatabaseOperations:
         assert response.status_code == 201
         assert response.json()["success"] is True
         assert len(response.json()["inserted_ids"]) == 2
+
+    @pytest.mark.django_db
+    def test_crud_put_rejects_empty_filters(self, authenticated_api_client):
+        url = "/api/v2/crud/"
+        data = {
+            "database_id": str(ObjectId()),
+            "collection_name": "users",
+            "filters": {},
+            "update_data": {"status": "active"},
+        }
+        response = authenticated_api_client.put(url, data=data, format="json")
+        assert response.status_code == 400
+        assert response.json()["success"] is False
+
+    @pytest.mark.django_db
+    def test_crud_put_returns_matched_count(self, authenticated_api_client, mocker):
+        database_id = str(ObjectId())
+        mock_result = MagicMock()
+        mock_result.modified_count = 1
+        mock_result.matched_count = 1
+        mock_result.upserted_id = None
+        mocker.patch(
+            "api.application.document_service.DocumentService.update_docs",
+            new=AsyncMock(return_value=mock_result),
+        )
+        url = "/api/v2/crud/"
+        data = {
+            "database_id": database_id,
+            "collection_name": "users",
+            "filters": {"_id": str(ObjectId())},
+            "update_data": {"status": "active"},
+            "update_all_fields": True,
+        }
+        response = authenticated_api_client.put(url, data=data, format="json")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["modified_count"] == 1
+        assert body["matched_count"] == 1
