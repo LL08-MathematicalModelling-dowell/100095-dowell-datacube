@@ -15,6 +15,7 @@ from rest_framework.exceptions import APIException, PermissionDenied
 
 from api.application.metadata_service import MetadataService
 from api.application.gridfs_service import GridFSService
+from api.infrastructure.rbac import ReadOnlyRoleError
 
 # Import analytics tasks
 from analytics.tasks import (
@@ -27,24 +28,38 @@ from analytics.tasks import (
 )
 
 class BaseAPIView(AsyncAPIView):
-    _forced_user_id = None  # Add this to store the owner_id from the signed URL
+    _forced_user_id = None  # Owner from signed file URL (no JWT on stream/download)
+
+    def _resolved_user_id(self) -> str | None:
+        if self._forced_user_id:
+            return str(self._forced_user_id)
+        if self.request.user and self.request.user.is_authenticated:
+            return str(self.request.user.pk)
+        return None
+
+    def _resolved_user_role(self) -> str | None:
+        if self._forced_user_id:
+            return None
+        return getattr(self.request.user, "role", None)
 
     @property
     def file_svc(self):
-        # Use the forced ID if available (for signed URLs), else fall back to request.user
-        uid = self._forced_user_id or (str(self.request.user.pk) if self.request.user and self.request.user.is_authenticated else None)
-        
+        uid = self._resolved_user_id()
         if not uid:
             raise PermissionDenied("User context not found for File Service.")
 
         return GridFSService(
             db_name=settings.FILE_STORAGE_DB_NAME,
-            user_id=uid
+            user_id=uid,
+            role=self._resolved_user_role(),
         )
 
     @property
     def metadata_svc(self):
-        return MetadataService(user_id=str(self.request.user.pk))
+        uid = self._resolved_user_id()
+        if not uid:
+            raise PermissionDenied("User context not found for Metadata Service.")
+        return MetadataService(user_id=uid, role=self._resolved_user_role())
 
     @staticmethod
     def handle_errors(fn: Callable) -> Callable:
@@ -77,6 +92,12 @@ class BaseAPIView(AsyncAPIView):
                     status_code = getattr(e, 'status_code', status.HTTP_404_NOT_FOUND if isinstance(e, Http404) else 500)
                     detail = getattr(e, 'detail', str(e))
                     return Response({"success": False, "error": type(e).__name__, "detail": detail}, status=status_code)
+                except ReadOnlyRoleError as e:
+                    BaseAPIView._track(request, None, start_time, error=e)
+                    return Response(
+                        {"success": False, "error": "Forbidden", "detail": str(e)},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
                 except (ValueError, KeyError, TypeError) as e:
                     BaseAPIView._track(request, None, start_time, error=e)
                     return Response({"success": False, "error": "ValidationError", "detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)

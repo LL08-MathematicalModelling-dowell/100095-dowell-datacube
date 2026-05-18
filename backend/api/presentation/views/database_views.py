@@ -26,11 +26,14 @@ class CreateDatabaseView(BaseAPIView):
 
     @property
     def db_svc(self):
-        return DatabaseService(user_id=str(self.request.user.pk))
+        return DatabaseService(
+            user_id=str(self.request.user.pk),
+            role=getattr(self.request.user, "role", None),
+        )
 
     @property
     def meta_svc(self):
-        return MetadataService(user_id=str(self.request.user.pk))
+        return self.metadata_svc
 
     @BaseAPIView.handle_errors
     async def post(self, request):
@@ -146,7 +149,10 @@ class AddCollectionView(BaseAPIView):
 
     @property
     def db_svc(self):
-        return DatabaseService(user_id=str(self.request.user.pk))
+        return DatabaseService(
+            user_id=str(self.request.user.pk),
+            role=getattr(self.request.user, "role", None),
+        )
 
     @BaseAPIView.handle_errors
     async def post(self, request):

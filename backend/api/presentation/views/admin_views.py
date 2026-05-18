@@ -41,7 +41,7 @@ class ListDatabasesView(BaseAPIView):
 
     @property
     def metadata_svc(self):
-        return MetadataService(user_id=str(self.request.user.pk))
+        return super().metadata_svc
 
     @BaseAPIView.handle_errors
     async def get(self, request):
@@ -102,7 +102,7 @@ class ListCollectionsView(BaseAPIView):
 
     @property
     def metadata_svc(self):
-        return MetadataService(user_id=str(self.request.user.pk))
+        return super().metadata_svc
 
     @BaseAPIView.handle_errors
     async def get(self, request):
@@ -149,7 +149,7 @@ class DropDatabaseView(BaseAPIView):
 
     @property
     def metadata_svc(self):
-        return MetadataService(user_id=str(self.request.user.pk))
+        return super().metadata_svc
 
     @BaseAPIView.handle_errors
     async def delete(self, request):
@@ -165,7 +165,6 @@ class DropDatabaseView(BaseAPIView):
             return Response({"error": "Confirmation mismatch"}, status=400)
         
         await self.metadata_svc.drop_database(db_id)
-        await settings.MONGODB_CLIENT.drop_database(meta["dbName"])
 
         # Analytics
         user_id = str(request.user.pk)
@@ -203,7 +202,7 @@ class DropCollectionsView(BaseAPIView):
 
     @property
     def metadata_svc(self):
-        return MetadataService(user_id=str(self.request.user.pk))
+        return super().metadata_svc
 
     @BaseAPIView.handle_errors
     async def delete(self, request):
@@ -254,7 +253,7 @@ class GetMetadataView(BaseAPIView):
 
     @property
     def metadata_svc(self):
-        return MetadataService(user_id=str(self.request.user.pk))
+        return super().metadata_svc
 
     @BaseAPIView.handle_errors
     async def get(self, request):
@@ -306,7 +305,7 @@ class ImportDataView(BaseAPIView):
 
     @property
     def metadata_svc(self):
-        return MetadataService(user_id=str(self.request.user.pk))
+        return super().metadata_svc
 
     @BaseAPIView.handle_errors
     async def post(self, request):
@@ -391,7 +390,10 @@ class PruneFieldsView(BaseAPIView):
     async def post(self, request):
         db_id = request.data["database_id"]
         dry_run = request.data.get("dry_run", True)
-        result = await MetadataService(user_id=str(request.user.pk)).prune_inactive_fields(
+        result = await MetadataService(
+            user_id=str(request.user.pk),
+            role=getattr(request.user, "role", None),
+        ).prune_inactive_fields(
             db_id=db_id,
             dry_run=dry_run,
         )

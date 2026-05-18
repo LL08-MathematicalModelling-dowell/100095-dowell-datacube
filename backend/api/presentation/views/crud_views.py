@@ -42,15 +42,14 @@ class DataCrudView(BaseAPIView):
     
     @property
     def doc_svc(self):
-        return DocumentService(user_id=str(self.request.user.pk))
+        return DocumentService(
+            user_id=str(self.request.user.pk),
+            role=getattr(self.request.user, "role", None),
+        )
     
     @property
     def metadata_svc(self):
-        """
-        Stateful service injection: Instantiates the service with the 
-        active user's ID for every request.
-        """
-        return MetadataService(user_id=str(self.request.user.pk))
+        return super().metadata_svc
 
     def _capture_mongo_analytics(
             self, request, db_id, collection, 

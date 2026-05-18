@@ -5,6 +5,7 @@ from django.conf import settings
 from bson import ObjectId
 from gridfs.asynchronous import AsyncGridFSBucket
 from api.application.metadata_service import MetadataService
+from api.application.service_context import UserServiceContext
 
 
 logger = logging.getLogger(__name__)
@@ -14,12 +15,21 @@ ProgressCallback = Callable[[int], Awaitable[None]]
 
 class GridFSService:
     """Service for handling file storage and retrieval using MongoDB's GridFS, scoped to individual users."""
-    def __init__(self, db_name: str, user_id: str, chunk_size: int = 1024 * 1024):
-        self.user_id = user_id
-        self.client = settings.MONGODB_CLIENT 
+
+    def __init__(
+        self,
+        db_name: str,
+        user_id: str,
+        *,
+        role: str | None = None,
+        chunk_size: int = 1024 * 1024,
+    ):
+        self.ctx = UserServiceContext(user_id, role=role)
+        self.user_id = self.ctx.user_id
+        self.client = settings.MONGODB_CLIENT
         self.db = self.client[db_name]
         self.bucket = AsyncGridFSBucket(self.db, bucket_name="user_storage", chunk_size_bytes=chunk_size)
-        self.meta_svc = MetadataService(user_id=user_id)
+        self.meta_svc = MetadataService(user_id=self.user_id, role=self.ctx.role)
 
     async def upload_file_stream(
             self, file_stream,
@@ -27,6 +37,7 @@ class GridFSService:
             progress_callback=None
         ) -> str:
         """Uploads a file to GridFS using an async stream."""
+        self.ctx.assert_can_write()
         async with self.bucket.open_upload_stream(
             filename,
             metadata={"contentType": content_type, "user_id": self.user_id}) as grid_in:
@@ -79,6 +90,7 @@ class GridFSService:
 
     async def delete_file(self, file_id: str) -> bool:
         """Deletes a file from GridFS and its metadata entry, scoped to the user."""
+        self.ctx.assert_can_write()
         try:
             entry = await self.meta_svc.get_file_entry(file_id)
             if not entry: return False

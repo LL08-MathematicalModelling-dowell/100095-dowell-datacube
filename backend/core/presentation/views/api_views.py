@@ -4,6 +4,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 
+from api.permissions import IsDeveloperOrAdmin
+
 from core.infrastructure.managers import user_manager
 from core.infrastructure.authentication import api_key_manager
 from api.application.metadata_service import MetadataService
@@ -41,7 +43,10 @@ class UserStatsAPIView(BaseAPIView):
 
     @property
     def metadata_svc(self):
-        return MetadataService(user_id=str(self.request.user.pk))
+        return MetadataService(
+            user_id=str(self.request.user.pk),
+            role=getattr(self.request.user, "role", None),
+        )
 
     @BaseAPIView.handle_errors
     async def get(self, request):
@@ -67,6 +72,11 @@ class APIKeyAPIView(APIView):
     Handles JSON requests for listing, creating, and revoking API keys.
     """
     permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method in ("POST", "DELETE"):
+            return [IsAuthenticated(), IsDeveloperOrAdmin()]
+        return [IsAuthenticated()]
 
     def get(self, request, *args, **kwargs):
         """Returns a JSON list of the user's API keys."""
@@ -110,7 +120,10 @@ class DatabaseDetailAPIView(BaseAPIView):
     @BaseAPIView.handle_errors
     async def get(self, request, db_id, *args, **kwargs):
         user_id = request.user.id
-        meta_svc = MetadataService(user_id)
+        meta_svc = MetadataService(
+            user_id,
+            role=getattr(request.user, "role", None),
+        )
 
         database_meta = await meta_svc.get_db(db_id)
         if not database_meta:
