@@ -197,6 +197,12 @@ class DatacubeObservabilityMiddleware:
         if hasattr(request, 'user') and request.user and request.user.is_authenticated:
             method = request.method
             path = request.path
+
+            # Avoid feedback loop: browsing analytics should not log more analytics.
+            if path.startswith("/analytics/"):
+                return response
+
+            api_v2_path = path.startswith("/api/v2/")
             request_body = {}
             if hasattr(request, '_parsed_json'):
                 request_body = request._parsed_json
@@ -251,8 +257,8 @@ class DatacubeObservabilityMiddleware:
             }
             log_http_request_task.delay(http_data) # type: ignore
 
-            # 2. Database context (if applicable)
-            if db_id or coll_name != 'system':
+            # 2. Database context (views on /api/v2/ log richer db_operations)
+            if (db_id or coll_name != "system") and not api_v2_path:
                 db_data = {
                     "user_id": user_id,
                     "db_id": db_id,
@@ -297,7 +303,18 @@ class DatacubeObservabilityMiddleware:
                 log_error_task.delay(error_data) # type: ignore
 
             # 6. MongoDB details (if any counts)
-            if any(k in mongo_metrics for k in ['inserted_count','modified_count','deleted_count','returned_documents']):
+            if (
+                not api_v2_path
+                and any(
+                    k in mongo_metrics
+                    for k in (
+                        "inserted_count",
+                        "modified_count",
+                        "deleted_count",
+                        "returned_documents",
+                    )
+                )
+            ):
                 detail_data = {
                     "user_id": user_id,
                     "inserted_count": mongo_metrics.get('inserted_count'),
@@ -307,9 +324,9 @@ class DatacubeObservabilityMiddleware:
                 }
                 log_mongo_detail_task.delay(detail_data) # type: ignore
 
-            # 7. Slow query (if duration > threshold)
+            # 7. Slow query (views on /api/v2/ log accurate slow_queries)
             threshold = get_slow_threshold_ms(mongo_metrics.get("operation_type", "unknown"))
-            if duration > threshold:
+            if duration > threshold and not api_v2_path:
                 slow_data = {
                     "user_id": user_id,
                     "query_details": {
