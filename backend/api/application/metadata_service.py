@@ -5,6 +5,16 @@ from django.conf import settings
 from bson import ObjectId
 from pymongo import ReturnDocument
 
+from api.application.service_context import UserServiceContext
+from api.domain.metadata_models import (
+    format_collection_schema,
+    infer_field_type,
+    new_database_metadata,
+    normalize_display_name,
+    serialize_metadata_doc,
+    utc_now,
+)
+
 
 class MetadataService:
     """
@@ -13,11 +23,12 @@ class MetadataService:
     Manages both database metadata (collections) and file metadata (GridFS).
     """
     
-    def __init__(self, user_id: str):
+    def __init__(self, user_id: str, *, role: str | None = None):
         if not user_id:
             raise ValueError("MetadataService requires a valid user_id for operations.")
-        
-        self.user_id = ObjectId(user_id)
+
+        self.ctx = UserServiceContext(user_id, role=role)
+        self.user_id = ObjectId(self.ctx.user_id)
         # Database metadata collection (existing)
         self._coll = settings.METADATA_COLLECTION
         # File metadata collection (new)
@@ -25,40 +36,9 @@ class MetadataService:
         self._client = settings.MONGODB_CLIENT
 
     def _stringify_objectids(self, doc):
-        """Recursively convert ObjectId instances to strings in a document."""
-        if doc is None:
-            return None
-        if isinstance(doc, list):
-            return [self._stringify_objectids(item) for item in doc]
-        if isinstance(doc, dict):
-            result = {}
-            for k, v in doc.items():
-                if isinstance(v, ObjectId):
-                    result[k] = str(v)
-                elif isinstance(v, (dict, list)):
-                    result[k] = self._stringify_objectids(v)
-                else:
-                    result[k] = v
-            return result
-        return doc
+        """Backward-compatible alias for JSON serialization."""
+        return serialize_metadata_doc(doc)
 
-    # ----------------------------------------------------------------------
-    # Existing methods for database metadata (unchanged, kept for context)
-    # ----------------------------------------------------------------------
-    def _format_collection_schema(self, collections: List[Dict]) -> List[Dict]:
-        """Ensures all collection metadata follows a consistent structure."""
-        return [
-            {
-                "name": coll["name"],
-                "created_at": datetime.now(timezone.utc),
-                "fields": [
-                    {"name": f["name"], "type": f.get("type", "string")}
-                    for f in coll.get("fields", [])
-                ]
-            }
-            for coll in collections
-        ]
-        
     def _get_user_filter(self, db_id: Optional[str] = None) -> Dict:
         """Helper to consistently scope queries to the current user."""
         query = {"user_id": self.user_id}
@@ -73,13 +53,13 @@ class MetadataService:
     async def exists_db(self, display_name: str, *, session=None) -> bool:
         """Checks display name uniqueness within the user's scope."""
         query = self._get_user_filter()
-        query["displayName"] = display_name.lower().strip()
+        query["displayName"] = normalize_display_name(display_name)
         return await self._coll.count_documents(query, limit=1, session=session) > 0
 
     async def get_meta_internal_db_name(self, display_name: str) -> Optional[str]:
         """Retrieves the internal DB name for a given display name."""
         query = self._get_user_filter()
-        query["displayName"] = display_name.lower().strip()
+        query["displayName"] = normalize_display_name(display_name)
         doc = await self._coll.find_one(query, {"dbName": 1})
         return doc["dbName"] if doc else None
 
@@ -91,21 +71,19 @@ class MetadataService:
         *,
         session=None
     ) -> Dict:
-        now = datetime.now(timezone.utc)
-        meta = {
-            "user_id": self.user_id,
-            "displayName": user_provided_name.strip(),
-            "dbName": internal_db_name,
-            "created_at": now,
-            "updated_at": now,
-            "collections": self._format_collection_schema(collections),
-        }
+        self.ctx.assert_can_write()
+        meta = new_database_metadata(
+            user_id=self.user_id,
+            display_name=user_provided_name,
+            internal_db_name=internal_db_name,
+            collections=collections,
+        )
         result = await self._coll.insert_one(meta, session=session)
         meta["_id"] = result.inserted_id
         return meta
 
     async def add_collections(self, db_id: str, new_collections: List[Dict], *, session=None) -> List[Dict]:
-        formatted_docs = self._format_collection_schema(new_collections)
+        formatted_docs = format_collection_schema(new_collections)
         updated = await self._coll.find_one_and_update(
             self._get_user_filter(db_id),
             {
@@ -121,6 +99,7 @@ class MetadataService:
 
     async def drop_collections(self, db_id: str, names: List[str], *, session=None) -> List[str]:
         """Drops specified collections from metadata and physical DB, scoped to user permissions."""
+        self.ctx.assert_can_write()
         meta = await self.get_db(db_id)
         if not meta:
             raise ValueError("Database not found or permission denied.")
@@ -147,6 +126,7 @@ class MetadataService:
 
     async def drop_database(self, db_id: str, *, session=None) -> Dict:
         """Drops the entire database (metadata + physical) scoped to user permissions."""
+        self.ctx.assert_can_write()
         meta = await self._coll.find_one_and_delete(self._get_user_filter(db_id), session=session)
         if not meta:
             raise PermissionError("Access denied or Database not found.")
@@ -201,28 +181,14 @@ class MetadataService:
                 results.append({"name": col_name, "num_documents": 0, "error": "Unreachable"})
         return results
 
-    def _infer_type(self, value: Any) -> str:
-        """Basic type inference for schema generation."""
-        if value is None: return "null"
-        if isinstance(value, bool): return "boolean"
-        if isinstance(value, int): return "integer"
-        if isinstance(value, float): return "float"
-        if isinstance(value, str): return "string"
-        if isinstance(value, datetime): return "date"
-        if isinstance(value, ObjectId): return "objectid"
-        if isinstance(value, list):
-            inner_type = self._infer_type(value[0]) if value else "any"
-            return f"array<{inner_type}>"
-        if isinstance(value, dict): return "object"
-        return "unknown"
-
     def _generate_schema_from_docs(self, docs: List[Dict]) -> Dict[str, str]:
         """Generates a field schema by inferring types from a sample of documents."""
         field_map = collections.defaultdict(set)
         for doc in docs:
             for key, val in doc.items():
-                if key.startswith("_"): continue
-                field_map[key].add(self._infer_type(val))
+                if key.startswith("_"):
+                    continue
+                field_map[key].add(infer_field_type(val))
         return {k: ", ".join(sorted(v)) for k, v in field_map.items()}
 
     async def update_collection_schema_inference(self, db_id: str, coll_name: str, sample_docs: List[Dict]):
@@ -263,7 +229,7 @@ class MetadataService:
                     "user_id": self.user_id,
                     "collections.name": coll_name
                 },
-                {"$set": {"collections.$.fields": updated_fields_list, "updated_at": datetime.now()}}
+                {"$set": {"collections.$.fields": updated_fields_list, "updated_at": utc_now()}}
             )
 
     async def prune_inactive_fields(self, db_id: str, dry_run: bool = True) -> Dict[str, Any]:
@@ -302,14 +268,19 @@ class MetadataService:
                 {"$group": {"_id": None, "active_keys": {"$addToSet": "$fields.k"}}}
             ]
             try:
-                agg_result = list(db[coll_name].aggregate(pipeline))
-                active_fields = set(agg_result[0]["active_keys"] if agg_result else [])
+                cursor = db[coll_name].aggregate(pipeline)
+                agg_result = await cursor.to_list(length=1)
+                active_fields = set(
+                    agg_result[0]["active_keys"] if agg_result else []
+                )
                 current_metadata_fields = {f["name"] for f in coll_meta.get("fields", [])}
                 inactive_fields = current_metadata_fields - active_fields
 
                 if inactive_fields:
                     if not dry_run:
-                        self._perform_prune_update(db_id, coll_name, list(inactive_fields))
+                        await self._perform_prune_update(
+                            db_id, coll_name, list(inactive_fields)
+                        )
                     total_removed += len(inactive_fields)
                     report["collections_processed"].append({
                         "name": coll_name,
@@ -325,23 +296,25 @@ class MetadataService:
         report["total_removed_count"] = total_removed
         return report
 
-    def _perform_prune_update(self, db_id: str, coll_name: str, fields_to_remove: list):
-        """Performs the actual update to remove inactive fields from collection metadata."""
-        self._coll.update_one(
+    async def _perform_prune_update(
+        self, db_id: str, coll_name: str, fields_to_remove: list
+    ) -> None:
+        """Remove inactive fields from collection metadata."""
+        await self._coll.update_one(
             {
                 "_id": ObjectId(db_id),
                 "user_id": self.user_id,
-                "collections.name": coll_name
+                "collections.name": coll_name,
             },
             {
                 "$pull": {
                     "collections.$.fields": {"name": {"$in": fields_to_remove}}
                 },
                 "$set": {
-                    "pruning.last_pruned_at": datetime.now(timezone.utc),
-                    "updated_at": datetime.now(timezone.utc)
-                }
-            }
+                    "pruning.last_pruned_at": utc_now(),
+                    "updated_at": utc_now(),
+                },
+            },
         )
 
     async def check_quota_is_exceeded(self) -> bool:
@@ -393,6 +366,7 @@ class MetadataService:
         Creates a file metadata entry after a successful GridFS upload.
         The file_id is the GridFS ObjectId as a string.
         """
+        self.ctx.assert_can_write()
         now = datetime.now(timezone.utc)
         entry = {
             "user_id": self.user_id,
@@ -415,6 +389,7 @@ class MetadataService:
         Deletes a file metadata entry scoped to the user.
         Returns True if a document was deleted, False otherwise.
         """
+        self.ctx.assert_can_write()
         result = await self._file_coll.delete_one(
             self._get_file_user_filter(file_id),
             session=session
