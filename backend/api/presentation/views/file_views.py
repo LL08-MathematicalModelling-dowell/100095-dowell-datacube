@@ -13,7 +13,12 @@ from gridfs.grid_file import ObjectId
 
 from api.presentation.views.base import BaseAPIView
 from api.presentation.file_serializer import FileUploadSerializer, FileListQuerySerializer
-from api.infrastructure.signing import generate_signed_url, verify_signed_url
+from api.infrastructure.signing import generate_signed_url
+from api.infrastructure.signed_file_access import (
+    SignedFileAccessError,
+    authorize_signed_file_request,
+    unauthorized_response,
+)
 
 # Analytics tasks
 from analytics.tasks import (
@@ -289,6 +294,16 @@ class FileDetailView(BaseAPIView):
         return Response({"success": False, "message": "File not found"}, status=status.HTTP_404_NOT_FOUND)
 
 
+async def _resolve_signed_file_owner(view: BaseAPIView, request, file_id: str):
+    """Validate sig query params and set view._forced_user_id for GridFS access."""
+    try:
+        owner_id, _, _ = await authorize_signed_file_request(request, file_id)
+    except SignedFileAccessError as exc:
+        return None, unauthorized_response(str(exc))
+    view._forced_user_id = owner_id
+    return owner_id, None
+
+
 class FileStreamView(BaseAPIView):
     """
     Stream a file using a signed URL (no JWT/api_key required in query).
@@ -344,51 +359,9 @@ class FileStreamView(BaseAPIView):
     async def get(self, request, file_id):
         start_time = time.perf_counter()
 
-        # ----- Signed URL validation -----
-        expires = request.GET.get('expires')
-        signature = request.GET.get('sig')
-        if not expires or not signature:
-            return Response(
-                {"success": False, "detail": "Missing signature parameters."},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
-
-        try:
-            expires_int = int(expires)
-        except ValueError:
-            return Response(
-                {"success": False, "detail": "Invalid expiration."},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
-
-        # 2. Get the "System" bucket (unscoped) to find out who owns this file
-        from gridfs.asynchronous import AsyncGridFSBucket # type: ignore
-
-        
-        client = settings.MONGODB_CLIENT
-        db = client[settings.FILE_STORAGE_DB_NAME]
-        system_bucket = AsyncGridFSBucket(db, bucket_name="user_storage")
-
-        try:
-            # We use find_one to get metadata without opening a full stream yet
-            file_doc = system_bucket.find({"_id": ObjectId(file_id)}).limit(1)
-            if not file_doc:
-                raise Http404("File not found")
-            
-            file_doc = await file_doc.to_list()
-            if not file_doc or len(file_doc) == 0:
-                raise Http404("File not found")
-            
-            owner_id = file_doc[0].metadata.get("user_id")
-        except Exception as e:
-            raise Http404(f"Error fetching file metadata for streaming: {e}")
-
-        # 3. Validate Signature with the owner_id we just found
-        if not verify_signed_url(file_id, owner_id, int(expires), signature):
-            return Response({"detail": "Invalid/Expired signature"}, status=401)
-
-        # 4. Success! Now set the ID so self.file_svc works
-        self._forced_user_id = owner_id
+        owner_id, err = await _resolve_signed_file_owner(self, request, file_id)
+        if err:
+            return err
 
         # ----- Proceed with streaming -----
         try:
@@ -550,52 +523,9 @@ class FileDownloadView(BaseAPIView):
     async def get(self, request, file_id):
         start_time = time.perf_counter()
 
-        # ----- Signed URL validation -----
-        expires = request.GET.get('expires')
-        signature = request.GET.get('sig')
-        if not expires or not signature:
-            return Response(
-                {"success": False, "detail": "Missing signature parameters."},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
-
-        try:
-            expires_int = int(expires)
-        except ValueError:
-            return Response(
-                {"success": False, "detail": "Invalid expiration."},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
-
-
-        # 2. Get the "System" bucket (unscoped) to find out who owns this file
-        from gridfs.asynchronous import AsyncGridFSBucket # type: ignore
-
-        
-        client = settings.MONGODB_CLIENT
-        db = client[settings.FILE_STORAGE_DB_NAME]
-        system_bucket = AsyncGridFSBucket(db, bucket_name="user_storage")
-
-        try:
-            # We use find_one to get metadata without opening a full stream yet
-            file_doc = system_bucket.find({"_id": ObjectId(file_id)}).limit(1)
-            if not file_doc:
-                raise Http404("File not found")
-            
-            file_doc = await file_doc.to_list()
-            if not file_doc or len(file_doc) == 0:
-                raise Http404("File not found")
-            
-            owner_id = file_doc[0].metadata.get("user_id")
-        except Exception as e:
-            raise Http404(f"Error fetching file metadata for download: {e}")
-
-        # 3. Validate Signature with the owner_id we just found
-        if not verify_signed_url(file_id, owner_id, int(expires), signature):
-            return Response({"detail": "Invalid/Expired signature"}, status=401)
-
-        # 4. Success! Now set the ID so self.file_svc works
-        self._forced_user_id = owner_id
+        owner_id, err = await _resolve_signed_file_owner(self, request, file_id)
+        if err:
+            return err
 
         # ----- Read file (in‑memory) -----
         try:
