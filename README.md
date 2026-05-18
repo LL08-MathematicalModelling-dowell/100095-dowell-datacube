@@ -1,14 +1,25 @@
 # Datacube V2
 
-MongoDB-backed **database and document platform** with a Django REST API, JWT/API-key authentication, optional analytics, and a React dashboard UI.
+MongoDB-backed **database and document platform** with a Django REST API, JWT/API-key authentication, analytics dashboards, and a React operator UI.
+
+## Documentation
+
+| Document | Audience | Contents |
+|----------|----------|----------|
+| **[datacube_documentation.md](datacube_documentation.md)** | Everyone | Full platform reference — architecture, all APIs, roles, setup |
+| **[backend/docs/FRONTEND_API_GUIDE.md](backend/docs/FRONTEND_API_GUIDE.md)** | SPA authors | Auth flows, profile, CRUD semantics for the dashboard |
+| **In-app `/api-docs`** | Integrators | Curated developer APIs with cURL, Python, TypeScript, and JavaScript samples |
+
+Start with **datacube_documentation.md** for the complete picture; use the UI API reference when building integrations.
 
 ## Repository layout
 
 | Path | Purpose |
 |------|---------|
-| `backend/` | Django project: data plane (`api`), auth and billing (`core`), observability (`analytics`) |
-| `UI/datacube-UI/` | React SPA for dashboards and account flows |
-| `_frontend_old_nextjs/`, `_Datacube_api_libraries_old/` | Legacy snapshots (not part of the active architecture) |
+| `backend/` | Django project: data plane (`api`), auth (`core`), observability (`analytics`) |
+| `UI/datacube-UI/` | React SPA — dashboards, account, developer API reference |
+| `datacube_documentation.md` | Canonical full API & project documentation |
+| `_frontend_old_nextjs/`, `_Datacube_api_libraries_old/` | Legacy snapshots (not part of active architecture) |
 
 ## Backend: layered architecture
 
@@ -18,10 +29,10 @@ The Django apps stay named `api`, `core`, and `analytics` (migrations and `INSTA
 
 | Layer | Package | Responsibility |
 |-------|---------|----------------|
-| **Presentation** | `api.presentation` | DRF serializers (`serializers.py`, `file_serializer.py`), URLconf (`urls_v2.py`), and HTTP views under `api.presentation.views` |
-| **Application** | `api.application` | Orchestration services: metadata, databases, collections, documents, GridFS |
+| **Presentation** | `api.presentation` | DRF serializers, `urls_v2.py`, HTTP views |
+| **Application** | `api.application` | Metadata, databases, collections, documents, GridFS |
 | **Infrastructure** | `api.infrastructure` | Mongo helpers, naming, signing URL helpers, validators |
-| **Cross-cutting** | `api/` root | `middleware.py`, `permissions.py`, `models.py`, `admin.py`, `migrations/` |
+| **Cross-cutting** | `api/` root | `middleware.py`, `permissions.py`, `models.py` |
 
 Views inherit from `BaseAPIView` in `api.presentation.views.base`, which wires analytics hooks and shared error handling.
 
@@ -29,47 +40,35 @@ Views inherit from `BaseAPIView` in `api.presentation.views.base`, which wires a
 
 | Layer | Package |
 |-------|---------|
-| **Presentation** | `core.presentation` — `urls.py`, `serializers.py`, `views/` (auth, profile, API keys, Stripe webhooks) |
-| **Infrastructure** | `core.infrastructure` — `authentication.py`, `db.py`, `managers.py` (Mongo user and auth DB access) |
+| **Presentation** | `core.presentation` — `urls.py`, serializers, views (auth, profile, API keys) |
+| **Infrastructure** | `core.infrastructure` — `authentication.py`, `managers.py` (Mongo user and auth DB) |
 
-DRF is configured to use `core.infrastructure.authentication.CustomJWTAuthentication` and `APIKeyAuthentication`.
-
-**API reference for frontend teams:** [backend/docs/FRONTEND_API_GUIDE.md](backend/docs/FRONTEND_API_GUIDE.md).
+DRF uses `core.infrastructure.authentication.CustomJWTAuthentication` and `APIKeyAuthentication`.
 
 ### `analytics`
 
-Task and middleware code for usage logging and dashboard APIs; URLs live in `analytics/urls.py` under the global prefix `analytics/api/v2/`.
+Task and middleware code for usage logging and dashboard APIs; URLs in `analytics/urls.py` under `analytics/api/v2/`.
 
 ## HTTP surface (prefixes)
 
-These are mounted from `backend/project/urls.py`:
+Mounted from `backend/project/urls.py`:
 
 | Prefix | App | Examples |
 |--------|-----|----------|
 | `/api/v2/` | `api` | `create_database/`, `crud/`, `files/`, `health_check/` |
-| `/core/` | `core` | `register/`, `login/`, `profile/`, `api/v1/keys/` |
+| `/core/` | `core` | `login/`, `profile/`, `api/v1/keys/` |
 | `/analytics/api/v2/` | `analytics` | `dashboard/`, `performance/`, … |
 | `/admin/` | Django | Admin site |
 
-Production host may differ; replace the host in examples with your deployment base URL.
+See [datacube_documentation.md §5–9](datacube_documentation.md#5-http-surface) for every endpoint.
 
-### Health check
+### Quick example: health check
 
 ```bash
 curl -sS "https://<host>/api/v2/health_check/"
 ```
 
-Example JSON shape:
-
-```json
-{
-  "success": true,
-  "status": "healthy",
-  "timestamp": "2026-05-15T12:00:00"
-}
-```
-
-### Example: create a database (authenticated)
+### Quick example: create a database (authenticated)
 
 ```bash
 curl -X POST "https://<host>/api/v2/create_database/" \
@@ -104,9 +103,11 @@ Required for `project.settings.common` (MongoDB and file storage):
 - `FILE_STORAGE_DB_NAME`
 - `SECRET_KEY` (set per environment; never commit real secrets)
 
-Optional and feature-specific variables (Stripe, demo login, etc.) are read where those modules are used.
+Optional variables (Stripe, OAuth, demo login, email) are documented in [datacube_documentation.md §4](datacube_documentation.md#4-configuration) and `backend/.env.example`.
 
 ## Local development
+
+### Backend
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then:
 
@@ -123,9 +124,17 @@ uv run python manage.py migrate
 uv run python manage.py runserver
 ```
 
-This creates `.venv/` from `uv.lock` (committed). Use `uv sync --no-dev` for a slimmer install without pytest or linters.
-
 Use `project.settings.development` (default in `manage.py`) unless you override `DJANGO_SETTINGS_MODULE`.
+
+### Frontend
+
+```bash
+cd UI/datacube-UI
+npm install
+npm run dev
+```
+
+Set `VITE_API_BASE` if the API is not on `http://127.0.0.1:8000`. Open `/api-docs` for the developer API reference with multi-language samples.
 
 ## Tests
 
@@ -136,12 +145,7 @@ export SECRET_KEY=test MONGODB_URI=mongodb://localhost:27017 \
 uv run pytest api/tests analytics/tests -q
 ```
 
-API tests mock MongoDB services and Celery `.delay` calls so they do not require Redis or a live broker.
-
-## Documentation and API clients
-
-- Primary API examples for `/api/v2/` are maintained in this README and in `backend/README.md`.
-- Use JWT from `/core/login/` or API keys where enabled, then call `/api/v2/*` with `Authorization: Bearer <token>`.
+API tests mock MongoDB services and Celery `.delay` calls — no Redis or live broker required.
 
 ## Contributing
 
