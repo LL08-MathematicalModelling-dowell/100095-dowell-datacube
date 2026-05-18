@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
+import { QueryErrorBlock, RefreshButton } from './ui/QueryRefresh';
+import { cn } from '../lib/cn';
 
 /** TypeScript Interfaces for the API Response **/
 export interface FileMetadata {
@@ -35,14 +37,15 @@ const FilesSection = () => {
   const pageSize = 10;
 
   // 1. Fetch Files & Stats
-  const { data, isLoading } = useQuery<FileListResponse>({
+  const { data, isLoading, isError, isFetching, refetch } = useQuery<FileListResponse>({
     queryKey: ['files', page],
     queryFn: async () => {
       const response = await api.get(`/api/v2/files/?page=${page}&page_size=${pageSize}`);
       return response;
     },
-    // keepPreviousData: true is deprecated in v5, use placeholderData if on newest TanStack
   });
+
+  const isRefreshing = isFetching && !isLoading;
 
   const files = data?.data || [];
   const stats = data?.stats || { total_files: 0, total_storage_bytes: 0 };
@@ -94,19 +97,32 @@ const FilesSection = () => {
           </div>
         </div>
         
-        <label className="flex cursor-pointer items-center gap-2 rounded-lg bg-[var(--accent)] px-6 py-2.5 font-semibold text-white shadow-[var(--shadow-sm)] transition-all hover:opacity-95">
-          <input type="file" className="hidden" onChange={handleFileUpload} disabled={uploadMutation.isPending} />
-          <svg xmlns="http://www.w3.org" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          {uploadMutation.isPending ? 'Uploading...' : 'Upload File'}
-        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <RefreshButton
+            onClick={() => refetch()}
+            isRefreshing={isRefreshing}
+            label="Reload files"
+          />
+          <label className="flex cursor-pointer items-center gap-2 rounded-lg bg-[var(--accent)] px-6 py-2.5 font-semibold text-white shadow-[var(--shadow-sm)] transition-all hover:opacity-95">
+            <input type="file" className="hidden" onChange={handleFileUpload} disabled={uploadMutation.isPending} />
+            <svg xmlns="http://www.w3.org" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            {uploadMutation.isPending ? 'Uploading...' : 'Upload File'}
+          </label>
+        </div>
       </div>
 
-      {isLoading ? (
+      {isError ? (
+        <QueryErrorBlock
+          message="Could not load files."
+          onRetry={() => refetch()}
+          isRefreshing={isRefreshing}
+        />
+      ) : isLoading ? (
         <div className="animate-pulse space-y-3">
           {[...Array(3)].map((_, i) => <div key={i} className="h-16 rounded-lg bg-[var(--surface-2)]/50" />)}
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className={cn('space-y-2', isRefreshing && 'opacity-70')}>
           {files.map((file) => (
             <div 
               key={file.file_id}

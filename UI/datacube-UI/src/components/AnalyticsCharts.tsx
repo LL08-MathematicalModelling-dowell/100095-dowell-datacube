@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useQuery } from "@tanstack/react-query";
+import { useIsFetching, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO, isValid } from "date-fns";
 import { useMemo, useState } from "react";
 import {
@@ -30,8 +30,20 @@ import {
   PieChart as PieIcon,
 } from "lucide-react";
 import api from "../services/api";
+import { QueryErrorBlock, RefreshButton } from "./ui/QueryRefresh";
 import { cn } from "../lib/cn";
 import { useThemeStore } from "../store/themeStore";
+
+const TAB_QUERY_KEYS: Record<string, string[][]> = {
+  overview: [["analytics", "dashboard"]],
+  performance: [["analytics", "performance"]],
+  errors: [["analytics", "errors"]],
+  collections: [["analytics", "top-collections"]],
+  endpoints: [["analytics", "endpoint-volume"]],
+  operations: [["analytics", "operation-breakdown"], ["analytics", "dashboard"]],
+  storage: [["analytics", "storage-trend"]],
+  slow: [["analytics", "slow-queries"]],
+};
 
 const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
 
@@ -69,6 +81,8 @@ type TabId = (typeof tabConfig)[number]["id"];
 const AnalyticsCharts = () => {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const themeMode = useThemeStore((s) => s.mode);
+  const queryClient = useQueryClient();
+  const analyticsFetching = useIsFetching({ queryKey: ["analytics"] });
 
   const axisProps = useMemo(
     () => ({
@@ -169,6 +183,17 @@ const AnalyticsCharts = () => {
 
   const isLoading = dashboardLoading || perfLoading || errorsLoading || topLoading;
   const hasError = dashboardError || perfError || errorsErr || topErr;
+  const isRefreshing = analyticsFetching > 0 && !isLoading;
+
+  const refreshTab = () => {
+    (TAB_QUERY_KEYS[activeTab] ?? []).forEach((key) =>
+      queryClient.invalidateQueries({ queryKey: key })
+    );
+  };
+
+  const refreshAll = () => {
+    queryClient.invalidateQueries({ queryKey: ["analytics"] });
+  };
 
   const dailyData = useMemo(() => {
     const dr = (dashboard as any)?.daily_requests;
@@ -227,14 +252,28 @@ const AnalyticsCharts = () => {
 
   if (hasError) {
     return (
-      <div className="rounded-[var(--radius-md)] border border-[var(--danger-soft)] bg-[var(--danger-soft)] px-4 py-3 text-[var(--danger)]">
-        Could not load analytics. Check your connection and try again.
-      </div>
+      <QueryErrorBlock
+        message="Could not load analytics. Check your connection and try again."
+        onRetry={refreshAll}
+        isRefreshing={isRefreshing}
+      />
     );
   }
 
   return (
-    <div className="space-y-6" data-theme={themeMode}>
+    <div className={cn("space-y-6", isRefreshing && "opacity-90")} data-theme={themeMode}>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <RefreshButton
+          onClick={refreshTab}
+          isRefreshing={isRefreshing}
+          label="Reload tab"
+        />
+        <RefreshButton
+          onClick={refreshAll}
+          isRefreshing={isRefreshing}
+          label="Reload all"
+        />
+      </div>
       <div className="flex flex-wrap gap-2 border-b border-[var(--border-subtle)] pb-1 rounded-t-[var(--radius-md)]">
         {tabConfig.map((tab) => {
           const Icon = tab.icon;

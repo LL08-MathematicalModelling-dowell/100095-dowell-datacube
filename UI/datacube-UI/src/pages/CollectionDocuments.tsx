@@ -4,7 +4,6 @@ import Editor from "@monaco-editor/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  AlertCircle,
   ArrowLeft,
   CheckCircle,
   ChevronLeft,
@@ -23,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { Link, useParams } from "react-router-dom";
 import { JsonTreeView } from "../components/documents/JsonTreeView";
+import { QueryErrorBlock, RefreshButton } from "../components/ui/QueryRefresh";
 import { cn } from "../lib/cn";
 import api from "../services/api";
 import { useThemeStore } from "../store/themeStore";
@@ -49,7 +49,7 @@ const CollectionDocuments = () => {
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<Monaco | null>(null);
 
-  const { data, isLoading, error, isFetching } = useQuery({
+  const { data, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: ["documents", dbId, collName, page],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -61,6 +61,8 @@ const CollectionDocuments = () => {
       return api.get(`${CRUD_URL}?${params}`);
     },
   });
+
+  const isRefreshing = isFetching && !isLoading;
 
   const deleteMutation = useMutation({
     mutationFn: (docId: string) =>
@@ -195,11 +197,21 @@ const CollectionDocuments = () => {
     );
   }
 
-  if (error) {
+  if (isError && !data) {
     return (
-      <div className="py-20 text-center">
-        <AlertCircle className="mx-auto mb-4 h-14 w-14 text-[var(--danger)]" />
-        <p className="text-lg text-[var(--text-muted)]">Could not load documents</p>
+      <div className="space-y-6 py-8">
+        <Link
+          to={`/dashboard/database/${dbId}`}
+          className="inline-flex items-center gap-2 text-sm font-medium text-[var(--accent-bright)] hover:underline"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to database
+        </Link>
+        <QueryErrorBlock
+          message="Could not load documents."
+          onRetry={() => refetch()}
+          isRefreshing={isRefreshing}
+        />
       </div>
     );
   }
@@ -225,11 +237,17 @@ const CollectionDocuments = () => {
           </h1>
           <p className="mt-1 text-[var(--text-muted)]">
             {pagination?.total_items ?? 0} documents
-            {isFetching && (
+            {isRefreshing && (
               <RefreshCw className="ml-2 inline h-3.5 w-3.5 animate-spin" />
             )}
           </p>
         </div>
+        <RefreshButton
+          onClick={() => refetch()}
+          isRefreshing={isRefreshing}
+          label="Reload documents"
+          size="md"
+        />
       </div>
 
       {docs.length === 0 ? (

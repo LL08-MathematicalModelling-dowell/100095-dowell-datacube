@@ -1,6 +1,9 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
+import { RefreshButton } from "../components/ui/QueryRefresh";
+import { cn } from "../lib/cn";
 import api, { API_ORIGIN } from "../services/api";
 
 // Reusable API endpoint (adjust if your base URL differs)
@@ -37,14 +40,15 @@ const FileDetail = () => {
   const queryClient = useQueryClient();
 
   // Fetch file metadata (the API returns { success: true, info: {...} })
-  const { data: file, isLoading, error } = useQuery<FileMetadata>({
+  const { data: file, isLoading, isError, isFetching, refetch } = useQuery<FileMetadata>({
     queryKey: ['file', fileId],
     queryFn: async () => {
       const res = await api.get(`${API_BASE}/files/${fileId}/`);
-      // Assuming response: { success: true, info: {...} }
       return res.info;
     },
   });
+
+  const isRefreshing = isFetching && !isLoading;
 
   const deleteMutation = useMutation({
     mutationFn: () => api.delete(`${API_BASE}/files/${fileId}/`),
@@ -93,19 +97,34 @@ const FileDetail = () => {
     );
   }
 
-  if (error || !file) {
+  if (isError || !file) {
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center bg-[var(--surface-0)] px-4 text-[var(--text-primary)]">
         <p className="mb-4 text-xl">File not found or access denied.</p>
-        <button
-          type="button"
-          onClick={() => navigate("/dashboard/overview")}
-          className="font-medium text-[var(--accent-bright)] hover:underline"
-        >
-          Back to overview
-        </button>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isRefreshing}
+            className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+          >
+            <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+            Retry
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/dashboard/overview")}
+            className="font-medium text-[var(--accent-bright)] hover:underline"
+          >
+            Back to overview
+          </button>
+        </div>
       </div>
     );
+  }
+
+  if (!file) {
+    return null;
   }
 
   const previewSrc = resolveMediaUrl(file.signed_url);
@@ -179,7 +198,13 @@ const FileDetail = () => {
               </div>
             </div>
 
-            <button
+            <div className="flex items-center gap-2">
+              <RefreshButton
+                onClick={() => refetch()}
+                isRefreshing={isRefreshing}
+                label="Reload"
+              />
+              <button
               type="button"
               onClick={() => {
                 if (
@@ -207,9 +232,10 @@ const FileDetail = () => {
                 <line x1="14" y1="11" x2="14" y2="17" />
               </svg>
             </button>
+            </div>
           </div>
 
-          <div className="p-8">
+          <div className={cn("p-8", isRefreshing && "opacity-70")}>
             {/* Preview for images */}
             {isImage && previewSrc ? (
               <div className="mb-8 flex justify-center rounded-[var(--radius-md)] bg-[var(--surface-0)] p-4">
