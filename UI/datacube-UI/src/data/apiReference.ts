@@ -406,10 +406,16 @@ export const apiDocs: ApiGroup[] = [
               database_id: "<24_hex>",
               collection_name: "users",
               filters: { _id: "<24_hex>" },
-              update_data: { $set: { status: "active" } },
-              update_all_fields: false,
+              update_data: { status: "active" },
+              update_all_fields: true,
+              update_many: false,
+              upsert: false,
             }),
-            response: j({ success: true, modified_count: 1 }),
+            response: j({
+              success: true,
+              modified_count: 1,
+              matched_count: 1,
+            }),
           },
           {
             method: "DELETE",
@@ -423,7 +429,7 @@ export const apiDocs: ApiGroup[] = [
           },
         ],
         notes:
-          "soft_delete true (default) sets is_deleted; false hard-deletes matching docs.",
+          "POST: max 500 documents. PUT/DELETE: filters required; single update needs _id. update_all_fields=true allows new fields; false patches existing fields only. upsert with _id creates if missing. soft_delete true (default) sets is_deleted.",
       },
       {
         name: "Files (GridFS)",
