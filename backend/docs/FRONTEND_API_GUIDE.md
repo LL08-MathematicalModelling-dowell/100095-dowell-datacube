@@ -364,6 +364,14 @@ Query params use `ListQuerySerializer`: optional **`filters`** (JSON) not used h
 
 **Analyst** may only use **safe** methods (**GET**). **Developer/admin** may write.
 
+**Safety rules (PUT/DELETE):**
+
+- `filters` must be a **non-empty** object.
+- Default (single) update: `filters` must include **`_id`** or **`id`**.
+- Multi-document update: set **`update_many`: true** (filters still required, e.g. `{ "status": "pending" }`).
+- Dangerous filter operators (e.g. `$where`) are rejected.
+- Unknown DB/collection → **403** (not 500).
+
 #### Insert — `POST`
 
 ```json
@@ -373,6 +381,10 @@ Query params use `ListQuerySerializer`: optional **`filters`** (JSON) not used h
   "documents": [{ "username": "alice" }, { "username": "bob" }]
 }
 ```
+
+| Limit | Value |
+|-------|--------|
+| Max documents per request | **500** |
 
 **201** — `{ "success": true, "inserted_ids": ["..."] }`  
 **403** — storage quota exceeded.
@@ -385,9 +397,11 @@ Query string parameters:
 |-------|-------------|
 | `database_id` | Required |
 | `collection_name` | Required |
-| `filters` | JSON object string (Mongo filter) |
+| `filters` | Optional JSON object (Mongo filter); omit or `{}` for all active rows |
 | `page` | Default 1 |
 | `page_size` | Default 50, max 1000 |
+
+Soft-deleted documents (`is_deleted: true`) are excluded from results.
 
 **200** — `{ "success", "data", "pagination": { "page", "page_size", "total_items", "total_pages" } }`
 
@@ -397,13 +411,56 @@ Query string parameters:
 {
   "database_id": "<24_hex_objectid>",
   "collection_name": "users",
-  "filters": { "_id": "<24_hex_or_field_query>" },
-  "update_data": { "$set": { "status": "active" } },
-  "update_all_fields": false
+  "filters": { "_id": "<24_hex_objectid>" },
+  "update_data": { "status": "active" },
+  "update_all_fields": true,
+  "update_many": false,
+  "upsert": false
 }
 ```
 
-**200** — `{ "success": true, "modified_count": n }`
+| Field | Default | Meaning |
+|-------|---------|---------|
+| `update_data` | — | Plain field map **or** allowed operators (`$set`, `$inc`, `$unset`, …) |
+| `update_all_fields` | `false` | `true`: full `$set`/operators (may add fields). `false`: only change fields that already exist on each doc |
+| `update_many` | `false` | `true`: update every match; `false`: single-document (requires `_id`/`id` in filters) |
+| `upsert` | `false` | With `_id`/`id` filter, create document if none matches (`update_many` must be `false`) |
+
+**Examples**
+
+- Patch one field on one doc (UI-friendly):
+
+```json
+{
+  "filters": { "_id": "674a1b2c3d4e5f6789012345" },
+  "update_data": { "status": "active" },
+  "update_all_fields": true
+}
+```
+
+- Operator update:
+
+```json
+{
+  "filters": { "_id": "674a1b2c3d4e5f6789012345" },
+  "update_data": { "$set": { "status": "active" }, "$inc": { "login_count": 1 } },
+  "update_all_fields": true
+}
+```
+
+- Upsert by id:
+
+```json
+{
+  "filters": { "_id": "674a1b2c3d4e5f6789012345" },
+  "update_data": { "username": "alice", "status": "active" },
+  "update_all_fields": true,
+  "upsert": true
+}
+```
+
+**200** — `{ "success": true, "modified_count": n, "matched_count": m, "upserted_id": "..." }`  
+`upserted_id` is present only when a new document was inserted.
 
 #### Delete — `DELETE`
 
@@ -416,7 +473,7 @@ Query string parameters:
 }
 ```
 
-`soft_delete` **true** (default): sets `is_deleted`; **false**: hard delete.
+`filters` must be **non-empty**. `soft_delete` **true** (default): sets `is_deleted` and `deleted_at` on active rows; **false**: permanently removes matching documents (any `is_deleted` state).
 
 **200** — `{ "success": true, "count": n }`
 

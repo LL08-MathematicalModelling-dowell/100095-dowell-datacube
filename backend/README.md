@@ -52,11 +52,17 @@ Replace `<HOST>` and tokens with your values.
 # Health (no auth)
 curl -sS "https://<HOST>/api/v2/health_check/"
 
-# CRUD create (JWT) — body field is `documents`, not `data`
+# CRUD create (JWT) — body field is `documents`, not `data` (max 500 per request)
 curl -X POST "https://<HOST>/api/v2/crud/" \
   -H "Authorization: Bearer <ACCESS_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{"database_id":"<DB_ID>","collection_name":"users","documents":[{"username":"alice"}]}'
+
+# CRUD update one document by _id
+curl -X PUT "https://<HOST>/api/v2/crud/" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"database_id":"<DB_ID>","collection_name":"users","filters":{"_id":"<DOC_ID>"},"update_data":{"status":"active"},"update_all_fields":true}'
 ```
 
 ## Dependencies (uv)
