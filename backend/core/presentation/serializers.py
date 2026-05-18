@@ -35,6 +35,7 @@ class UserSerializer(serializers.Serializer):
     role = serializers.SerializerMethodField()
     is_email_verified = serializers.SerializerMethodField()
     auth_method = serializers.SerializerMethodField()
+    has_avatar = serializers.SerializerMethodField()
 
     def get_id(self, obj):
         return str(obj.get("_id"))
@@ -47,6 +48,9 @@ class UserSerializer(serializers.Serializer):
 
     def get_auth_method(self, obj):
         return obj.get("auth_method") or "password"
+
+    def get_has_avatar(self, obj):
+        return bool(obj.get("avatar_file_id"))
 
 
 class ProfilePatchSerializer(serializers.Serializer):

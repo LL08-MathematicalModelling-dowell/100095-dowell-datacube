@@ -394,6 +394,14 @@ class UserAvatarView(APIView):
             }
         )
 
+    def delete(self, request):
+        try:
+            uid = ObjectId(request.user.id)
+        except InvalidId:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+        user_manager.remove_avatar_file(uid)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class AccountDeleteView(APIView):
     permission_classes = [IsAuthenticated]
