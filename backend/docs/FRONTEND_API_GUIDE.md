@@ -230,7 +230,7 @@ Server exchanges the **authorization code** (not an ID token from the client).
 
 ### 4.11 Profile
 
-`GET /core/profile/` — JWT → user document fields (`id`, `email`, `firstName`, `lastName`, `role`, `is_email_verified`, `auth_method`).
+`GET /core/profile/` — JWT → user document fields (`id`, `email`, `firstName`, `lastName`, `role`, `is_email_verified`, `auth_method`, `has_avatar`).
 
 `PATCH /core/profile/` — `{ "firstName": "...", "lastName": "..." }` (optional fields)
 
@@ -239,6 +239,8 @@ Server exchanges the **authorization code** (not an ID token from the client).
 `GET /core/profile/avatar/` — binary image or **404**.
 
 `POST /core/profile/avatar/` — `multipart/form-data`, field **`file`**. Allowed types: jpeg, png, webp, gif; max **3 MB**.
+
+`DELETE /core/profile/avatar/` — remove stored avatar; **204** on success.
 
 ### 4.13 Account delete (soft delete)
 
