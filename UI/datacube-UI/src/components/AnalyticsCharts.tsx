@@ -4,6 +4,7 @@ import { format, parseISO, isValid } from "date-fns";
 import { useMemo, useState } from "react";
 import {
   Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -22,7 +23,9 @@ import {
 import {
   Activity,
   BarChart3,
+  Clock,
   Database,
+  HardDrive,
   LayoutDashboard,
   PieChart as PieIcon,
 } from "lucide-react";
@@ -55,6 +58,10 @@ const tabConfig = [
   { id: "performance", label: "Performance", icon: Activity },
   { id: "errors", label: "Errors", icon: PieIcon },
   { id: "collections", label: "Collections", icon: Database },
+  { id: "endpoints", label: "Endpoints", icon: BarChart3 },
+  { id: "operations", label: "Operations", icon: PieIcon },
+  { id: "storage", label: "Storage", icon: HardDrive },
+  { id: "slow", label: "Slow queries", icon: Clock },
 ] as const;
 
 type TabId = (typeof tabConfig)[number]["id"];
@@ -102,6 +109,42 @@ const AnalyticsCharts = () => {
     retry: 1,
   });
 
+  const { data: endpointsRaw } = useQuery({
+    queryKey: ["analytics", "endpoint-volume"],
+    queryFn: async () => {
+      const res = await api.get("/analytics/api/v2/endpoint-volume/");
+      return unwrapData(res) || { endpoint_volume: [] };
+    },
+    retry: 1,
+  });
+
+  const { data: operationsRaw } = useQuery({
+    queryKey: ["analytics", "operation-breakdown"],
+    queryFn: async () => {
+      const res = await api.get("/analytics/api/v2/operation-breakdown/");
+      return unwrapData(res) || { operation_breakdown: {} };
+    },
+    retry: 1,
+  });
+
+  const { data: storageRaw } = useQuery({
+    queryKey: ["analytics", "storage-trend"],
+    queryFn: async () => {
+      const res = await api.get("/analytics/api/v2/storage-trend/");
+      return unwrapData(res) || { storage_trend_mb: [] };
+    },
+    retry: 1,
+  });
+
+  const { data: slowRaw } = useQuery({
+    queryKey: ["analytics", "slow-queries"],
+    queryFn: async () => {
+      const res = await api.get("/analytics/api/v2/slow-queries/?limit=15");
+      return unwrapData(res) || { data: [] };
+    },
+    retry: 1,
+  });
+
   const { data: topCollectionsRaw, isLoading: topLoading, error: topErr } = useQuery({
     queryKey: ["analytics", "top-collections"],
     queryFn: async () => {
@@ -118,6 +161,11 @@ const AnalyticsCharts = () => {
   const performance = performanceRaw || {};
   const errors = errorsRaw || {};
   const topCollections = topCollectionsRaw?.top_collections || [];
+  const endpointVolume = (endpointsRaw as any)?.endpoint_volume || [];
+  const operationBreakdown = (operationsRaw as any)?.operation_breakdown || {};
+  const storageTrend = (storageRaw as any)?.storage_trend_mb || [];
+  const slowQueries = (slowRaw as any)?.data || [];
+  const methods7d = (dashboard as any)?.methods_7d || {};
 
   const isLoading = dashboardLoading || perfLoading || errorsLoading || topLoading;
   const hasError = dashboardError || perfError || errorsErr || topErr;
@@ -249,6 +297,22 @@ const AnalyticsCharts = () => {
                 <p className={cn("mt-2 text-2xl font-bold tabular-nums", card.tone)}>
                   {typeof card.v === "number" ? card.v.toLocaleString() : card.v}
                   {card.suf}
+                </p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              { k: "Databases", v: (dashboard as any)?.overview?.database_count ?? 0, tone: "text-[var(--accent-bright)]" },
+              { k: "Collections", v: (dashboard as any)?.overview?.collection_count ?? 0, tone: "text-[var(--accent-bright)]" },
+              { k: "Files", v: (dashboard as any)?.overview?.file_count ?? 0, tone: "text-[var(--chart-4)]" },
+              { k: "API calls (month)", v: (dashboard as any)?.overview?.api_calls_current_month ?? 0, tone: "text-[var(--text-primary)]" },
+              { k: "Slow queries (7d)", v: (dashboard as any)?.overview?.slow_queries_7d ?? 0, tone: "text-[var(--warning)]" },
+            ].map((card) => (
+              <div key={card.k} className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-0)] px-4 py-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--text-subtle)]">{card.k}</p>
+                <p className={cn("mt-2 text-2xl font-bold tabular-nums", card.tone)}>
+                  {typeof card.v === "number" ? card.v.toLocaleString() : card.v}
                 </p>
               </div>
             ))}
@@ -445,6 +509,109 @@ const AnalyticsCharts = () => {
             </ResponsiveContainer>
           ) : (
             <p className="py-12 text-center text-[var(--text-muted)]">No collection ops recorded yet.</p>
+          )}
+        </div>
+      )}
+
+      {activeTab === "endpoints" && (
+        <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4 sm:p-5">
+          <h3 className="mb-4 text-base font-semibold text-[var(--text-primary)]">Request volume by endpoint</h3>
+          {endpointVolume.length > 0 ? (
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={endpointVolume} layout="vertical" margin={{ left: 8 }}>
+                <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="3 3" horizontal />
+                <XAxis type="number" {...axisProps} tickLine={false} />
+                <YAxis type="category" dataKey="endpoint" width={140} tick={{ ...axisProps.tick, fontSize: 10 }} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="requests" name="Requests" fill="var(--chart-2)" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="py-12 text-center text-[var(--text-muted)]">No endpoint data yet.</p>
+          )}
+        </div>
+      )}
+
+      {activeTab === "operations" && (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4">
+            <h3 className="mb-4 text-base font-semibold text-[var(--text-primary)]">DB operations by type</h3>
+            {Object.keys(operationBreakdown).length > 0 ? (
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart>
+                  <Pie
+                    data={Object.entries(operationBreakdown).map(([name, value]) => ({ name, value }))}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={90}
+                    label={({ name, percent }) => `${name} (${((percent ?? 0) * 100).toFixed(0)}%)`}
+                  >
+                    {Object.keys(operationBreakdown).map((_k, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="py-10 text-center text-[var(--text-muted)]">No operations logged yet.</p>
+            )}
+          </div>
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4">
+            <h3 className="mb-4 text-base font-semibold text-[var(--text-primary)]">HTTP methods (7d)</h3>
+            {Object.keys(methods7d).length > 0 ? (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={Object.entries(methods7d).map(([name, value]) => ({ name, value }))}>
+                  <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" {...axisProps} tickLine={false} axisLine={false} />
+                  <YAxis {...axisProps} tickLine={false} axisLine={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="value" name="Requests" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="py-10 text-center text-[var(--text-muted)]">No method breakdown yet.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "storage" && (
+        <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4 sm:p-5">
+          <h3 className="mb-4 text-base font-semibold text-[var(--text-primary)]">File storage trend (30d)</h3>
+          {storageTrend.length > 0 ? (
+            <ResponsiveContainer width="100%" height={320}>
+              <AreaChart data={storageTrend}>
+                <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="date" {...axisProps} tickFormatter={formatTickDate} tickLine={false} axisLine={false} />
+                <YAxis {...axisProps} tickLine={false} axisLine={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <Area type="monotone" dataKey="storage_mb" name="MB" stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="py-12 text-center text-[var(--text-muted)]">Upload files to see storage growth.</p>
+          )}
+        </div>
+      )}
+
+      {activeTab === "slow" && (
+        <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4 sm:p-5">
+          <h3 className="mb-4 text-base font-semibold text-[var(--text-primary)]">Recent slow queries</h3>
+          {slowQueries.length > 0 ? (
+            <ul className="divide-y divide-[var(--border-subtle)] text-sm">
+              {slowQueries.map((row: any) => (
+                <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
+                  <span className="font-mono text-[var(--text-muted)]">{row.collection || "—"}</span>
+                  <span className="tabular-nums text-[var(--warning)]">{row.duration_ms} ms</span>
+                  <span className="w-full text-xs text-[var(--text-subtle)]">{row.timestamp}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="py-12 text-center text-[var(--text-muted)]">No slow queries recorded.</p>
           )}
         </div>
       )}
