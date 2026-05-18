@@ -1,8 +1,19 @@
 /** Browser OAuth2 PKCE helpers for Google / GitHub (authorization code flow). */
 
+import api from "../services/api";
+
 const STORAGE_VERIFIER = "datacube_oauth_code_verifier";
 const STORAGE_STATE = "datacube_oauth_state";
 const STORAGE_PROVIDER = "datacube_oauth_provider";
+
+/** One in-flight token exchange per authorization code (React Strict Mode safe). */
+const inflightExchangeByCode = new Map<string, Promise<OAuthTokenResponse>>();
+
+export type OAuthTokenResponse = {
+  access: string;
+  refresh: string;
+  firstName: string;
+};
 
 function base64UrlEncode(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -67,6 +78,35 @@ export function clearPkceSession(): void {
   sessionStorage.removeItem(STORAGE_VERIFIER);
   sessionStorage.removeItem(STORAGE_STATE);
   sessionStorage.removeItem(STORAGE_PROVIDER);
+}
+
+/** Exchange code for JWTs once per code, even if React Strict Mode runs the effect twice. */
+export function exchangeOAuthTokens(
+  provider: OAuthProvider,
+  code: string,
+  verifier: string
+): Promise<OAuthTokenResponse> {
+  const existing = inflightExchangeByCode.get(code);
+  if (existing) return existing;
+
+  const path =
+    provider === "google"
+      ? "/core/auth/oauth/google/"
+      : "/core/auth/oauth/github/";
+
+  const promise = api
+    .post(path, {
+      code,
+      code_verifier: verifier,
+      redirect_uri: getOAuthRedirectUri(),
+    })
+    .then((data) => data as OAuthTokenResponse)
+    .finally(() => {
+      inflightExchangeByCode.delete(code);
+    });
+
+  inflightExchangeByCode.set(code, promise);
+  return promise;
 }
 
 export function buildGoogleAuthorizeUrl(opts: {
