@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import toast from "react-hot-toast";
 import { Card, PageHeader } from "../components/ui/Card.tsx";
+import { QueryErrorBlock, RefreshButton } from "../components/ui/QueryRefresh.tsx";
 import { cn } from "../lib/cn.ts";
 import { btnPrimaryCn, inputCn } from "../lib/uiClasses.ts";
 import api from "../services/api";
@@ -89,7 +90,13 @@ const ApiKeys = () => {
   const [newKey, setNewKey] = useState<NewKeyResponse | null>(null);
   const [keyName, setKeyName] = useState("");
 
-  const { data: keys, isLoading, error } = useQuery<ApiKey[]>({
+  const {
+    data: keys,
+    isLoading,
+    isError,
+    isFetching,
+    refetch,
+  } = useQuery<ApiKey[]>({
     queryKey: ["apiKeys"],
     queryFn: async () => {
       const response = await api.get("/core/api/v1/keys/");
@@ -97,6 +104,8 @@ const ApiKeys = () => {
     },
     enabled: !!accessToken,
   });
+
+  const isRefreshing = isFetching && !isLoading;
 
   const generateKeyMutation = useMutation({
     mutationFn: async () => {
@@ -180,17 +189,29 @@ const ApiKeys = () => {
         )}
       </Card>
 
-      <Card title="Your keys" subtitle="Full secrets are only shown once after creation.">
+      <Card
+        title="Your keys"
+        subtitle="Full secrets are only shown once after creation."
+        action={
+          <RefreshButton
+            onClick={() => refetch()}
+            isRefreshing={isRefreshing}
+            label="Reload keys"
+          />
+        }
+      >
         {isLoading && (
           <p className="text-[var(--text-muted)]">Loading…</p>
         )}
-        {error && (
-          <p className="text-[var(--danger)]">
-            Could not load keys. Refresh and try again.
-          </p>
+        {isError && (
+          <QueryErrorBlock
+            message="Could not load API keys."
+            onRetry={() => refetch()}
+            isRefreshing={isRefreshing}
+          />
         )}
 
-        {!isLoading && !error && keys && keys.length > 0 ? (
+        {!isLoading && !isError && keys && keys.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="min-w-full table-auto text-left text-sm">
               <thead>
@@ -241,7 +262,7 @@ const ApiKeys = () => {
           </div>
         ) : null}
 
-        {!isLoading && !error && (!keys || keys.length === 0) ? (
+        {!isLoading && !isError && (!keys || keys.length === 0) ? (
           <p className="text-[var(--text-muted)]">
             No keys yet. Generate one to call the API from scripts or services.
           </p>

@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 import FilesSection from '../components/FileSection';
 import AnalyticsCharts from '../components/AnalyticsCharts';
 import { Card, PageHeader } from '../components/ui/Card';
+import { QueryErrorBlock, RefreshButton } from '../components/ui/QueryRefresh';
 
 // Define validation schema
 const collectionFieldSchema = z.object({
@@ -41,7 +42,13 @@ const Overview = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
 
   // Fetch databases and usage stats
-  const { data: databases, isLoading, error } = useQuery<Database[]>({
+  const {
+    data: databases,
+    isLoading,
+    isError,
+    isFetching,
+    refetch,
+  } = useQuery<Database[]>({
     queryKey: ['databases'],
     queryFn: async () => {
       const response = await api.get('/core/api/v1/dashboard/stats/');
@@ -49,6 +56,8 @@ const Overview = () => {
     },
     enabled: !!refreshToken,
   });
+
+  const isRefreshingDatabases = isFetching && !isLoading;
 
   // Create database mutation
   const createMutation = useMutation({
@@ -98,20 +107,33 @@ const Overview = () => {
           subtitle="Logical databases mapped to your MongoDB namespaces"
           className="mb-8"
           action={
-            <button
-              onClick={() => setIsFormOpen(true)}
-              className="rounded-[var(--radius-md)] bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-transform hover:brightness-110 active:scale-[0.98]"
-              type="button"
-            >
-              Create database
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <RefreshButton
+                onClick={() => refetch()}
+                isRefreshing={isRefreshingDatabases}
+                label="Reload"
+              />
+              <button
+                onClick={() => setIsFormOpen(true)}
+                className="rounded-[var(--radius-md)] bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-transform hover:brightness-110 active:scale-[0.98]"
+                type="button"
+              >
+                Create database
+              </button>
+            </div>
           }
         >
 
           {isLoading && <p className="text-[var(--text-muted)]">Loading databases…</p>}
-          {error && <p className="text-[var(--danger)]">Could not load databases.</p>}
+          {isError && (
+            <QueryErrorBlock
+              message="Could not load databases."
+              onRetry={() => refetch()}
+              isRefreshing={isRefreshingDatabases}
+            />
+          )}
 
-          {!isLoading && !error && databases && databases.length > 0 ? (
+          {!isLoading && !isError && databases && databases.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="min-w-full table-auto">
                 <thead>
@@ -139,7 +161,7 @@ const Overview = () => {
                 </tbody>
               </table>
             </div>
-          ) : (!isLoading && !error && databases?.length === 0) && (
+          ) : (!isLoading && !isError && databases?.length === 0) && (
             <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--border)] bg-[var(--surface-0)] p-8 text-center">
               <p className="text-[var(--text-muted)] mb-4">No databases yet.</p>
               <button
