@@ -36,3 +36,8 @@ docker run -d --name datacube-redis -p 6379:6379 redis:7-alpine
 
 # --- Container health ---
 # docker inspect --format='{{json .State.Health}}' datacube-backend
+
+DJANGO_SETTINGS_MODULE=project.settings.development uv run uvicorn project.asgi:application --reload --host 127.0.0.1 --port 8000
+
+DJANGO_SETTINGS_MODULE=project.settings.development uv run celery -A project worker -Q analytics,maintenance -l info
+
