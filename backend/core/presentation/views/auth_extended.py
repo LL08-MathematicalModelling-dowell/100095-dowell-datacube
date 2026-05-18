@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from bson import ObjectId
 from bson.errors import InvalidId
 from django.conf import settings
-from django.http import FileResponse
+from django.http import HttpResponse
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -358,10 +358,12 @@ class UserAvatarView(APIView):
             return Response(status=status.HTTP_404_NOT_FOUND)
         try:
             grid_out = user_manager.avatar_bucket().open_download_stream(doc["avatar_file_id"])
+            content_type = (grid_out.metadata or {}).get("contentType", "application/octet-stream")
+            # Buffered: avatars are ≤3 MB; avoids ASGI sync-iterator warning on FileResponse.
+            body = grid_out.read()
         except Exception:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        content_type = (grid_out.metadata or {}).get("contentType", "application/octet-stream")
-        return FileResponse(grid_out, content_type=content_type)
+        return HttpResponse(body, content_type=content_type)
 
     def post(self, request):
         upload = request.FILES.get("file")
