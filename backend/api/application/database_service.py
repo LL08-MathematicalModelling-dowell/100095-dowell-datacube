@@ -9,21 +9,19 @@ from typing import List, Dict, Tuple
 from api.infrastructure.naming import generate_db_name
 from api.application.metadata_service import MetadataService
 from api.application.collection_service import CollectionService
+from api.application.service_context import UserServiceContext
 
 
 class DatabaseService:
     """Service for managing virtual databases and their collections."""
-    def __init__(self, user_id: str):
-        """
-        Initialize the service for a specific user.
-        All operations will be scoped to this user_id.
-        """
+
+    def __init__(self, user_id: str, *, role: str | None = None):
         if not user_id:
             raise ValueError("DatabaseService requires a valid user_id.")
-            
-        self.user_id = user_id
-        # Instantiate MetadataService with the same user context
-        self.meta_svc = MetadataService(user_id=user_id)
+
+        self.ctx = UserServiceContext(user_id, role=role)
+        self.user_id = self.ctx.user_id
+        self.meta_svc = MetadataService(user_id=self.user_id, role=self.ctx.role)
 
     async def create_database_with_collections(
         self,
@@ -38,7 +36,8 @@ class DatabaseService:
         3. Persists metadata record.
         4. Provisions physical MongoDB collections.
         """
-        
+        self.ctx.assert_can_write()
+
         # Guard: Check existence before generating names or starting transactions
         if await self.meta_svc.exists_db(user_provided_name, session=session):
             raise ValueError(f"A database named '{user_provided_name}' already exists.")
@@ -79,6 +78,8 @@ class DatabaseService:
         Adds new collections to an existing database.
         Verified: Only proceeds if the bound user owns the target database.
         """
+        self.ctx.assert_can_write()
+
         # Step 1: Verification & Data Retrieval
         meta = await self.meta_svc.get_db(database_id)
         if not meta:

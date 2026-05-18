@@ -1,24 +1,6 @@
-from django.conf import settings
 from rest_framework.permissions import SAFE_METHODS, BasePermission
-from rest_framework.request import Request
-from rest_framework.views import APIView
 
 from core.infrastructure.roles import ROLE_ADMIN, ROLE_ANALYST, ROLE_DEVELOPER, normalize_role
-
-
-class IsAdminUserOrInternalIP(BasePermission):
-    """
-    Allows access only to admin users or requests from internal IP addresses.
-    """
-
-    def has_permission(self, request: Request, view: APIView) -> bool:  # pyright: ignore[reportIncompatibleMethodOverride]
-        if request.user and request.user.is_staff:
-            return True
-        ip_addr: str | None = request.META.get("REMOTE_ADDR")
-        internal_ips: set[str] = set(settings.INTERNAL_IPS)
-        if ip_addr is not None and ip_addr in internal_ips:
-            return True
-        return False
 
 
 class IsDeveloperOrAdmin(BasePermission):

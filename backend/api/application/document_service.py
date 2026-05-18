@@ -9,16 +9,18 @@ from datetime import datetime, timezone
 from typing import List, Dict, Tuple, Optional
 from api.application.metadata_service import MetadataService
 from api.application.collection_service import CollectionService
+from api.application.service_context import UserServiceContext
 from pymongo.errors import PyMongoError
 
 
 class DocumentService:
-    def __init__(self, user_id: str):
+    def __init__(self, user_id: str, *, role: str | None = None):
         if not user_id:
             raise ValueError("DocumentService requires a valid user_id.")
-        
-        self.user_id = user_id
-        self.meta_svc = MetadataService(user_id=user_id)
+
+        self.ctx = UserServiceContext(user_id, role=role)
+        self.user_id = self.ctx.user_id
+        self.meta_svc = MetadataService(user_id=self.user_id, role=self.ctx.role)
 
     async def _get_scoped_collection_svc(self, db_id: str, coll_name: str) -> CollectionService:
         """
@@ -67,6 +69,7 @@ class DocumentService:
 
     async def create_docs(self, db_id: str, coll_name: str, docs: List[Dict]):
         """Inserts documents and triggers schema discovery."""
+        self.ctx.assert_can_write()
         try:
             # append "is_deleted" to all docs if not present
             for doc in docs:
@@ -94,6 +97,7 @@ class DocumentService:
         bulk: bool = False
     ):
         """Updates documents and updates field metadata if new fields are added."""
+        self.ctx.assert_can_write()
         if not update_data:
             raise ValueError("No update data provided.")
             
@@ -119,6 +123,7 @@ class DocumentService:
 
     async def delete_docs(self, db_id: str, coll_name: str, filt: dict, soft: bool = True):
         """Standardizes deletion logic."""
+        self.ctx.assert_can_write()
         try:
             svc = await self._get_scoped_collection_svc(db_id, coll_name)
             if soft:
