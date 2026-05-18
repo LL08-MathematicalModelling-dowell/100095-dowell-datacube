@@ -6,6 +6,7 @@ This module contains all serializers used by the API, organized by functionality
 
 import re
 from rest_framework import serializers
+from api.domain.metadata_models import FIELD_TYPE_CHOICES, normalize_field_type
 from api.infrastructure.validators import validate_collection_name, validate_unique_fields
 
 
@@ -33,15 +34,13 @@ class FieldSerializer(serializers.Serializer):
     )
     
     type = serializers.ChoiceField(
-        choices=[
-            "string", "number", "object", "array", "boolean", 
-            "date", "datetime", "null", "binary", "objectid", 
-            "decimal128", "regex", "timestamp", "int", "long", 
-            "double", "float"
-        ],
+        choices=FIELD_TYPE_CHOICES,
         default="string",
-        help_text="Type of the field. Defaults to 'string'."
+        help_text="Type of the field. Defaults to 'string'.",
     )
+
+    def validate_type(self, value):
+        return normalize_field_type(value)
 
     def validate_name(self, value):
         if not re.match(r'^[\w-]+$', value):
@@ -242,7 +241,7 @@ class ListQuerySerializer(serializers.Serializer):
     page_size = serializers.IntegerField(
         required=False,
         default=50,
-        # min_length=1,
+        min_value=1,
         max_value=1000,
         help_text="Number of documents to return per page. Max 1000."
     )
