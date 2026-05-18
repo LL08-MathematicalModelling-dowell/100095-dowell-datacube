@@ -10,6 +10,13 @@ from typing import List, Dict, Tuple, Optional
 from api.application.metadata_service import MetadataService
 from api.application.collection_service import CollectionService
 from api.application.service_context import UserServiceContext
+from api.infrastructure.query_safety import (
+    assert_mutating_filter_allowed,
+    is_operator_update,
+    plain_fields_for_partial_update,
+    prepare_update_document,
+    validate_filter,
+)
 from pymongo.errors import PyMongoError
 
 
@@ -94,45 +101,82 @@ class DocumentService:
         coll_name: str,
         filt: dict,
         update_data: dict,
-        bulk: bool = False
+        *,
+        allow_new_fields: bool = False,
+        update_many: bool = False,
+        upsert: bool = False,
     ):
-        """Updates documents and updates field metadata if new fields are added."""
+        """Update one or many documents; optional upsert when filter targets _id."""
         self.ctx.assert_can_write()
-        if not update_data:
-            raise ValueError("No update data provided.")
-            
+        validate_filter(filt or {})
+        assert_mutating_filter_allowed(filt or {}, update_many=update_many)
+
+        if upsert:
+            if update_many:
+                raise ValueError("upsert cannot be combined with update_many.")
+            if not (filt.get("_id") or filt.get("id")):
+                raise ValueError("upsert requires '_id' or 'id' in filters.")
+
+        update_doc, schema_sample = prepare_update_document(update_data)
+        if upsert:
+            set_on_insert = update_doc.setdefault("$setOnInsert", {})
+            if not isinstance(set_on_insert, dict):
+                raise ValueError("$setOnInsert must be an object when provided.")
+            set_on_insert.setdefault("is_deleted", False)
+
         try:
             svc = await self._get_scoped_collection_svc(db_id, coll_name)
-            
-            # Perform the update
-            if bulk:
-                result = await svc.update_many(coll_name, filt or {}, update_data)
-            else:
-                result = await svc.update_one(coll_name, filt or {}, update_data)
 
-            # Schema Evolution: Analyze the update data for new fields
-            if "$set" in update_data:
+            if allow_new_fields:
+                if update_many:
+                    result = await svc.update_many_raw(coll_name, filt, update_doc)
+                else:
+                    result = await svc.update_one_raw(
+                        coll_name, filt, update_doc, upsert=upsert
+                    )
+            else:
+                if is_operator_update(update_data) and not (
+                    set(update_data.keys()) == {"$set"}
+                ):
+                    raise ValueError(
+                        "Operator updates other than a lone $set require update_all_fields=true."
+                    )
+                plain = plain_fields_for_partial_update(update_data)
+                if update_many:
+                    result = await svc.update_many_existing_fields(
+                        coll_name, filt, plain
+                    )
+                else:
+                    result = await svc.update_one_existing_fields(
+                        coll_name, filt, plain
+                    )
+
+            if schema_sample:
                 await self.meta_svc.update_collection_schema_inference(
-                    db_id, coll_name, [update_data["$set"]]
+                    db_id, coll_name, [schema_sample]
                 )
-            elif not any(k.startswith('$') for k in update_data.keys()):
-                await self.meta_svc.update_collection_schema_inference(db_id, coll_name, [update_data])
             return result
+        except (ValueError, PermissionError):
+            raise
         except PyMongoError as e:
-            raise RuntimeError(f"Failed to update documents: {e}")
+            raise RuntimeError(f"Failed to update documents: {e}") from e
 
     async def delete_docs(self, db_id: str, coll_name: str, filt: dict, soft: bool = True):
-        """Standardizes deletion logic."""
+        """Delete or soft-delete documents matching a non-empty filter."""
         self.ctx.assert_can_write()
+        validate_filter(filt or {})
+        assert_mutating_filter_allowed(filt or {}, update_many=True)
+
         try:
             svc = await self._get_scoped_collection_svc(db_id, coll_name)
             if soft:
                 soft_delete_payload = {
                     "is_deleted": True,
-                    "deleted_at": datetime.now(timezone.utc)
+                    "deleted_at": datetime.now(timezone.utc),
                 }
-                return await svc.update_many(coll_name, filt or {}, soft_delete_payload)
-            else:
-                return await svc.delete_many(coll_name, filt or {})
+                return await svc.soft_delete_many(coll_name, filt, soft_delete_payload)
+            return await svc.delete_many(coll_name, filt)
+        except (ValueError, PermissionError):
+            raise
         except PyMongoError as e:
-            raise RuntimeError(f"Deletion failed: {e}")
+            raise RuntimeError(f"Deletion failed: {e}") from e
