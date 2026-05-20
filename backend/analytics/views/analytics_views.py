@@ -7,10 +7,15 @@ from pymongo.errors import OperationFailure
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
+from analytics.services.date_range import parse_analytics_date_range
+from analytics.services.inventory_stats import aggregate_db_operations, build_inventory
 from analytics.services.platform_stats import (
     aggregate_file_storage,
     aggregate_http_methods,
+    aggregate_http_summary,
     aggregate_metadata_counts,
+    aggregate_metadata_storage_totals,
+    aggregate_top_collections_scoped,
     count_slow_queries,
     file_storage_trend,
     get_usage_snapshot,
@@ -26,84 +31,105 @@ class AnalyticsBaseView(AsyncAPIView):
 
     @property
     async def analytics_db(self):
-        # Create a client per request (or reuse a singleton). For simplicity, create new.
         client = settings.MONGODB_CLIENT
         return client["datacube_analytics"]
 
     def get_user_id(self, request) -> str:
         return str(request.user.pk)
 
+    def get_period(self, request):
+        return parse_analytics_date_range(request)
+
 
 class DashboardOverviewView(AnalyticsBaseView):
-    """Main dashboard summary: total requests, avg duration, error rate, storage used."""
+    """Dashboard with base + technical summaries and configurable date range."""
 
     async def get(self, request):
         user_id = self.get_user_id(request)
-        db = await self.analytics_db
-        end = datetime.now(timezone.utc)
-        start = end - timedelta(days=7)
+        start, end, period = self.get_period(request)
 
-        # 1. Total requests and avg duration
-        pipeline_requests = [
-            {"$match": {"user_id": user_id, "timestamp": {"$gte": start, "$lte": end}}},
-            {"$group": {
-                "_id": None,
-                "total_requests": {"$sum": 1},
-                "avg_duration_ms": {"$avg": "$duration_ms"},
-                "error_count": {"$sum": {"$cond": [{"$eq": ["$success", False]}, 1, 0]}}
-            }}
-        ]
-        cursor = await db["http_requests"].aggregate(pipeline_requests)
-        req_result = await cursor.to_list(length=1)
-        total_requests = req_result[0]["total_requests"] if req_result else 0
-        avg_duration = round(req_result[0]["avg_duration_ms"], 2) if req_result else 0
-        error_count = req_result[0]["error_count"] if req_result else 0
-        error_rate = round((error_count / total_requests) * 100, 2) if total_requests > 0 else 0
-
-        storage = await aggregate_file_storage(user_id)
+        http = await aggregate_http_summary(user_id, start=start, end=end)
+        storage_files = await aggregate_file_storage(user_id)
+        storage_data = await aggregate_metadata_storage_totals(user_id)
         meta_counts = await aggregate_metadata_counts(user_id)
         usage = get_usage_snapshot(user_id)
-        methods_7d = await aggregate_http_methods(user_id)
-        slow_queries_7d = await count_slow_queries(user_id)
-        total_storage_mb = round(storage["total_bytes"] / (1024 * 1024), 2)
+        methods = await aggregate_http_methods(user_id, start=start, end=end)
+        slow_count = await count_slow_queries(user_id, start=start, end=end)
 
-        # 3. Requests per day (last 7 days)
-        pipeline_daily = [
-            {"$match": {"user_id": user_id, "timestamp": {"$gte": start, "$lte": end}}},
-            {"$group": {
-                "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$timestamp"}},
-                "count": {"$sum": 1},
-                "avg_duration": {"$avg": "$duration_ms"}
-            }},
-            {"$sort": {"_id": 1}}
-        ]
-        cursor = await db["http_requests"].aggregate(pipeline_daily)
-        daily_data = await cursor.to_list(length=100)
-        dates = [d["_id"] for d in daily_data]
-        counts = [d["count"] for d in daily_data]
-        durations = [round(d["avg_duration"], 2) for d in daily_data]
+        inventory_preview = await build_inventory(
+            user_id, start, end, refresh_storage=False, skip_storage_refresh=True
+        )
+        inv_totals = inventory_preview.get("totals") or {}
+
+        file_mb = round(storage_files["total_bytes"] / (1024 * 1024), 2)
+        data_mb = round(storage_data["storage_data_bytes"] / (1024 * 1024), 2)
+
+        base_summary = {
+            "database_count": meta_counts["database_count"],
+            "collection_count": meta_counts["collection_count"],
+            "document_count": inv_totals.get("document_count", 0),
+            "storage_files_mb": file_mb,
+            "storage_data_mb": data_mb,
+            "storage_total_mb": round(file_mb + data_mb, 2),
+            "file_count": storage_files["file_count"],
+            "api_calls_current_month": usage.get("api_calls_current_month", 0),
+            "subscription_plan": usage.get("subscription_plan", "free"),
+            "role": usage.get("role", "developer"),
+            "last_activity_at": inv_totals.get("last_activity_at"),
+            "api_calls_in_period": inv_totals.get("api_calls", 0),
+        }
+
+        technical_summary = {
+            "total_requests": http["total_requests"],
+            "avg_response_time_ms": http["avg_response_time_ms"],
+            "error_rate_percent": http["error_rate_percent"],
+            "slow_queries": slow_count,
+        }
+
+        overview = {
+            **base_summary,
+            **technical_summary,
+            "slow_queries_7d": slow_count,
+            "total_storage_mb": base_summary["storage_total_mb"],
+        }
 
         return Response({
             "success": True,
-            "overview": {
-                "total_requests": total_requests,
-                "avg_response_time_ms": avg_duration,
-                "error_rate_percent": error_rate,
-                "total_storage_mb": total_storage_mb,
-                "file_count": storage["file_count"],
-                "database_count": meta_counts["database_count"],
-                "collection_count": meta_counts["collection_count"],
-                "api_calls_current_month": usage.get("api_calls_current_month", 0),
-                "subscription_plan": usage.get("subscription_plan", "free"),
-                "role": usage.get("role", "developer"),
-                "slow_queries_7d": slow_queries_7d,
-            },
-            "methods_7d": methods_7d,
-            "daily_requests": {
-                "dates": dates,
-                "counts": counts,
-                "avg_durations_ms": durations,
-            }
+            "period": period,
+            "base_summary": base_summary,
+            "technical_summary": technical_summary,
+            "overview": overview,
+            "methods": methods,
+            "methods_7d": methods,
+            "daily_requests": http["daily_requests"],
+        })
+
+
+class InventoryView(AnalyticsBaseView):
+    """Per-database and per-collection inventory with trends for the selected period."""
+
+    async def get(self, request):
+        user_id = self.get_user_id(request)
+        start, end, period = self.get_period(request)
+        database_id = (request.query_params.get("database_id") or "").strip() or None
+        refresh = request.query_params.get("refresh_storage", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+
+        payload = await build_inventory(
+            user_id,
+            start,
+            end,
+            database_id=database_id,
+            refresh_storage=refresh,
+        )
+
+        return Response({
+            "success": True,
+            "period": period,
+            **payload,
         })
 
 
@@ -134,7 +160,7 @@ class PerformanceMetricsView(AnalyticsBaseView):
             cursor = await coll.aggregate(pipeline)
             rows = await cursor.to_list(length=1)
         except OperationFailure as exc:
-            logger.info("Analytics percentile aggregation not available, using fallback: %s", exc)
+            logger.info("Analytics percentile aggregation not available: %s", exc)
             return None
         if not rows or rows[0].get("n", 0) == 0:
             return {}
@@ -186,23 +212,23 @@ class PerformanceMetricsView(AnalyticsBaseView):
     async def get(self, request):
         user_id = self.get_user_id(request)
         db = await self.analytics_db
-        end = datetime.now(timezone.utc)
-        start = end - timedelta(days=7)
+        start, end, period = self.get_period(request)
 
         coll = db["http_requests"]
         percentiles = await self._percentiles_ms_server(coll, user_id, start, end)
         if percentiles is None:
             percentiles = await self._percentiles_ms_fallback(coll, user_id, start, end)
 
-        # Throughput (requests per minute over last 24h)
         day_start = end - timedelta(days=1)
         pipeline_throughput = [
-            {"$match": {"user_id": user_id, "timestamp": {"$gte": day_start}}},
-            {"$group": {
-                "_id": {"$dateToString": {"format": "%Y-%m-%d %H:00", "date": "$timestamp"}},
-                "count": {"$sum": 1}
-            }},
-            {"$sort": {"_id": 1}}
+            {"$match": {"user_id": user_id, "timestamp": {"$gte": day_start, "$lte": end}}},
+            {
+                "$group": {
+                    "_id": {"$dateToString": {"format": "%Y-%m-%d %H:00", "date": "$timestamp"}},
+                    "count": {"$sum": 1},
+                }
+            },
+            {"$sort": {"_id": 1}},
         ]
         cursor = await db["http_requests"].aggregate(pipeline_throughput)
         throughput_data = await cursor.to_list(length=100)
@@ -210,6 +236,7 @@ class PerformanceMetricsView(AnalyticsBaseView):
 
         return Response({
             "success": True,
+            "period": period,
             "percentiles_ms": percentiles,
             "throughput_last_24h": throughput,
         })
@@ -221,34 +248,42 @@ class ErrorAnalyticsView(AnalyticsBaseView):
     async def get(self, request):
         user_id = self.get_user_id(request)
         db = await self.analytics_db
-        end = datetime.now(timezone.utc)
-        start = end - timedelta(days=7)
+        start, end, period = self.get_period(request)
 
-        # 1. Errors by status code
         pipeline_status = [
-            {"$match": {"user_id": user_id, "timestamp": {"$gte": start}, "status_code": {"$gte": 400}}},
+            {
+                "$match": {
+                    "user_id": user_id,
+                    "timestamp": {"$gte": start, "$lte": end},
+                    "status_code": {"$gte": 400},
+                }
+            },
             {"$group": {"_id": "$status_code", "count": {"$sum": 1}}},
-            {"$sort": {"_id": 1}}
+            {"$sort": {"_id": 1}},
         ]
         cursor = await db["http_requests"].aggregate(pipeline_status)
         status_errors = await cursor.to_list(length=100)
         error_by_status = {str(d["_id"]): d["count"] for d in status_errors}
 
-        # 2. Top 5 error‑prone endpoints
         pipeline_endpoints = [
-            {"$match": {"user_id": user_id, "timestamp": {"$gte": start}, "status_code": {"$gte": 400}}},
+            {
+                "$match": {
+                    "user_id": user_id,
+                    "timestamp": {"$gte": start, "$lte": end},
+                    "status_code": {"$gte": 400},
+                }
+            },
             {"$group": {"_id": "$path", "count": {"$sum": 1}}},
             {"$sort": {"count": -1}},
-            {"$limit": 5}
+            {"$limit": 5},
         ]
         cursor = await db["http_requests"].aggregate(pipeline_endpoints)
         top_error_endpoints = await cursor.to_list(length=5)
         top_endpoints = [{"path": d["_id"], "errors": d["count"]} for d in top_error_endpoints]
 
-        # 3. Error types from error collection
         pipeline_types = [
-            {"$match": {"user_id": user_id, "timestamp": {"$gte": start}}},
-            {"$group": {"_id": "$error_type", "count": {"$sum": 1}}}
+            {"$match": {"user_id": user_id, "timestamp": {"$gte": start, "$lte": end}}},
+            {"$group": {"_id": "$error_type", "count": {"$sum": 1}}},
         ]
         cursor = await db["errors"].aggregate(pipeline_types)
         error_types = await cursor.to_list(length=10)
@@ -256,6 +291,7 @@ class ErrorAnalyticsView(AnalyticsBaseView):
 
         return Response({
             "success": True,
+            "period": period,
             "errors_by_status_code": error_by_status,
             "top_error_endpoints": top_endpoints,
             "error_types": error_type_map,
@@ -263,24 +299,19 @@ class ErrorAnalyticsView(AnalyticsBaseView):
 
 
 class TopCollectionsView(AnalyticsBaseView):
-    """Most accessed collections (by operations count)."""
+    """Most accessed collections (scoped by database when available)."""
 
     async def get(self, request):
         user_id = self.get_user_id(request)
-        db = await self.analytics_db
-        end = datetime.now(timezone.utc)
-        start = end - timedelta(days=7)
-
-        pipeline = [
-            {"$match": {"user_id": user_id, "timestamp": {"$gte": start}}},
-            {"$group": {"_id": "$collection", "count": {"$sum": 1}}},
-            {"$sort": {"count": -1}},
-            {"$limit": 10}
-        ]
-        cursor = await db["db_operations"].aggregate(pipeline)
-        top = await cursor.to_list(length=10)
-        collections = [{"name": d["_id"], "operations": d["count"]} for d in top]
-        return Response({"success": True, "top_collections": collections})
+        start, end, period = self.get_period(request)
+        collections = await aggregate_top_collections_scoped(
+            user_id, start=start, end=end, limit=15
+        )
+        return Response({
+            "success": True,
+            "period": period,
+            "top_collections": collections,
+        })
 
 
 class SlowQueriesView(AnalyticsBaseView):
@@ -289,12 +320,18 @@ class SlowQueriesView(AnalyticsBaseView):
     async def get(self, request):
         user_id = self.get_user_id(request)
         db = await self.analytics_db
-        limit = int(request.query_params.get("limit", 20))
+        start, end, period = self.get_period(request)
+        limit = min(int(request.query_params.get("limit", 20)), 100)
         offset = int(request.query_params.get("offset", 0))
 
-        cursor = db["slow_queries"].find(
-            {"user_id": user_id}
-        ).sort("timestamp", -1).skip(offset).limit(limit)
+        query = {"user_id": user_id, "timestamp": {"$gte": start, "$lte": end}}
+        cursor = (
+            db["slow_queries"]
+            .find(query)
+            .sort("timestamp", -1)
+            .skip(offset)
+            .limit(limit)
+        )
         slow_queries = []
         async for doc in cursor:
             slow_queries.append({
@@ -306,62 +343,84 @@ class SlowQueriesView(AnalyticsBaseView):
                 "query_details": doc.get("query_details", {}),
                 "timestamp": doc["timestamp"].isoformat(),
             })
-        total = await db["slow_queries"].count_documents({"user_id": user_id})
+        total = await db["slow_queries"].count_documents(query)
         return Response({
             "success": True,
+            "period": period,
             "data": slow_queries,
-            "pagination": {"total": total, "limit": limit, "offset": offset}
+            "pagination": {"total": total, "limit": limit, "offset": offset},
         })
 
 
 class RequestVolumeByEndpointView(AnalyticsBaseView):
-    """Bar chart data: requests count per endpoint (last 7 days)."""
+    """Bar chart data: requests count per endpoint."""
 
     async def get(self, request):
         user_id = self.get_user_id(request)
         db = await self.analytics_db
-        end = datetime.now(timezone.utc)
-        start = end - timedelta(days=7)
+        start, end, period = self.get_period(request)
 
         pipeline = [
-            {"$match": {"user_id": user_id, "timestamp": {"$gte": start}}},
+            {"$match": {"user_id": user_id, "timestamp": {"$gte": start, "$lte": end}}},
             {"$group": {"_id": "$path", "count": {"$sum": 1}}},
             {"$sort": {"count": -1}},
-            {"$limit": 15}
+            {"$limit": 15},
         ]
         cursor = await db["http_requests"].aggregate(pipeline)
         result = await cursor.to_list(length=15)
         endpoints = [{"endpoint": d["_id"], "requests": d["count"]} for d in result]
-        return Response({"success": True, "endpoint_volume": endpoints})
+        return Response({
+            "success": True,
+            "period": period,
+            "endpoint_volume": endpoints,
+        })
 
 
 class DatabaseOperationBreakdownView(AnalyticsBaseView):
-    """Pie chart data: operations by type (insert, query, update, delete, etc.)."""
+    """Pie chart data: operations by type."""
 
     async def get(self, request):
         user_id = self.get_user_id(request)
         db = await self.analytics_db
-        end = datetime.now(timezone.utc)
-        start = end - timedelta(days=7)
+        start, end, period = self.get_period(request)
 
         pipeline = [
-            {"$match": {"user_id": user_id, "timestamp": {"$gte": start}}},
-            {"$group": {"_id": "$operation_type", "count": {"$sum": 1}}}
+            {"$match": {"user_id": user_id, "timestamp": {"$gte": start, "$lte": end}}},
+            {"$group": {"_id": "$operation_type", "count": {"$sum": 1}}},
         ]
         cursor = await db["db_operations"].aggregate(pipeline)
         result = await cursor.to_list(length=20)
         operations = {d["_id"]: d["count"] for d in result}
-        return Response({"success": True, "operation_breakdown": operations})
+        return Response({
+            "success": True,
+            "period": period,
+            "operation_breakdown": operations,
+        })
 
 
 class UserStorageTrendView(AnalyticsBaseView):
-    """Storage usage over time (daily snapshot from file_metadata)."""
+    """Storage usage over time: GridFS uploads + data-plane API calls trend."""
 
     async def get(self, request):
         user_id = self.get_user_id(request)
-        db = await self.analytics_db
-        end = datetime.now(timezone.utc)
-        start = end - timedelta(days=30)
+        start, end, period = self.get_period(request)
 
-        trend = await file_storage_trend(user_id, start=start, end=end)
-        return Response({"success": True, "storage_trend_mb": trend})
+        file_trend = await file_storage_trend(user_id, start=start, end=end)
+        ops = await aggregate_db_operations(user_id, start, end)
+        data_daily: dict[str, int] = {}
+        for _db_id, series in ops["daily_by_db"].items():
+            for point in series:
+                data_daily[point["date"]] = data_daily.get(point["date"], 0) + point[
+                    "api_calls"
+                ]
+        data_trend = [
+            {"date": d, "storage_mb": 0, "api_calls": data_daily[d], "kind": "data_activity"}
+            for d in sorted(data_daily.keys())
+        ]
+
+        return Response({
+            "success": True,
+            "period": period,
+            "storage_trend_mb": file_trend,
+            "data_activity_trend": data_trend,
+        })

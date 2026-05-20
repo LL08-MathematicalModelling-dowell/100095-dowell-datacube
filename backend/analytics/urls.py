@@ -2,6 +2,7 @@ from django.urls import path, re_path
 
 from analytics.views.analytics_views import (
     DashboardOverviewView,
+    InventoryView,
     PerformanceMetricsView,
     ErrorAnalyticsView,
     TopCollectionsView,
@@ -16,6 +17,7 @@ app_name = "analytics"
 
 urlpatterns = [
     re_path(r'^dashboard/?$', DashboardOverviewView.as_view(), name='analytics-dashboard'),
+    re_path(r'^inventory/?$', InventoryView.as_view(), name='analytics-inventory'),
     re_path(r'^performance/?$', PerformanceMetricsView.as_view(), name='analytics-performance'),
     re_path(r'^errors/?$', ErrorAnalyticsView.as_view(), name='analytics-errors'),
     re_path(r'^top-collections/?$', TopCollectionsView.as_view(), name='analytics-top-collections'),
