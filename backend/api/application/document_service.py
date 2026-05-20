@@ -68,6 +68,7 @@ class DocumentService:
             for doc in docs:
                 doc.pop("is_deleted", None)
 
+            await self.meta_svc.touch_collection_access(db_id, coll_name)
             return total, docs
         except (ValueError, PermissionError) as e:
             raise e
