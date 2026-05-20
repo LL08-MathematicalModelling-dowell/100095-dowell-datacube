@@ -54,6 +54,10 @@ class CollectionFieldMeta(TypedDict):
 class CollectionMeta(TypedDict, total=False):
     name: str
     created_at: datetime
+    last_access_at: datetime
+    storage_bytes: int
+    document_count_cached: int
+    stats_updated_at: datetime
     fields: list[CollectionFieldMeta]
 
 
@@ -72,6 +76,9 @@ class DatabaseMetadata(TypedDict, total=False):
     dbName: str
     created_at: datetime
     updated_at: datetime
+    last_access_at: datetime
+    storage_bytes_total: int
+    stats_updated_at: datetime
     collections: list[CollectionMeta]
     pruning: PruningConfig
 

@@ -46,9 +46,32 @@ class MetadataService:
             query["_id"] = ObjectId(db_id)
         return query
 
-    async def get_db(self, db_id: str) -> Optional[Dict]:
+    async def touch_database_access(self, db_id: str) -> None:
+        now = utc_now()
+        await self._coll.update_one(
+            self._get_user_filter(db_id),
+            {"$set": {"last_access_at": now, "updated_at": now}},
+        )
+
+    async def touch_collection_access(self, db_id: str, collection_name: str) -> None:
+        now = utc_now()
+        await self._coll.update_one(
+            {**self._get_user_filter(db_id), "collections.name": collection_name},
+            {
+                "$set": {
+                    "last_access_at": now,
+                    "updated_at": now,
+                    "collections.$.last_access_at": now,
+                }
+            },
+        )
+
+    async def get_db(self, db_id: str, *, record_access: bool = True) -> Optional[Dict]:
         """Fetches a database document strictly scoped to the bound user."""
-        return await self._coll.find_one(self._get_user_filter(db_id))
+        doc = await self._coll.find_one(self._get_user_filter(db_id))
+        if doc and record_access:
+            await self.touch_database_access(db_id)
+        return doc
 
     async def exists_db(self, display_name: str, *, session=None) -> bool:
         """Checks display name uniqueness within the user's scope."""
@@ -158,28 +181,103 @@ class MetadataService:
             })
         return total, results
 
-    async def list_collections_with_live_counts(self, db_id: str, *, session=None) -> List[Dict]:
+    async def list_collections_with_live_counts(
+        self, db_id: str, *, session=None, record_access: bool = True
+    ) -> List[Dict]:
         """Lists collections for a database along with live document counts, scoped to user permissions."""
-        meta = await self.get_db(db_id)
+        meta = await self.get_db(db_id, record_access=record_access)
         if not meta:
             raise PermissionError("Database not found or access denied.")
 
         internal_name = meta.get("dbName")
         db = self._client[internal_name]
+        now = utc_now()
 
         results = []
         for col_meta in meta.get("collections", []):
             col_name = col_meta["name"]
             try:
                 count = await db[col_name].count_documents({}, session=session)
+                if record_access:
+                    await self._coll.update_one(
+                        {**self._get_user_filter(db_id), "collections.name": col_name},
+                        {"$set": {"collections.$.last_access_at": now}},
+                    )
                 results.append({
                     "name": col_name,
                     "num_documents": count,
-                    "fields": col_meta.get("fields", [])
+                    "document_count_cached": col_meta.get("document_count_cached", count),
+                    "storage_bytes": col_meta.get("storage_bytes", 0),
+                    "created_at": col_meta.get("created_at"),
+                    "last_access_at": col_meta.get("last_access_at") or now,
+                    "fields": col_meta.get("fields", []),
                 })
             except Exception:
                 results.append({"name": col_name, "num_documents": 0, "error": "Unreachable"})
         return results
+
+    async def refresh_storage_stats_for_db(
+        self, db_id: str, *, max_age_hours: int = 6, force: bool = False
+    ) -> Dict[str, Any]:
+        """Refresh collStats for each collection; cache sizes on metadata."""
+        meta = await self.get_db(db_id, record_access=False)
+        if not meta:
+            raise PermissionError("Database not found or access denied.")
+
+        now = utc_now()
+        if not force and meta.get("stats_updated_at"):
+            age = now - meta["stats_updated_at"]
+            if age < timedelta(hours=max_age_hours):
+                return {
+                    "refreshed": False,
+                    "storage_bytes_total": int(meta.get("storage_bytes_total") or 0),
+                    "stats_updated_at": meta["stats_updated_at"],
+                }
+
+        internal_name = meta["dbName"]
+        mdb = self._client[internal_name]
+        total_bytes = 0
+        collections = list(meta.get("collections") or [])
+
+        for col in collections:
+            name = col["name"]
+            storage_bytes = 0
+            doc_count = 0
+            try:
+                stats = await mdb.command("collStats", name)
+                storage_bytes = int(stats.get("storageSize") or stats.get("size") or 0)
+                doc_count = int(stats.get("count") or 0)
+            except Exception:
+                try:
+                    doc_count = await mdb[name].estimated_document_count()
+                except Exception:
+                    doc_count = 0
+            total_bytes += storage_bytes
+            await self._coll.update_one(
+                {**self._get_user_filter(db_id), "collections.name": name},
+                {
+                    "$set": {
+                        "collections.$.storage_bytes": storage_bytes,
+                        "collections.$.document_count_cached": doc_count,
+                        "collections.$.stats_updated_at": now,
+                    }
+                },
+            )
+
+        await self._coll.update_one(
+            self._get_user_filter(db_id),
+            {"$set": {"storage_bytes_total": total_bytes, "stats_updated_at": now, "updated_at": now}},
+        )
+        return {
+            "refreshed": True,
+            "storage_bytes_total": total_bytes,
+            "stats_updated_at": now,
+        }
+
+    async def list_user_databases_for_inventory(self) -> List[Dict]:
+        """All database metadata docs for the bound user (inventory)."""
+        cursor = self._coll.find(self._get_user_filter()).sort("displayName", 1)
+        return await cursor.to_list(length=500)
 
     def _generate_schema_from_docs(self, docs: List[Dict]) -> Dict[str, str]:
         """Generates a field schema by inferring types from a sample of documents."""
