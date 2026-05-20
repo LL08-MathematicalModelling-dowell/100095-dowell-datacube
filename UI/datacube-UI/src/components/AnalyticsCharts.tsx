@@ -31,11 +31,19 @@ import {
 } from "lucide-react";
 import api from "../services/api";
 import { QueryErrorBlock, RefreshButton } from "./ui/QueryRefresh";
+import { AnalyticsDateFilterBar } from "./analytics/AnalyticsDateFilter";
+import {
+  analyticsQueryString,
+  DEFAULT_ANALYTICS_FILTER,
+  periodLabel,
+  type AnalyticsDateFilter,
+} from "../lib/analyticsDateFilter";
 import { cn } from "../lib/cn";
 import { useThemeStore } from "../store/themeStore";
 
 const TAB_QUERY_KEYS: Record<string, string[][]> = {
   overview: [["analytics", "dashboard"]],
+  inventory: [["analytics", "inventory"]],
   performance: [["analytics", "performance"]],
   errors: [["analytics", "errors"]],
   collections: [["analytics", "top-collections"]],
@@ -67,6 +75,7 @@ function formatTickDate(value: string) {
 
 const tabConfig = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "inventory", label: "Data inventory", icon: Database },
   { id: "performance", label: "Performance", icon: Activity },
   { id: "errors", label: "Errors", icon: PieIcon },
   { id: "collections", label: "Collections", icon: Database },
@@ -78,11 +87,21 @@ const tabConfig = [
 
 type TabId = (typeof tabConfig)[number]["id"];
 
+function dateFilterKey(f: AnalyticsDateFilter): string {
+  return f.preset === "custom" && f.startDate && f.endDate
+    ? `custom:${f.startDate}:${f.endDate}`
+    : `days:${f.days}`;
+}
+
 const AnalyticsCharts = () => {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [dateFilter, setDateFilter] = useState<AnalyticsDateFilter>(DEFAULT_ANALYTICS_FILTER);
   const themeMode = useThemeStore((s) => s.mode);
   const queryClient = useQueryClient();
   const analyticsFetching = useIsFetching({ queryKey: ["analytics"] });
+  const qs = analyticsQueryString(dateFilter);
+  const dk = dateFilterKey(dateFilter);
+  const periodText = periodLabel(dateFilter);
 
   const axisProps = useMemo(
     () => ({
@@ -93,27 +112,36 @@ const AnalyticsCharts = () => {
   );
 
   const { data: dashboardRaw, isLoading: dashboardLoading, error: dashboardError } = useQuery({
-    queryKey: ["analytics", "dashboard"],
+    queryKey: ["analytics", "dashboard", dk],
     queryFn: async () => {
-      const res = await api.get("/analytics/api/v2/dashboard/");
+      const res = await api.get(`/analytics/api/v2/dashboard/${qs}`);
       return unwrapData(res) || { overview: null, daily_requests: null };
     },
     retry: 1,
   });
 
-  const { data: performanceRaw, isLoading: perfLoading, error: perfError } = useQuery({
-    queryKey: ["analytics", "performance"],
+  const { data: inventoryRaw, isLoading: inventoryLoading } = useQuery({
+    queryKey: ["analytics", "inventory", dk],
     queryFn: async () => {
-      const res = await api.get("/analytics/api/v2/performance/");
+      const res = await api.get(`/analytics/api/v2/inventory/${qs}`);
+      return unwrapData(res) || { databases: [], totals: {} };
+    },
+    retry: 1,
+  });
+
+  const { data: performanceRaw, isLoading: perfLoading, error: perfError } = useQuery({
+    queryKey: ["analytics", "performance", dk],
+    queryFn: async () => {
+      const res = await api.get(`/analytics/api/v2/performance/${qs}`);
       return unwrapData(res) || { percentiles_ms: {}, throughput_last_24h: [] };
     },
     retry: 1,
   });
 
   const { data: errorsRaw, isLoading: errorsLoading, error: errorsErr } = useQuery({
-    queryKey: ["analytics", "errors"],
+    queryKey: ["analytics", "errors", dk],
     queryFn: async () => {
-      const res = await api.get("/analytics/api/v2/errors/");
+      const res = await api.get(`/analytics/api/v2/errors/${qs}`);
       return unwrapData(res) || {
         errors_by_status_code: {},
         top_error_endpoints: [],
@@ -124,45 +152,45 @@ const AnalyticsCharts = () => {
   });
 
   const { data: endpointsRaw } = useQuery({
-    queryKey: ["analytics", "endpoint-volume"],
+    queryKey: ["analytics", "endpoint-volume", dk],
     queryFn: async () => {
-      const res = await api.get("/analytics/api/v2/endpoint-volume/");
+      const res = await api.get(`/analytics/api/v2/endpoint-volume/${qs}`);
       return unwrapData(res) || { endpoint_volume: [] };
     },
     retry: 1,
   });
 
   const { data: operationsRaw } = useQuery({
-    queryKey: ["analytics", "operation-breakdown"],
+    queryKey: ["analytics", "operation-breakdown", dk],
     queryFn: async () => {
-      const res = await api.get("/analytics/api/v2/operation-breakdown/");
+      const res = await api.get(`/analytics/api/v2/operation-breakdown/${qs}`);
       return unwrapData(res) || { operation_breakdown: {} };
     },
     retry: 1,
   });
 
   const { data: storageRaw } = useQuery({
-    queryKey: ["analytics", "storage-trend"],
+    queryKey: ["analytics", "storage-trend", dk],
     queryFn: async () => {
-      const res = await api.get("/analytics/api/v2/storage-trend/");
+      const res = await api.get(`/analytics/api/v2/storage-trend/${qs}`);
       return unwrapData(res) || { storage_trend_mb: [] };
     },
     retry: 1,
   });
 
   const { data: slowRaw } = useQuery({
-    queryKey: ["analytics", "slow-queries"],
+    queryKey: ["analytics", "slow-queries", dk],
     queryFn: async () => {
-      const res = await api.get("/analytics/api/v2/slow-queries/?limit=15");
+      const res = await api.get(`/analytics/api/v2/slow-queries/${qs}${qs ? "&" : "?"}limit=15`);
       return unwrapData(res) || { data: [] };
     },
     retry: 1,
   });
 
   const { data: topCollectionsRaw, isLoading: topLoading, error: topErr } = useQuery({
-    queryKey: ["analytics", "top-collections"],
+    queryKey: ["analytics", "top-collections", dk],
     queryFn: async () => {
-      const res = await api.get("/analytics/api/v2/top-collections/");
+      const res = await api.get(`/analytics/api/v2/top-collections/${qs}`);
       const u = unwrapData(res);
       if (Array.isArray(u)) return { top_collections: u };
       if (u?.top_collections) return u;
@@ -172,6 +200,10 @@ const AnalyticsCharts = () => {
   });
 
   const dashboard = dashboardRaw || {};
+  const inventory = inventoryRaw || {};
+  const baseSummary = (dashboard as any)?.base_summary || (dashboard as any)?.overview || {};
+  const technicalSummary =
+    (dashboard as any)?.technical_summary || (dashboard as any)?.overview || {};
   const performance = performanceRaw || {};
   const errors = errorsRaw || {};
   const topCollections = topCollectionsRaw?.top_collections || [];
@@ -179,7 +211,8 @@ const AnalyticsCharts = () => {
   const operationBreakdown = (operationsRaw as any)?.operation_breakdown || {};
   const storageTrend = (storageRaw as any)?.storage_trend_mb || [];
   const slowQueries = (slowRaw as any)?.data || [];
-  const methods7d = (dashboard as any)?.methods_7d || {};
+  const methods7d = (dashboard as any)?.methods || (dashboard as any)?.methods_7d || {};
+  const inventoryDbs = (inventory as any)?.databases || [];
 
   const isLoading = dashboardLoading || perfLoading || errorsLoading || topLoading;
   const hasError = dashboardError || perfError || errorsErr || topErr;
@@ -262,6 +295,7 @@ const AnalyticsCharts = () => {
 
   return (
     <div className={cn("space-y-6", isRefreshing && "opacity-90")} data-theme={themeMode}>
+      <AnalyticsDateFilterBar value={dateFilter} onChange={setDateFilter} />
       <div className="flex flex-wrap items-center justify-end gap-2">
         <RefreshButton
           onClick={refreshTab}
@@ -299,62 +333,55 @@ const AnalyticsCharts = () => {
 
       {activeTab === "overview" && (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {[
-              {
-                k: "Requests (7d)",
-                v: (dashboard as any)?.overview?.total_requests ?? 0,
-                suf: "",
-                tone: "text-[var(--chart-2)]",
-              },
-              {
-                k: "Avg latency",
-                v: (dashboard as any)?.overview?.avg_response_time_ms ?? 0,
-                suf: " ms",
-                tone: "text-[var(--chart-1)]",
-              },
-              {
-                k: "Error rate",
-                v: (dashboard as any)?.overview?.error_rate_percent ?? 0,
-                suf: "%",
-                tone: "text-[var(--danger)]",
-              },
-              {
-                k: "Storage",
-                v: (dashboard as any)?.overview?.total_storage_mb ?? 0,
-                suf: " MB",
-                tone: "text-[var(--chart-3)]",
-              },
-            ].map((card) => (
-              <div
-                key={card.k}
-                className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-0)] px-4 py-4 transition-transform duration-200 hover:shadow-[var(--shadow-sm)]"
-              >
-                <p className="text-xs font-medium uppercase tracking-wide text-[var(--text-subtle)]">
-                  {card.k}
-                </p>
-                <p className={cn("mt-2 text-2xl font-bold tabular-nums", card.tone)}>
-                  {typeof card.v === "number" ? card.v.toLocaleString() : card.v}
-                  {card.suf}
-                </p>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <section className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4 sm:p-5">
+              <h3 className="text-base font-semibold text-[var(--text-primary)]">Base summary</h3>
+              <p className="mt-1 text-sm text-[var(--text-muted)]">Data plane & account ({periodText})</p>
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {[
+                  { k: "Databases", v: baseSummary.database_count, tone: "text-[var(--accent-bright)]" },
+                  { k: "Collections", v: baseSummary.collection_count, tone: "text-[var(--accent-bright)]" },
+                  { k: "Documents", v: baseSummary.document_count, tone: "text-[var(--text-primary)]" },
+                  { k: "Data storage", v: baseSummary.storage_data_mb, suf: " MB", tone: "text-[var(--chart-3)]" },
+                  { k: "File storage", v: baseSummary.storage_files_mb, suf: " MB", tone: "text-[var(--chart-4)]" },
+                  { k: "Files", v: baseSummary.file_count, tone: "text-[var(--chart-4)]" },
+                  { k: "API calls (period)", v: baseSummary.api_calls_in_period, tone: "text-[var(--chart-2)]" },
+                  { k: "API calls (month)", v: baseSummary.api_calls_current_month, tone: "text-[var(--text-muted)]" },
+                ].map((card) => (
+                  <div key={card.k} className="rounded-[var(--radius-md)] border border-[var(--border-subtle)]/80 px-3 py-3">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-subtle)]">{card.k}</p>
+                    <p className={cn("mt-1 text-lg font-bold tabular-nums", card.tone)}>
+                      {typeof card.v === "number" ? card.v.toLocaleString() : card.v ?? "—"}
+                      {(card as { suf?: string }).suf ?? ""}
+                    </p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {[
-              { k: "Databases", v: (dashboard as any)?.overview?.database_count ?? 0, tone: "text-[var(--accent-bright)]" },
-              { k: "Collections", v: (dashboard as any)?.overview?.collection_count ?? 0, tone: "text-[var(--accent-bright)]" },
-              { k: "Files", v: (dashboard as any)?.overview?.file_count ?? 0, tone: "text-[var(--chart-4)]" },
-              { k: "API calls (month)", v: (dashboard as any)?.overview?.api_calls_current_month ?? 0, tone: "text-[var(--text-primary)]" },
-              { k: "Slow queries (7d)", v: (dashboard as any)?.overview?.slow_queries_7d ?? 0, tone: "text-[var(--warning)]" },
-            ].map((card) => (
-              <div key={card.k} className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-0)] px-4 py-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-[var(--text-subtle)]">{card.k}</p>
-                <p className={cn("mt-2 text-2xl font-bold tabular-nums", card.tone)}>
-                  {typeof card.v === "number" ? card.v.toLocaleString() : card.v}
-                </p>
+            </section>
+            <section className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4 sm:p-5">
+              <h3 className="text-base font-semibold text-[var(--text-primary)]">Technical summary</h3>
+              <p className="mt-1 text-sm text-[var(--text-muted)]">HTTP telemetry ({periodText})</p>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                {[
+                  { k: "Requests", v: technicalSummary.total_requests, tone: "text-[var(--chart-2)]" },
+                  { k: "Avg latency", v: technicalSummary.avg_response_time_ms, suf: " ms", tone: "text-[var(--chart-1)]" },
+                  { k: "Error rate", v: technicalSummary.error_rate_percent, suf: "%", tone: "text-[var(--danger)]" },
+                  { k: "Slow queries", v: technicalSummary.slow_queries, tone: "text-[var(--warning)]" },
+                ].map((card) => (
+                  <div key={card.k} className="rounded-[var(--radius-md)] border border-[var(--border-subtle)]/80 px-3 py-3">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-subtle)]">{card.k}</p>
+                    <p className={cn("mt-1 text-lg font-bold tabular-nums", card.tone)}>
+                      {typeof card.v === "number" ? card.v.toLocaleString() : card.v ?? "—"}
+                      {(card as { suf?: string }).suf ?? ""}
+                    </p>
+                  </div>
+                ))}
               </div>
-            ))}
+              <p className="mt-4 text-xs text-[var(--text-subtle)]">
+                Plan: {baseSummary.subscription_plan ?? "—"} · Role: {baseSummary.role ?? "—"}
+                {baseSummary.last_activity_at ? ` · Last activity: ${formatTickDate(baseSummary.last_activity_at.slice(0, 10))}` : ""}
+              </p>
+            </section>
           </div>
 
           <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4 sm:p-5">
@@ -362,7 +389,7 @@ const AnalyticsCharts = () => {
               Traffic & latency trend
             </h3>
             <p className="mb-4 text-sm text-[var(--text-muted)]">
-              Daily request volume vs average response time (last 7 days)
+              Daily request volume vs average response time ({periodText})
             </p>
             {dailyData.length > 0 ? (
               <ResponsiveContainer width="100%" height={320}>
@@ -418,6 +445,79 @@ const AnalyticsCharts = () => {
             )}
           </div>
         </>
+      )}
+
+      {activeTab === "inventory" && (
+        <div className="space-y-4">
+          {inventoryLoading ? (
+            <p className="text-sm text-[var(--text-muted)]">Loading inventory…</p>
+          ) : inventoryDbs.length === 0 ? (
+            <p className="text-sm text-[var(--text-muted)]">No databases yet.</p>
+          ) : (
+            inventoryDbs.map((db: any) => (
+              <div
+                key={db.id}
+                className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4 sm:p-5"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-semibold text-[var(--accent-bright)]">{db.display_name}</h3>
+                    <p className="mt-1 font-mono text-xs text-[var(--text-subtle)]">{db.id}</p>
+                  </div>
+                  <div className="text-right text-sm text-[var(--text-muted)]">
+                    <p>{db.document_count?.toLocaleString()} docs · {db.storage_mb} MB</p>
+                    <p>{db.api_calls?.toLocaleString()} API ops ({periodText})</p>
+                  </div>
+                </div>
+                <dl className="mt-4 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                  <div><dt className="text-[var(--text-subtle)]">Created</dt><dd>{db.created_at ? formatTickDate(db.created_at.slice(0, 10)) : "—"}</dd></div>
+                  <div><dt className="text-[var(--text-subtle)]">Last access</dt><dd>{db.last_access_at ? formatTickDate(db.last_access_at.slice(0, 10)) : "—"}</dd></div>
+                  <div><dt className="text-[var(--text-subtle)]">Updated</dt><dd>{db.updated_at ? formatTickDate(db.updated_at.slice(0, 10)) : "—"}</dd></div>
+                  <div><dt className="text-[var(--text-subtle)]">Stats refreshed</dt><dd>{db.stats_updated_at ? formatTickDate(db.stats_updated_at.slice(0, 10)) : "—"}</dd></div>
+                </dl>
+                {db.trend?.length > 0 && (
+                  <div className="mt-4 h-[120px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={db.trend.map((t: any) => ({ ...t, label: formatTickDate(t.date) }))}>
+                        <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="label" {...axisProps} tick={{ fontSize: 9 }} />
+                        <YAxis {...axisProps} hide />
+                        <Tooltip />
+                        <Area type="monotone" dataKey="api_calls" stroke="var(--chart-2)" fill="var(--chart-2)" fillOpacity={0.15} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full min-w-[520px] text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-[var(--border-subtle)] text-xs uppercase text-[var(--text-subtle)]">
+                        <th className="py-2 pr-4">Collection</th>
+                        <th className="py-2 pr-4">Documents</th>
+                        <th className="py-2 pr-4">Size (MB)</th>
+                        <th className="py-2 pr-4">API calls</th>
+                        <th className="py-2">Last access</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(db.collections || []).map((c: any) => (
+                        <tr key={c.name} className="border-b border-[var(--border-subtle)]/60">
+                          <td className="py-2 pr-4 font-medium">{c.name}</td>
+                          <td className="py-2 pr-4 tabular-nums">{c.document_count?.toLocaleString()}</td>
+                          <td className="py-2 pr-4 tabular-nums">{c.storage_mb}</td>
+                          <td className="py-2 pr-4 tabular-nums">{c.api_calls?.toLocaleString()}</td>
+                          <td className="py-2 text-[var(--text-muted)]">
+                            {c.last_access_at ? formatTickDate(c.last_access_at.slice(0, 10)) : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       )}
 
       {activeTab === "performance" && (
@@ -534,13 +634,18 @@ const AnalyticsCharts = () => {
             Hottest collections
           </h3>
           <p className="mb-4 text-sm text-[var(--text-muted)]">
-            MongoDB operations logged per collection (7-day window)
+            MongoDB operations logged per collection ({periodText})
           </p>
           {topCollections.length > 0 ? (
             <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={topCollections}>
+              <BarChart
+                data={topCollections.map((c: any) => ({
+                  ...c,
+                  label: c.db_id ? `${c.name}` : c.name,
+                }))}
+              >
                 <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" {...axisProps} tickLine={false} axisLine={false} />
+                <XAxis dataKey="label" {...axisProps} tickLine={false} axisLine={false} />
                 <YAxis {...axisProps} tickLine={false} axisLine={false} />
                 <Tooltip content={<CustomTooltip />} />
                 <Bar dataKey="operations" name="Ops" fill="var(--chart-3)" radius={[4, 4, 0, 0]} />
@@ -599,7 +704,7 @@ const AnalyticsCharts = () => {
             )}
           </div>
           <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4">
-            <h3 className="mb-4 text-base font-semibold text-[var(--text-primary)]">HTTP methods (7d)</h3>
+            <h3 className="mb-4 text-base font-semibold text-[var(--text-primary)]">HTTP methods ({periodText})</h3>
             {Object.keys(methods7d).length > 0 ? (
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={Object.entries(methods7d).map(([name, value]) => ({ name, value }))}>
@@ -619,19 +724,36 @@ const AnalyticsCharts = () => {
 
       {activeTab === "storage" && (
         <div className="rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4 sm:p-5">
-          <h3 className="mb-4 text-base font-semibold text-[var(--text-primary)]">File storage trend (30d)</h3>
+          <h3 className="mb-4 text-base font-semibold text-[var(--text-primary)]">
+            Storage & activity ({periodText})
+          </h3>
           {storageTrend.length > 0 ? (
             <ResponsiveContainer width="100%" height={320}>
-              <AreaChart data={storageTrend}>
+              <AreaChart data={storageTrend.map((r: any) => ({ ...r, label: formatTickDate(r.date) }))}>
                 <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="date" {...axisProps} tickFormatter={formatTickDate} tickLine={false} axisLine={false} />
+                <XAxis dataKey="label" {...axisProps} tickLine={false} axisLine={false} />
                 <YAxis {...axisProps} tickLine={false} axisLine={false} />
                 <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="storage_mb" name="MB" stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.2} />
+                <Legend />
+                <Area type="monotone" dataKey="storage_mb" name="Files (MB)" stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.2} />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
             <p className="py-12 text-center text-[var(--text-muted)]">Upload files to see storage growth.</p>
+          )}
+          {(storageRaw as any)?.data_activity_trend?.length > 0 && (
+            <div className="mt-6">
+              <h4 className="mb-2 text-sm font-medium text-[var(--text-muted)]">Data API activity (calls per day)</h4>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={(storageRaw as any).data_activity_trend.map((r: any) => ({ ...r, label: formatTickDate(r.date) }))}>
+                  <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="label" {...axisProps} tick={{ fontSize: 10 }} />
+                  <YAxis {...axisProps} tickLine={false} axisLine={false} />
+                  <Tooltip />
+                  <Bar dataKey="api_calls" name="API calls" fill="var(--chart-2)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           )}
         </div>
       )}
