@@ -7,7 +7,7 @@ Used by analytics dashboard endpoints (not written to datacube_analytics).
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Optional
 
 from bson import ObjectId
 from django.conf import settings
@@ -66,6 +66,25 @@ async def aggregate_metadata_counts(user_id: str) -> dict[str, int]:
     }
 
 
+async def aggregate_metadata_storage_totals(user_id: str) -> dict[str, int]:
+    """Sum cached storage_bytes_total across user databases."""
+    coll = settings.METADATA_COLLECTION
+    pipeline = [
+        {"$match": {"user_id": _user_oid(user_id)}},
+        {
+            "$group": {
+                "_id": None,
+                "storage_bytes": {"$sum": {"$ifNull": ["$storage_bytes_total", 0]}},
+            }
+        },
+    ]
+    cursor = await coll.aggregate(pipeline)
+    rows = await cursor.to_list(length=1)
+    if not rows:
+        return {"storage_data_bytes": 0}
+    return {"storage_data_bytes": int(rows[0].get("storage_bytes") or 0)}
+
+
 async def file_storage_trend(
     user_id: str,
     *,
@@ -97,16 +116,20 @@ async def file_storage_trend(
         {
             "date": row["_id"],
             "storage_mb": round((row.get("total_bytes") or 0) / (1024 * 1024), 2),
+            "kind": "files",
         }
         for row in rows
     ]
 
 
-async def aggregate_http_methods(user_id: str, *, days: int = 7) -> dict[str, int]:
-    """HTTP request counts by method (last N days)."""
+async def aggregate_http_methods(
+    user_id: str,
+    *,
+    start: datetime,
+    end: datetime,
+) -> dict[str, int]:
+    """HTTP request counts by method."""
     coll = settings.MONGODB_CLIENT["datacube_analytics"]["http_requests"]
-    end = datetime.now(timezone.utc)
-    start = end - timedelta(days=days)
     pipeline = [
         {"$match": {"user_id": user_id, "timestamp": {"$gte": start, "$lte": end}}},
         {"$group": {"_id": "$method", "count": {"$sum": 1}}},
@@ -116,11 +139,72 @@ async def aggregate_http_methods(user_id: str, *, days: int = 7) -> dict[str, in
     return {row["_id"]: int(row["count"]) for row in rows}
 
 
-async def count_slow_queries(user_id: str, *, days: int = 7) -> int:
+async def aggregate_http_summary(
+    user_id: str,
+    *,
+    start: datetime,
+    end: datetime,
+) -> dict[str, Any]:
+    """Totals and daily series for HTTP traffic in the period."""
+    coll = settings.MONGODB_CLIENT["datacube_analytics"]["http_requests"]
+    match = {"user_id": user_id, "timestamp": {"$gte": start, "$lte": end}}
+
+    pipeline_totals = [
+        {"$match": match},
+        {
+            "$group": {
+                "_id": None,
+                "total_requests": {"$sum": 1},
+                "avg_duration_ms": {"$avg": "$duration_ms"},
+                "error_count": {
+                    "$sum": {"$cond": [{"$eq": ["$success", False]}, 1, 0]}
+                },
+            }
+        },
+    ]
+    cursor = await coll.aggregate(pipeline_totals)
+    rows = await cursor.to_list(length=1)
+    total_requests = int(rows[0]["total_requests"]) if rows else 0
+    avg_duration = round(float(rows[0]["avg_duration_ms"] or 0), 2) if rows else 0
+    error_count = int(rows[0]["error_count"]) if rows else 0
+    error_rate = round((error_count / total_requests) * 100, 2) if total_requests else 0
+
+    pipeline_daily = [
+        {"$match": match},
+        {
+            "$group": {
+                "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$timestamp"}},
+                "count": {"$sum": 1},
+                "avg_duration": {"$avg": "$duration_ms"},
+            }
+        },
+        {"$sort": {"_id": 1}},
+    ]
+    cursor2 = await coll.aggregate(pipeline_daily)
+    daily_data = await cursor2.to_list(length=100)
+
+    return {
+        "total_requests": total_requests,
+        "avg_response_time_ms": avg_duration,
+        "error_rate_percent": error_rate,
+        "daily_requests": {
+            "dates": [d["_id"] for d in daily_data],
+            "counts": [int(d["count"]) for d in daily_data],
+            "avg_durations_ms": [round(float(d["avg_duration"] or 0), 2) for d in daily_data],
+        },
+    }
+
+
+async def count_slow_queries(
+    user_id: str,
+    *,
+    start: datetime,
+    end: datetime,
+) -> int:
     coll = settings.MONGODB_CLIENT["datacube_analytics"]["slow_queries"]
-    end = datetime.now(timezone.utc)
-    start = end - timedelta(days=days)
-    return await coll.count_documents({"user_id": user_id, "timestamp": {"$gte": start, "$lte": end}})
+    return await coll.count_documents(
+        {"user_id": user_id, "timestamp": {"$gte": start, "$lte": end}}
+    )
 
 
 def get_usage_snapshot(user_id: str) -> dict[str, Any]:
@@ -136,3 +220,41 @@ def get_usage_snapshot(user_id: str) -> dict[str, Any]:
         "last_reset_date": usage.get("last_reset_date"),
         "role": doc.get("role", "developer"),
     }
+
+
+async def aggregate_top_collections_scoped(
+    user_id: str,
+    *,
+    start: datetime,
+    end: datetime,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Top collections by operation count, including db_id."""
+    coll = settings.MONGODB_CLIENT["datacube_analytics"]["db_operations"]
+    pipeline = [
+        {
+            "$match": {
+                "user_id": user_id,
+                "timestamp": {"$gte": start, "$lte": end},
+                "collection": {"$exists": True, "$nin": [None, "", "system"]},
+            }
+        },
+        {
+            "$group": {
+                "_id": {"db_id": "$db_id", "collection": "$collection"},
+                "count": {"$sum": 1},
+            }
+        },
+        {"$sort": {"count": -1}},
+        {"$limit": limit},
+    ]
+    cursor = await coll.aggregate(pipeline)
+    rows = await cursor.to_list(length=limit)
+    return [
+        {
+            "db_id": r["_id"].get("db_id"),
+            "name": r["_id"].get("collection"),
+            "operations": int(r["count"]),
+        }
+        for r in rows
+    ]
