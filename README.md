@@ -147,9 +147,15 @@ uv run pytest api/tests analytics/tests -q
 
 API tests mock MongoDB services and Celery `.delay` calls — no Redis or live broker required.
 
+## Production deployment (GitHub Actions → VPS)
+
+Images are built in CI and pushed to **GitHub Container Registry (GHCR)**. The VPS only receives `deploy/docker-compose.yml` and runs `docker compose pull` / `up` — no git clone or on-server builds.
+
+See **[deploy/README.md](deploy/README.md)** for one-time VPS setup, GitHub secrets (`SSH_*`, `GHCR_PULL_TOKEN`, `WORKING_DIR`), and variables (`VITE_API_BASE`).
+
 ## Contributing
 
-Fork the repository, branch from the default line of development, run tests for touched apps, and open a pull request with a short note on behavior changes (especially URL or auth changes).
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup, commit style, tests, and pull request expectations.
 
 ## License
 
