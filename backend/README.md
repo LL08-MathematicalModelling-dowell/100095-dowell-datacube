@@ -84,7 +84,22 @@ uv run python manage.py runserver
 uv run pytest api/tests analytics/tests -q
 ```
 
-Docker production builds use `uv sync --frozen --no-dev` in `Dockerfile.prod` (no `requirements.txt`).
+### Docker
+
+| File | Purpose |
+|------|---------|
+| `Dockerfile.prod` | Production: multistage build with `uv sync --frozen --no-dev` |
+| `Dockerfile.dev` | Local compose: `uv sync --frozen --all-groups`, hot-reload via volume mount |
+
+```bash
+# Production image (from repo root)
+docker compose -f docker-compose.prod_enhanced.yml build backend
+
+# Development stack (uv + mounted source)
+docker compose -f docker-compose.dev_enhanced.yml up --build
+```
+
+There is no `requirements.txt`; lockfile changes require updating `uv.lock` and rebuilding images.
 
 ## Running locally
 
