@@ -1,0 +1,85 @@
+# Production stack — images are built in GitHub Actions and pulled on the VPS.
+# One-time on the server: create network, config/backend.env, and .env (see deploy/README.md).
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  backend:
+    image: ${BACKEND_IMAGE}:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file:
+      - ./config/backend.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=project.settings.production
+    expose:
+      - "8000"
+    command: >
+      gunicorn project.asgi:application
+      --bind 0.0.0.0:8000
+      --workers 3
+      --worker-class uvicorn_worker.UvicornWorker
+      --log-level info
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v2/health_check/').read()",
+        ]
+      interval: 45s
+      timeout: 10s
+      retries: 3
+    labels:
+      - autoheal=true
+    depends_on:
+      - redis
+    networks:
+      - app-network
+
+  celery_worker:
+    image: ${BACKEND_IMAGE}:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file:
+      - ./config/backend.env
+    command: celery -A project worker -Q analytics,maintenance -l info
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A project inspect ping"]
+      interval: 1m
+      timeout: 15s
+    labels:
+      - autoheal=true
+    depends_on:
+      - redis
+      - backend
+    networks:
+      - app-network
+
+  react-app:
+    image: ${FRONTEND_IMAGE}:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    expose:
+      - "80"
+    environment:
+      - NODE_ENV=production
+    networks:
+      - app-network
+
+  autoheal:
+    image: willfarrell/autoheal:latest
+    restart: always
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
+      - AUTOHEAL_INTERVAL=10
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    external: true
