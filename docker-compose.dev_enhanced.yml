@@ -1,46 +1,41 @@
+# Local stack — backend/celery built with uv (see backend/Dockerfile.dev).
 services:
-  # 1. Redis Service (Local Cache/Broker)
-  # NOTE: For High Availability, ensure your .env uses your MANAGED REDIS URL
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     networks:
       - app-network
 
-  # 2. Web Backend (ASGI Server)
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile.prod
+      dockerfile: Dockerfile.dev
     restart: unless-stopped
-    deploy:
-      replicas: 3
     env_file:
       - ./backend/.env
-    
     environment:
-      - DJANGO_SETTINGS_MODULE=project.settings.production
-    # ports:
-    #   - "8000:8000"
+      - DJANGO_SETTINGS_MODULE=project.settings.development
+    volumes:
+      - ./backend:/app
+      - /app/.venv
     expose:
-      - 8000
+      - "8000"
     command: >
-      gunicorn project.asgi:application 
-      --bind 0.0.0.0:8000 
-      --workers 3 
-      --worker-class uvicorn_worker.UvicornWorker 
-      --log-level info
+      uv run python manage.py runserver 0.0.0.0:8000
     healthcheck:
-      # Updated path to your Django health check view
-      # test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/health_check/"]
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v2/health_check/').read()"]
-
-      interval: 45s      # Slightly more aggressive for faster failover
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v2/health_check/').read()",
+        ]
+      interval: 45s
       timeout: 10s
       retries: 3
-      start_period: 40s   # Give Django time to initialize DB connections
+      start_period: 40s
     labels:
-      - "autoheal=true"
+      - autoheal=true
     depends_on:
       - redis
     networks:
@@ -57,8 +52,6 @@ services:
     networks:
       - app-network
 
-
-  # 3. Autoheal Service
   autoheal:
     image: willfarrell/autoheal:latest
     restart: always
@@ -72,40 +65,41 @@ services:
     networks:
       - app-network
 
-  # 4. Celery Worker (Background Tasks)
   celery_worker:
     build:
       context: ./backend
-      dockerfile: Dockerfile.prod
+      dockerfile: Dockerfile.dev
     restart: unless-stopped
     env_file:
       - ./backend/.env
-    command: celery -A project worker -Q analytics,maintenance -l info
+    environment:
+      - DJANGO_SETTINGS_MODULE=project.settings.development
+    volumes:
+      - ./backend:/app
+      - /app/.venv
+    command: >
+      uv run celery -A project worker -Q analytics,maintenance -l info
     healthcheck:
-      # Verifies the worker is actually connected to the broker and responding
-      test: ["CMD-SHELL", "celery -A project inspect ping"]
+      test: ["CMD-SHELL", "uv run celery -A project inspect ping"]
       interval: 1m
       timeout: 15s
       retries: 3
       start_period: 30s
     labels:
-      - "autoheal=true"
+      - autoheal=true
     depends_on:
       - redis
       - backend
     networks:
       - app-network
 
-  # 5. Frontend Application
   react-app:
     build:
       context: ./UI/datacube-UI
       dockerfile: Dockerfile
     restart: unless-stopped
-    deploy:
-      replicas: 2
     ports:
-      - "3000:3000"
+      - "8080:80"
     environment:
       - NODE_ENV=production
     networks:

@@ -1,0 +1,26 @@
+# Development image — full uv environment (including dev dependency groups).
+# Mount ./backend over /app in compose; preserve .venv with an anonymous volume.
+
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    PATH="/app/.venv/bin:$PATH"
+
+WORKDIR /app
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --all-groups
+
+COPY . .
+
+EXPOSE 8000
+
+CMD ["uv", "run", "python", "manage.py", "runserver", "0.0.0.0:8000"]
