@@ -16,16 +16,27 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/datacube-backend
-  FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/datacube-frontend
 
 jobs:
   build-and-push:
     name: Build and push images
     runs-on: ubuntu-latest
+    outputs:
+      backend_image: ${{ steps.image.outputs.backend }}
+      frontend_image: ${{ steps.image.outputs.frontend }}
+      ghcr_user: ${{ steps.image.outputs.ghcr_user }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Resolve GHCR image names (lowercase)
+        id: image
+        shell: bash
+        run: |
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "backend=ghcr.io/${owner}/datacube-backend" >> "$GITHUB_OUTPUT"
+          echo "frontend=ghcr.io/${owner}/datacube-frontend" >> "$GITHUB_OUTPUT"
+          echo "ghcr_user=${owner}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -44,8 +55,8 @@ jobs:
           file: ./backend/Dockerfile.prod
           push: true
           tags: |
-            ${{ env.BACKEND_IMAGE }}:latest
-            ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+            ${{ steps.image.outputs.backend }}:latest
+            ${{ steps.image.outputs.backend }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -56,8 +67,8 @@ jobs:
           file: ./UI/datacube-UI/Dockerfile
           push: true
           tags: |
-            ${{ env.FRONTEND_IMAGE }}:latest
-            ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+            ${{ steps.image.outputs.frontend }}:latest
+            ${{ steps.image.outputs.frontend }}:${{ github.sha }}
           build-args: |
             VITE_API_BASE=${{ vars.VITE_API_BASE }}
             VITE_GITHUB_OAUTH_CLIENT_ID=${{ secrets.VITE_GITHUB_OAUTH_CLIENT_ID }}
@@ -91,7 +102,7 @@ jobs:
         uses: appleboy/ssh-action@v1.2.2
         env:
           IMAGE_TAG: ${{ github.sha }}
-          GHCR_USER: ${{ github.repository_owner }}
+          GHCR_USER: ${{ needs.build-and-push.outputs.ghcr_user }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.USER_NAME }}

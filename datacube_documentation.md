@@ -89,7 +89,7 @@ Usage logging middleware and read-only dashboard APIs under `/analytics/api/v2/`
 
 ## 4. Configuration
 
-Required environment variables (see `backend/project/settings/common.py` and `.env.example`):
+Required environment variables (see `backend/project/settings/common.py` and [`deploy/config/backend.env.example`](deploy/config/backend.env.example)):
 
 | Variable | Purpose |
 |----------|---------|
@@ -100,9 +100,15 @@ Required environment variables (see `backend/project/settings/common.py` and `.e
 | `AUTH_DB_NAME` | Users, API keys, OTP |
 | `FILE_STORAGE_DB_NAME` | GridFS files + avatars bucket |
 
-Optional: Stripe, OAuth client IDs, demo login, email SMTP — read from settings modules where used.
+**Production VPS:** copy `deploy/config/backend.env.example` → `config/backend.env` on the server. Do **not** use legacy names (`DATABASE_URL`, `DATABASE`, `COLLECTION`, `DATACUBE_V2_AUTH_DB`) — the app reads the names above.
 
-**Settings module:** `project.settings.development` by default (`manage.py`); override with `DJANGO_SETTINGS_MODULE` for production.
+**Recommended for production:** `OTP_PEPPER`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME`.
+
+**Optional:** `GITHUB_OAUTH_*`, `GOOGLE_OAUTH_*`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `FREE_PRICE_ID`, `PRO_PRICE_ID`, `DEMO_PLAYGROUND_SECRET`.
+
+**Not read from env (do not rely on):** `DEBUG`, `ALLOWED_HOSTS` (hardcoded in `production.py`), `REDIS_*` (Celery URL in `production.py`), `MY_BASE_URL` (use `VITE_API_BASE` in the frontend build).
+
+**Settings module:** `project.settings.development` by default (`manage.py`); Docker production compose sets `project.settings.production`.
 
 ---
 

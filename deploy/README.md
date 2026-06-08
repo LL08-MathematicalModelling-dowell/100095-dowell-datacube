@@ -37,11 +37,11 @@ flowchart LR
    ```bash
    cp .env.example .env
    cp config/backend.env.example config/backend.env
-   # Edit both files with real values
+   # Edit both files with real values (see backend.env.example for required vs legacy vars)
    ```
 
-   Set `BACKEND_IMAGE` / `FRONTEND_IMAGE` to your GHCR paths, e.g.  
-   `ghcr.io/<github-username>/datacube-backend`.
+   Set `BACKEND_IMAGE` / `FRONTEND_IMAGE` to your GHCR paths (**lowercase**), e.g.  
+   `ghcr.io/ll08-mathematicalmodelling-dowell/datacube-backend`.
 
 5. **GHCR pull access** — create a GitHub PAT with `read:packages` and store it as GitHub secret `GHCR_PULL_TOKEN`. The deploy workflow logs in on the VPS before `docker compose pull`.
 
