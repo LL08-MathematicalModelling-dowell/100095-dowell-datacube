@@ -89,6 +89,9 @@ jobs:
 
       - name: Pull images and restart stack
         uses: appleboy/ssh-action@v1.2.2
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          GHCR_USER: ${{ github.repository_owner }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.USER_NAME }}
@@ -97,9 +100,6 @@ jobs:
           script_stop: true
           command_timeout: 30m
           envs: IMAGE_TAG,GHCR_USER
-          env:
-            IMAGE_TAG: ${{ github.sha }}
-            GHCR_USER: ${{ github.repository_owner }}
           script: |
             set -euo pipefail
             cd "${{ secrets.WORKING_DIR }}"
