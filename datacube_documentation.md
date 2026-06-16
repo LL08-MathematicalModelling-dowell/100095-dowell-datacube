@@ -102,7 +102,7 @@ Required environment variables (see `backend/project/settings/common.py` and [`d
 
 **Production VPS:** copy `deploy/config/backend.env.example` → `config/backend.env` on the server. Do **not** use legacy names (`DATABASE_URL`, `DATABASE`, `COLLECTION`, `DATACUBE_V2_AUTH_DB`) — the app reads the names above.
 
-**Recommended for production:** `OTP_PEPPER`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME`.
+**Recommended for production:** `OTP_PEPPER`, Gmail SMTP (`EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`, `EMAIL_FROM_NAME`).
 
 **Optional:** `GITHUB_OAUTH_*`, `GOOGLE_OAUTH_*`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `FREE_PRICE_ID`, `PRO_PRICE_ID`, `DEMO_PLAYGROUND_SECRET`.
 
