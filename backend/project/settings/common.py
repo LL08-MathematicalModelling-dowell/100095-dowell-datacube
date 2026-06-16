@@ -178,10 +178,19 @@ OTP_PEPPER = os.getenv(
     "dev-only-otp-pepper-change-me-please-change-me-please",
 )
 
-# --- Email (Resend) & OAuth (server-side PKCE code exchange) ---
-RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
-RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
-RESEND_FROM_NAME = os.getenv("RESEND_FROM_NAME", "DataCube")
+# --- Email (SMTP) & OAuth (server-side PKCE code exchange) ---
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.smtp.EmailBackend",
+)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "true").lower() in ("1", "true", "yes")
+EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "false").lower() in ("1", "true", "yes")
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "noreply@datacube.local")
+EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "DataCube")
 ALLOW_STDOUT_EMAIL = os.getenv("ALLOW_STDOUT_EMAIL", "").lower() in ("1", "true", "yes")
 GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
 GOOGLE_OAUTH_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "")

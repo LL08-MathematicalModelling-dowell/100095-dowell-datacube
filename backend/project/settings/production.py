@@ -29,7 +29,7 @@ CSRF_COOKIE_SECURE = True
 # SECURE_HSTS_PRELOAD = True
 
 # --- Email ---
-# OTP / verification: Resend only (core.infrastructure.resend_client).
+# OTP / verification: Gmail SMTP (core.infrastructure.email_client).
 
 # --- DRF ---
 # Disable the browsable API renderer in production

@@ -17,8 +17,8 @@ DEBUG = True
 CORS_ORIGIN_ALLOW_ALL = True
 
 # --- Email ---
-# OTP / verification: core.infrastructure.resend_client
-# With no RESEND_API_KEY, set ALLOW_STDOUT_EMAIL=true to log OTP codes in the terminal.
+# OTP / verification: core.infrastructure.email_client (Gmail SMTP)
+# With no EMAIL_HOST_PASSWORD, set ALLOW_STDOUT_EMAIL=true to log OTP codes in the terminal.
 ALLOW_STDOUT_EMAIL = os.getenv("ALLOW_STDOUT_EMAIL", "true").lower() in ("1", "true", "yes")
 
 # --- CORS ---

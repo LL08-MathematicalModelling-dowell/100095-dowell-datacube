@@ -28,7 +28,7 @@ from core.infrastructure.oauth_pkce import (
     google_userinfo,
 )
 from core.infrastructure.otp import OtpPurpose, generate_numeric_code, save_otp_challenge, verify_otp_challenge
-from core.infrastructure.resend_client import send_otp_email
+from core.infrastructure.email_client import send_otp_email
 from core.infrastructure.roles import normalize_role
 from core.infrastructure.user_access import effective_email_verified
 from core.presentation.serializers import (
