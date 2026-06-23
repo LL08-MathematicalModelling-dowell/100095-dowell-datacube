@@ -1,6 +1,6 @@
 import pytest
 from bson import ObjectId
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 from api.application.document_service import DocumentService
 from api.presentation.serializers import BulkUpdateDocumentSerializer
