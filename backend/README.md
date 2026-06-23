@@ -34,6 +34,7 @@ Endpoints include (all typically authenticated except `health_check`):
 - `DELETE …/drop_database/`, `drop_collections/`
 - `POST …/import_data/`
 - `POST/GET/PUT/DELETE …/crud/`
+- `POST …/crud/bulk/` — per-document update/upsert batch (`bulkWrite`, max 500 ops)
 - `…/files/` — list/upload; `files/<id>/`, `files/stream/<id>/`, `files/download/<id>/`
 - `GET …/health_check/`
 - `POST …/admin/prune_fields/` — admin permission; prunes inactive field metadata (`database_id`, optional `dry_run`)
@@ -63,6 +64,12 @@ curl -X PUT "https://<HOST>/api/v2/crud/" \
   -H "Authorization: Bearer <ACCESS_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{"database_id":"<DB_ID>","collection_name":"users","filters":{"_id":"<DOC_ID>"},"update_data":{"status":"active"},"update_all_fields":true}'
+
+# CRUD bulk update / upsert (max 500 operations)
+curl -X POST "https://<HOST>/api/v2/crud/bulk/" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"database_id":"<DB_ID>","collection_name":"users","operations":[{"filters":{"_id":"<DOC_ID>"},"update_data":{"points":120},"update_all_fields":true,"upsert":true}]}'
 ```
 
 ## Dependencies (uv)

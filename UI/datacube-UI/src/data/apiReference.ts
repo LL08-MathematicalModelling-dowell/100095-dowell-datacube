@@ -282,7 +282,7 @@ export const apiDocs: ApiGroup[] = [
         name: "CRUD — update",
         auth_required: "JWT or API key — developer/admin",
         description:
-          "Single-doc updates require `_id` in filters unless `update_many` is true. See `update_all_fields`, `upsert` in full docs.",
+          "Single-doc updates require `_id` in filters unless `update_many` is true. `upsert` cannot be combined with `update_many` — use bulk update for mixed per-document sync.",
         url: "/api/v2/crud/",
         methods: [
           {
@@ -300,6 +300,46 @@ export const apiDocs: ApiGroup[] = [
               success: true,
               modified_count: 1,
               matched_count: 1,
+            }),
+          },
+        ],
+      },
+      {
+        name: "CRUD — bulk update / upsert",
+        auth_required: "JWT or API key — developer/admin",
+        description:
+          "Sync many documents in one request. Each operation is an independent updateOne with optional upsert (requires `_id` and `update_all_fields: true`). Max 500 operations.",
+        url: "/api/v2/crud/bulk/",
+        methods: [
+          {
+            method: "POST",
+            body: j({
+              database_id: DB_ID,
+              collection_name: "users",
+              operations: [
+                {
+                  filters: { _id: DOC_ID },
+                  update_data: { points: 120 },
+                  update_all_fields: true,
+                  upsert: true,
+                },
+                {
+                  filters: { _id: "674a1b2c3d4e5f6789012346" },
+                  update_data: { points: 450 },
+                  update_all_fields: true,
+                  upsert: true,
+                },
+              ],
+            }),
+            response: j({
+              success: true,
+              matched_count: 1,
+              modified_count: 1,
+              upserted_count: 1,
+              results: [
+                { index: 0, ok: true },
+                { index: 1, ok: true, upserted_id: "674a1b2c3d4e5f6789012347" },
+              ],
             }),
           },
         ],

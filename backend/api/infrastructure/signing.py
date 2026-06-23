@@ -13,11 +13,14 @@ def generate_signed_url(
 ) -> str:
     """
     Generate a signed URL for a file that expires after a given time.
-    :param file_id: The GridFS file ID (as string)
-    :param user_id: The user's ID (must match the owner)
-    :param expires_in_seconds: URL validity duration (default 5 minutes)
-    :param path_prefix: API endpoint path (adjust as needed)
-    :return: Full signed URL (relative path, without domain)
+    
+    Args:
+        file_id: The GridFS file ID (as string)
+        user_id: The user's ID (must match the owner)
+        expires_in_seconds: URL validity duration (default 5 minutes)
+        path_prefix: API endpoint path (adjust as needed)
+    
+    Returns: Full signed URL (relative path, without domain)
     """
     expire_at = int(time.time()) + expires_in_seconds
     message = f"{file_id}:{user_id}:{expire_at}"

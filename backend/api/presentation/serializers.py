@@ -7,6 +7,7 @@ This module contains all serializers used by the API, organized by functionality
 import re
 from rest_framework import serializers
 from api.domain.metadata_models import FIELD_TYPE_CHOICES, normalize_field_type
+from api.infrastructure.query_safety import MAX_BULK_UPDATE_OPERATIONS
 from api.infrastructure.validators import validate_collection_name, validate_unique_fields
 
 
@@ -214,6 +215,68 @@ class UpdateDocumentSerializer(DocumentBaseSerializer):
                 }
             )
         return attrs
+
+
+class BulkUpdateOperationSerializer(serializers.Serializer):
+    """One updateOne operation inside a bulk CRUD request."""
+
+    filters = serializers.JSONField(
+        help_text="MongoDB query; must be non-empty and include _id or id."
+    )
+    update_data = serializers.JSONField(
+        help_text="Plain field map or allowed update operators ($set, $inc, …)."
+    )
+    update_all_fields = serializers.BooleanField(
+        default=False,
+        help_text=(
+            "If true, apply update_data with $set/operators (may add new fields). "
+            "Required when upsert is true."
+        ),
+    )
+    upsert = serializers.BooleanField(
+        default=False,
+        help_text="If true, insert when no active document matches (requires _id/id).",
+    )
+
+    def validate_filters(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Filters must be a valid JSON object/dictionary.")
+        if not value:
+            raise serializers.ValidationError("filters must not be empty.")
+        return value
+
+    def validate_update_data(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Update data must be a valid JSON object/dictionary.")
+        if not value:
+            raise serializers.ValidationError("update_data must not be empty.")
+        return value
+
+    def validate(self, attrs):
+        filters = attrs.get("filters") or {}
+        upsert = attrs.get("upsert", False)
+        update_all_fields = attrs.get("update_all_fields", False)
+
+        if "_id" not in filters and "id" not in filters:
+            raise serializers.ValidationError(
+                {"filters": "Each operation requires _id or id in filters."}
+            )
+        if upsert and not update_all_fields:
+            raise serializers.ValidationError(
+                {"upsert": "Requires update_all_fields=true."}
+            )
+        return attrs
+
+
+class BulkUpdateDocumentSerializer(DocumentBaseSerializer):
+    """Validates a batch of per-document update/upsert operations."""
+
+    operations = BulkUpdateOperationSerializer(
+        many=True,
+        min_length=1,
+        max_length=MAX_BULK_UPDATE_OPERATIONS,
+        help_text="One to 500 independent updateOne operations (optional upsert per row).",
+    )
 
 
 class DeleteDocumentSerializer(DocumentBaseSerializer):

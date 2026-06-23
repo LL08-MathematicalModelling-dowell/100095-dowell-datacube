@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 from django.conf import settings
 from bson import ObjectId, errors
+from pymongo import UpdateOne
 from pymongo.errors import CollectionInvalid, PyMongoError
 
 from api.application.metadata_service import MetadataService
@@ -227,5 +228,20 @@ class CollectionService:
         return await self.db[coll_name].update_many(
             safe_filt,
             {"$set": payload},
+            session=session,
+        )
+
+    async def bulk_write_updates(
+        self,
+        coll_name: str,
+        requests: List[UpdateOne],
+        session=None,
+    ):
+        """Execute independent updateOne operations in one bulkWrite call."""
+        if not requests:
+            return None
+        return await self.db[coll_name].bulk_write(
+            requests,
+            ordered=False,
             session=session,
         )

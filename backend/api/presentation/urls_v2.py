@@ -16,7 +16,7 @@ from api.presentation.views.database_views import (
     CreateDatabaseView,
     AddCollectionView,
 )
-from api.presentation.views.crud_views import DataCrudView
+from api.presentation.views.crud_views import DataCrudView, DataCrudBulkView
 
 from api.presentation.views.file_views import (
     FileListView,
@@ -42,6 +42,7 @@ urlpatterns = [
 
     # CRUD operations - Handles POST, PUT, DELETE, so re_path is critical
     re_path(r"^crud/?$", DataCrudView.as_view(), name="crud"),
+    re_path(r"^crud/bulk/?$", DataCrudBulkView.as_view(), name="crud_bulk"),
 
     # File operations
      # List and upload files

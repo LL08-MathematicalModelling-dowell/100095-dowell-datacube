@@ -425,8 +425,10 @@ Soft-deleted documents (`is_deleted: true`) are excluded from results.
 |-------|---------|---------|
 | `update_data` | — | Plain field map **or** allowed operators (`$set`, `$inc`, `$unset`, …) |
 | `update_all_fields` | `false` | `true`: full `$set`/operators (may add fields). `false`: only change fields that already exist on each doc |
-| `update_many` | `false` | `true`: update every match; `false`: single-document (requires `_id`/`id` in filters) |
+| `update_many` | `false` | `true`: apply the **same** update to **all** matches for **one** filter; `false`: single-document (requires `_id`/`id` in filters) |
 | `upsert` | `false` | With `_id`/`id` filter, create document if none matches (`update_many` must be `false`) |
+
+**`upsert` + `update_many`:** not supported. MongoDB `updateMany` + `upsert` inserts at most one document when zero rows match — it cannot update some rows and insert others from a list. Use **bulk update** (below) for that pattern.
 
 **Examples**
 
@@ -463,6 +465,55 @@ Soft-deleted documents (`is_deleted: true`) are excluded from results.
 
 **200** — `{ "success": true, "modified_count": n, "matched_count": m, "upserted_id": "..." }`  
 `upserted_id` is present only when a new document was inserted.
+
+#### Bulk update / upsert — `POST /api/v2/crud/bulk/`
+
+Use when you have **multiple documents** and each may need its own update or upsert (e.g. sync loyalty points for many users). One network round-trip via MongoDB `bulkWrite`.
+
+```json
+{
+  "database_id": "<24_hex_objectid>",
+  "collection_name": "users",
+  "operations": [
+    {
+      "filters": { "_id": "674a1b2c3d4e5f6789012345" },
+      "update_data": { "points": 120 },
+      "update_all_fields": true,
+      "upsert": true
+    },
+    {
+      "filters": { "_id": "674a1b2c3d4e5f6789012346" },
+      "update_data": { "points": 450 },
+      "update_all_fields": true,
+      "upsert": true
+    }
+  ]
+}
+```
+
+| Field | Default | Meaning |
+|-------|---------|---------|
+| `operations` | — | **1–500** items; each runs as `updateOne` |
+| `filters` | — | Required; must include `_id` or `id` |
+| `update_all_fields` | `false` | Same as PUT; **`upsert` requires `true`** |
+| `upsert` | `false` | Insert when no active document matches |
+
+**200** example:
+
+```json
+{
+  "success": true,
+  "matched_count": 1,
+  "modified_count": 1,
+  "upserted_count": 1,
+  "results": [
+    { "index": 0, "ok": true },
+    { "index": 1, "ok": true, "upserted_id": "674a1b2c3d4e5f6789012347" }
+  ]
+}
+```
+
+If some operations fail (`ordered: false`), successful ops still apply; failed indices appear in `errors`.
 
 #### Delete — `DELETE`
 
