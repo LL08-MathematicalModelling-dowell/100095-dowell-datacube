@@ -27,6 +27,7 @@ ALLOWED_UPDATE_OPERATORS = frozenset(
 FORBIDDEN_UPDATE_KEYS = frozenset({"$out", "$merge", "$replaceRoot", "$replaceWith"})
 
 MAX_INSERT_BATCH = 500
+MAX_BULK_UPDATE_OPERATIONS = 500
 
 
 def _walk_filter(node: Any, *, path: str = "") -> None:

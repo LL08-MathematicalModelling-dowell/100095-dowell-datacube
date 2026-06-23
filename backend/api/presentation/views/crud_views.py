@@ -15,6 +15,7 @@ from api.presentation.views.base import BaseAPIView
 from api.presentation.serializers import (
     AsyncPostDocumentSerializer,
     UpdateDocumentSerializer,
+    BulkUpdateDocumentSerializer,
     DeleteDocumentSerializer,
     DocumentQuerySerializer,
 )
@@ -267,3 +268,49 @@ class DataCrudView(BaseAPIView):
             "success": True, 
             "count": affected_count
         }, status=status.HTTP_200_OK)
+
+
+class DataCrudBulkView(DataCrudView):
+    """Batch per-document update/upsert via MongoDB bulkWrite."""
+
+    @BaseAPIView.handle_errors
+    async def post(self, request):
+        op_start = time.perf_counter()
+        payload = self.validate_serializer(BulkUpdateDocumentSerializer, request.data)
+
+        db_id = payload["database_id"]
+        coll_name = payload["collection_name"]
+        operations = []
+        for op in payload["operations"]:
+            raw_filters = safe_load_filters(op.get("filters", {}))
+            operations.append(
+                {
+                    "filters": normalize_id_filter(raw_filters),
+                    "update_data": op["update_data"],
+                    "update_all_fields": op.get("update_all_fields", False),
+                    "upsert": op.get("upsert", False),
+                }
+            )
+
+        result = await self.doc_svc.bulk_update_docs(
+            db_id=db_id,
+            coll_name=coll_name,
+            operations=operations,
+        )
+
+        has_errors = bool(result.get("errors"))
+        self._capture_mongo_analytics(
+            request,
+            db_id,
+            coll_name,
+            operation_type="bulk_update",
+            document_count=len(operations),
+            result=None,
+            start_time=op_start,
+        )
+
+        body = {
+            "success": not has_errors,
+            **result,
+        }
+        return Response(body, status=status.HTTP_200_OK)
