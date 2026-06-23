@@ -322,14 +322,53 @@ Max **500** documents per request. Use `documents`, not `data`.
 | Field | Default | Meaning |
 |-------|---------|---------|
 | `update_all_fields` | false | true: may add fields; false: patch existing fields only |
-| `update_many` | false | true: update all matches; false: single doc (`_id` in filters) |
-| `upsert` | false | Create if missing (requires `_id`/`id`, `update_many` false) |
+| `update_many` | false | true: apply the **same** update to **all** docs matching **one** filter; false: single doc (`_id` in filters) |
+| `upsert` | false | Create if missing (requires `_id`/`id`, `update_many` false). **Cannot** be combined with `update_many`. |
 
 `update_data` may use operators: `$set`, `$inc`, `$unset`, etc.
 
 **200** — `{ "success", "modified_count", "matched_count", "upserted_id?" }`
 
+**Note:** `upsert` + `update_many` does not support “update some docs and insert others” in one call. MongoDB `updateMany` with `upsert: true` inserts at most **one** document when zero matches are found. For mixed per-document update/insert batches, use **Bulk update** below.
+
 **Safety:** non-empty `filters`; dangerous operators rejected; unknown DB/collection → **403**.
+
+#### Bulk update / upsert — `POST /api/v2/crud/bulk/`
+
+Sync many documents in one request: each operation runs as an independent `updateOne` (update if found, optional insert if missing). Backed by MongoDB `bulkWrite`.
+
+```json
+{
+  "database_id": "<24_hex>",
+  "collection_name": "users",
+  "operations": [
+    {
+      "filters": { "_id": "<24_hex>" },
+      "update_data": { "points": 120 },
+      "update_all_fields": true,
+      "upsert": true
+    },
+    {
+      "filters": { "_id": "<24_hex>" },
+      "update_data": { "points": 450 },
+      "update_all_fields": true,
+      "upsert": true
+    }
+  ]
+}
+```
+
+| Field | Default | Meaning |
+|-------|---------|---------|
+| `operations` | — | 1–500 items; each item is one `updateOne` |
+| `filters` | — | Required per op; must include `_id` or `id` |
+| `update_data` | — | Same rules as single PUT |
+| `update_all_fields` | false | Same as single PUT; **`upsert` requires `true`** |
+| `upsert` | false | Insert when no active (non-deleted) doc matches |
+
+**200** — `{ "success", "matched_count", "modified_count", "upserted_count", "results": [{ "index", "ok", "upserted_id?" }], "errors?" }`
+
+Per-operation `matched_count` / `modified_count` are not returned; use aggregate totals and `upserted_id` per index when a row was inserted.
 
 #### Delete — DELETE
 
