@@ -86,6 +86,13 @@ test-ci: ## Run the same checks as GitHub Actions CI
 docker-up: ## Full stack via Docker (redis, backend, celery, nginx, react-app)
 	docker compose -f $(COMPOSE_DEV) up --build
 
+dev-redis:
+	docker run -d --name dev-redis -p 6379:6379 redis:7-alpine
+
+dev-redis-down:
+	docker stop dev-redis
+	docker rm -f dev-redis
+
 docker-down: ## Stop Docker dev stack
 	docker compose -f $(COMPOSE_DEV) down
 
