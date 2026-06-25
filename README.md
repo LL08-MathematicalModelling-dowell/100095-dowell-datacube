@@ -18,8 +18,8 @@ Start with **datacube_documentation.md** for the complete picture; use the UI AP
 |------|---------|
 | `backend/` | Django project: data plane (`api`), auth (`core`), observability (`analytics`) |
 | `UI/datacube-UI/` | React SPA — dashboards, account, developer API reference |
+| `deploy/` | Production VPS compose + env examples (GHCR pull) |
 | `datacube_documentation.md` | Canonical full API & project documentation |
-| `_frontend_old_nextjs/`, `_Datacube_api_libraries_old/` | Legacy snapshots (not part of active architecture) |
 
 ## Backend: layered architecture
 
@@ -106,6 +106,15 @@ Required for `project.settings.common` (MongoDB and file storage):
 Optional variables (Stripe, OAuth, demo login, email) are documented in [datacube_documentation.md §4](datacube_documentation.md#4-configuration) and `backend/.env.example`.
 
 ## Local development
+
+```bash
+make help           # list all targets
+make setup          # first-time: .env, deps, migrate, npm
+make dev-backend    # Django API on http://127.0.0.1:8000
+make dev-ui         # Vite UI on http://127.0.0.1:5173 (second terminal)
+make docker-up      # full stack (redis, celery, nginx, react-app on :8080)
+make test           # backend pytest
+```
 
 ### Backend
 

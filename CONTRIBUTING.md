@@ -6,9 +6,18 @@ Thank you for helping improve Datacube. This guide explains how to set up the pr
 
 - Read [README.md](README.md) for the repository layout and quick start.
 - Use [datacube_documentation.md](datacube_documentation.md) as the canonical reference for APIs, configuration, and roles.
-- Legacy folders (`_frontend_old_nextjs/`, `_Datacube_api_libraries_old/`) are snapshots — do not extend them unless explicitly asked.
 
 ## Development setup
+
+Common shortcuts via **Makefile** at the repo root (`make help`):
+
+```bash
+make setup          # first time: .env, uv sync, migrate, npm install
+make dev-backend    # Django on :8000
+make dev-ui         # Vite on :5173 (separate terminal)
+make docker-up      # full stack in Docker
+make test           # backend pytest
+```
 
 ### Backend (Python 3.11, [uv](https://docs.astral.sh/uv/))
 

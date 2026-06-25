@@ -53,7 +53,7 @@ ObjectIds in JSON are always **24-character hexadecimal strings**.
 | `datacube_documentation.md` | This file — full platform reference |
 | `backend/docs/FRONTEND_API_GUIDE.md` | SPA-focused API guide |
 | `backend/.env.example` | Environment variable template |
-| `_frontend_old_nextjs/`, `_Datacube_api_libraries_old/` | Legacy snapshots (not active) |
+| `deploy/` | Production compose + env examples |
 
 ---
 

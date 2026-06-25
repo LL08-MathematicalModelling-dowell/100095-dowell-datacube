@@ -99,8 +99,8 @@ uv run pytest api/tests analytics/tests -q
 | `Dockerfile.dev` | Local compose: `uv sync --frozen --all-groups`, hot-reload via volume mount |
 
 ```bash
-# Production image (from repo root)
-docker compose -f docker-compose.prod_enhanced.yml build backend
+# Production image (from repo root) — CI builds via backend/Dockerfile.prod
+docker build -f backend/Dockerfile.prod -t datacube-backend ./backend
 
 # Development stack (uv + mounted source)
 docker compose -f docker-compose.dev_enhanced.yml up --build
