@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "backend/**"
+      - "UI/datacube-UI/**"
+      - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
 permissions:
