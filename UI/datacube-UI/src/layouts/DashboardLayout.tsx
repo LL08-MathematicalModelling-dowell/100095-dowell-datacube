@@ -27,10 +27,11 @@ const DashboardLayout = () => {
 
     if (accessToken && refreshToken) {
       api
-        .get<Profile>("/core/profile")
+        .get("/core/profile")
         .then((profile) => {
-          setIsPlayground(Boolean(profile?.is_playground));
-          setPlaygroundExpiresAt(profile?.playground_expires_at ?? null);
+          const p = profile as Profile;
+          setIsPlayground(Boolean(p?.is_playground));
+          setPlaygroundExpiresAt(p?.playground_expires_at ?? null);
         })
         .catch(() => {
           /* refresh interceptor may redirect */
