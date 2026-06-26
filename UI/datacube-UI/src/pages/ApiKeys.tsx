@@ -1,12 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Sparkles } from "lucide-react";
 import { useState } from "react";
 import toast from "react-hot-toast";
+import { Link } from "react-router-dom";
 import { Card, PageHeader } from "../components/ui/Card.tsx";
 import { QueryErrorBlock, RefreshButton } from "../components/ui/QueryRefresh.tsx";
+import { getApiErrorMessage } from "../lib/apiErrors.ts";
 import { cn } from "../lib/cn.ts";
 import { btnPrimaryCn, inputCn } from "../lib/uiClasses.ts";
 import api from "../services/api";
 import useAuthStore from "../store/authStore";
+
+interface Profile {
+  is_playground?: boolean;
+}
 
 interface ApiKey {
   _id: string;
@@ -90,6 +97,14 @@ const ApiKeys = () => {
   const [newKey, setNewKey] = useState<NewKeyResponse | null>(null);
   const [keyName, setKeyName] = useState("");
 
+  const { data: profile } = useQuery<Profile>({
+    queryKey: ["profile"],
+    queryFn: async () => api.get("/core/profile"),
+    enabled: !!accessToken,
+    staleTime: 5 * 60 * 1000,
+  });
+  const isPlayground = Boolean(profile?.is_playground);
+
   const {
     data: keys,
     isLoading,
@@ -120,8 +135,8 @@ const ApiKeys = () => {
       setKeyName("");
       toast.success("API key created");
     },
-    onError: () => {
-      toast.error("Failed to generate key");
+    onError: (err) => {
+      toast.error(getApiErrorMessage(err));
     },
   });
 
@@ -165,27 +180,45 @@ const ApiKeys = () => {
         subtitle="Choose a label you will recognize in logs and dashboards."
         className="mb-8"
       >
-        <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center">
-          <input
-            type="text"
-            value={keyName}
-            onChange={(e) => setKeyName(e.target.value)}
-            placeholder="e.g. production-etl"
-            className={cn(inputCn(), "flex-1")}
-          />
-          <button
-            type="button"
-            onClick={handleGenerateKey}
-            disabled={generateKeyMutation.isPending}
-            className={btnPrimaryCn("w-full shrink-0 sm:w-auto")}
-          >
-            {generateKeyMutation.isPending ? "Generating…" : "Generate key"}
-          </button>
-        </div>
-        {generateKeyMutation.isError && (
-          <p className="mt-3 text-sm text-[var(--danger)]">
-            Something went wrong. Try again.
-          </p>
+        {isPlayground ? (
+          <div className="flex items-start gap-3 rounded-[var(--radius-md)] border border-[var(--accent)]/25 bg-[var(--accent-soft)] px-4 py-3 text-sm text-[var(--text-primary)]">
+            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent-bright)]" />
+            <span>
+              API keys are disabled in playground mode.{" "}
+              <Link
+                to="/register"
+                className="font-medium text-[var(--accent-bright)] hover:underline"
+              >
+                Create a free account
+              </Link>{" "}
+              to generate keys and keep your data.
+            </span>
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center">
+              <input
+                type="text"
+                value={keyName}
+                onChange={(e) => setKeyName(e.target.value)}
+                placeholder="e.g. production-etl"
+                className={cn(inputCn(), "flex-1")}
+              />
+              <button
+                type="button"
+                onClick={handleGenerateKey}
+                disabled={generateKeyMutation.isPending}
+                className={btnPrimaryCn("w-full shrink-0 sm:w-auto")}
+              >
+                {generateKeyMutation.isPending ? "Generating…" : "Generate key"}
+              </button>
+            </div>
+            {generateKeyMutation.isError && (
+              <p className="mt-3 text-sm text-[var(--danger)]">
+                {getApiErrorMessage(generateKeyMutation.error)}
+              </p>
+            )}
+          </>
         )}
       </Card>
 
