@@ -36,9 +36,20 @@ class UserSerializer(serializers.Serializer):
     is_email_verified = serializers.SerializerMethodField()
     auth_method = serializers.SerializerMethodField()
     has_avatar = serializers.SerializerMethodField()
+    is_playground = serializers.SerializerMethodField()
+    playground_expires_at = serializers.SerializerMethodField()
 
     def get_id(self, obj):
         return str(obj.get("_id"))
+
+    def get_is_playground(self, obj):
+        return bool(obj.get("is_playground"))
+
+    def get_playground_expires_at(self, obj):
+        expires = obj.get("playground_expires_at")
+        if not expires:
+            return None
+        return expires.isoformat() if hasattr(expires, "isoformat") else expires
 
     def get_role(self, obj):
         return normalize_role(obj.get("role"))

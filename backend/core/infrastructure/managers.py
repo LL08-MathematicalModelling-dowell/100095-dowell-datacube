@@ -315,5 +315,114 @@ class UserManager:
         user_data["_id"] = result.inserted_id
         return user_data
 
+    # --- Ephemeral playground sessions -------------------------------------
+
+    def create_playground_user(
+        self,
+        *,
+        email: str,
+        session_id: str,
+        ip_hash: str,
+        user_agent: str,
+        expires_at: datetime,
+    ):
+        """Create a short-lived, isolated playground user."""
+        now = datetime.now(timezone.utc)
+        user_data = {
+            "email": email,
+            "firstName": "Playground",
+            "lastName": "Guest",
+            "password": None,
+            "is_email_verified": True,
+            "email_verification_token": None,
+            "email_token_expiry": None,
+            "auth_schema_version": 2,
+            "auth_method": "playground",
+            "is_playground": True,
+            "playground_session_id": session_id,
+            "playground_expires_at": expires_at,
+            "playground_ip_hash": ip_hash,
+            "playground_user_agent": user_agent,
+            "playground_usage": {"documents": 0},
+            "role": DEFAULT_ROLE,
+            "auth_providers": [],
+            "avatar_file_id": None,
+            "stripe_customer_id": None,
+            "subscription_plan": "free",
+            "subscription_status": "active",
+            "usage": {
+                "api_calls_current_month": 0,
+                "last_reset_date": now.isoformat(),
+            },
+            "created_at": now,
+            "updated_at": now,
+            "deleted_at": None,
+        }
+        result = self.users_collection.insert_one(user_data)
+        user_data["_id"] = result.inserted_id
+        return user_data
+
+    def get_playground_user_by_session(self, session_id: str):
+        if not session_id:
+            return None
+        return self.users_collection.find_one(
+            {
+                "playground_session_id": session_id,
+                "is_playground": True,
+                "deleted_at": None,
+            }
+        )
+
+    def count_live_playground_sessions(self) -> int:
+        now = datetime.now(timezone.utc)
+        return self.users_collection.count_documents(
+            {
+                "is_playground": True,
+                "deleted_at": None,
+                "playground_expires_at": {"$gt": now},
+            }
+        )
+
+    def count_live_playground_sessions_by_ip(self, ip_hash: str) -> int:
+        now = datetime.now(timezone.utc)
+        return self.users_collection.count_documents(
+            {
+                "is_playground": True,
+                "deleted_at": None,
+                "playground_ip_hash": ip_hash,
+                "playground_expires_at": {"$gt": now},
+            }
+        )
+
+    def list_expired_playground_users(self, limit: int = 200):
+        now = datetime.now(timezone.utc)
+        cursor = self.users_collection.find(
+            {
+                "is_playground": True,
+                "deleted_at": None,
+                "playground_expires_at": {"$lte": now},
+            }
+        ).limit(limit)
+        return list(cursor)
+
+    def touch_playground_session(self, user_id: ObjectId):
+        self.users_collection.update_one(
+            {"_id": user_id},
+            {"$set": {"updated_at": datetime.now(timezone.utc)}},
+        )
+
+    def increment_playground_document_usage(self, user_id, delta: int):
+        self.users_collection.update_one(
+            {"_id": ObjectId(user_id)},
+            {
+                "$inc": {"playground_usage.documents": delta},
+                "$set": {"updated_at": datetime.now(timezone.utc)},
+            },
+        )
+
+    def hard_delete_user(self, user_id: ObjectId):
+        """Permanently remove a user document (used by playground cleanup)."""
+        self.users_collection.delete_one({"_id": user_id})
+
 
 user_manager = UserManager()

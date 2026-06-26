@@ -156,6 +156,11 @@ class FileListView(BaseAPIView):
     @BaseAPIView.handle_errors
     async def post(self, request):
         start_time = time.perf_counter()
+
+        from core.application.playground_service import assert_playground_can_upload_files
+
+        assert_playground_can_upload_files(str(request.user.pk))
+
         data = self.validate_serializer(FileUploadSerializer, request.data)
         uploaded_file = data['file']
 

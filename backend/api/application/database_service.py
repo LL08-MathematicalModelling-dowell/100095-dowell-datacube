@@ -38,6 +38,10 @@ class DatabaseService:
         """
         self.ctx.assert_can_write()
 
+        from core.application.playground_service import enforce_playground_database_limit
+
+        await enforce_playground_database_limit(self.user_id)
+
         # Guard: Check existence before generating names or starting transactions
         if await self.meta_svc.exists_db(user_provided_name, session=session):
             raise ValueError(f"A database named '{user_provided_name}' already exists.")
@@ -79,6 +83,10 @@ class DatabaseService:
         Verified: Only proceeds if the bound user owns the target database.
         """
         self.ctx.assert_can_write()
+
+        from core.application.playground_service import enforce_playground_collection_limit
+
+        await enforce_playground_collection_limit(self.user_id, database_id, len(new_cols))
 
         # Step 1: Verification & Data Retrieval
         meta = await self.meta_svc.get_db(database_id)
