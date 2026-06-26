@@ -36,7 +36,7 @@ export default function TryPage() {
   const mutation = useMutation({
     mutationFn: async () => {
       const sessionId = localStorage.getItem(PG_SESSION_KEY);
-      return api.post<PlaygroundStartResponse>(
+      return api.post(
         "/core/api/v2/playground/start/",
         sessionId ? { session_id: sessionId } : {},
         { withCredentials: true }
