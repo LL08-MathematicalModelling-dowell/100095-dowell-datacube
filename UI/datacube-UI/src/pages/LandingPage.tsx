@@ -126,11 +126,17 @@ export default function LandingPage() {
             ) : (
               <>
                 <Link
-                  to="/register"
+                  to="/try"
                   className={cn(
                     btnPrimaryCn("w-full px-8 py-4 text-base sm:w-auto"),
                     "shadow-[var(--shadow-glow-teal)]"
                   )}
+                >
+                  Try playground
+                </Link>
+                <Link
+                  to="/register"
+                  className="inline-flex w-full items-center justify-center rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-1)] px-8 py-4 text-base font-semibold text-[var(--text-primary)] transition-colors hover:border-[var(--accent)]/40 hover:bg-[var(--surface-2)] sm:w-auto"
                 >
                   Create account
                 </Link>

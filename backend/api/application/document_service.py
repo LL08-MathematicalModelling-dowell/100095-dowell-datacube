@@ -80,6 +80,10 @@ class DocumentService:
     async def create_docs(self, db_id: str, coll_name: str, docs: List[Dict]):
         """Inserts documents and triggers schema discovery."""
         self.ctx.assert_can_write()
+
+        from core.application.playground_service import enforce_playground_document_limit
+
+        await enforce_playground_document_limit(self.user_id, len(docs))
         try:
             # append "is_deleted" to all docs if not present
             for doc in docs:

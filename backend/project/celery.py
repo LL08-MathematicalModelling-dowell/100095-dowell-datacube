@@ -31,6 +31,7 @@ app.conf.update(
         "analytics.tasks.log_slow_query_task": {"queue": "analytics"},
         "analytics.tasks.aggregate_daily_usage": {"queue": "analytics"},
         "analytics.tasks.cleanup_old_analytics": {"queue": "maintenance"},
+        "core.tasks.cleanup_expired_playground_sessions": {"queue": "maintenance"},
     },
 )
 
@@ -50,5 +51,9 @@ app.conf.beat_schedule = {
     "weekly-analytics-prune": {
         "task": "analytics.tasks.cleanup_old_analytics",
         "schedule": crontab(hour=3, minute=0, day_of_week=0),
+    },
+    "hourly-playground-cleanup": {
+        "task": "core.tasks.cleanup_expired_playground_sessions",
+        "schedule": crontab(minute=0),
     },
 }

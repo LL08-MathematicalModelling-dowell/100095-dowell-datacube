@@ -28,9 +28,24 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    
+    services:
+      mongodb:
+        image: mongo:7-alpine
+        env:
+          MONGO_INITDB_ROOT_USERNAME: root
+          MONGO_INITDB_ROOT_PASSWORD: password
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
       # Required at Django settings import (project.settings.common); no server needed for unit tests.
-      MONGODB_URI: mongodb://127.0.0.1:27017
+      MONGODB_URI: mongodb://root:password@localhost:27017
       MONGODB_DATABASE: datacube_ci
       MONGODB_COLLECTION: metadata
       DATACUBE_V2_AUTH_DB: datacube_auth_ci

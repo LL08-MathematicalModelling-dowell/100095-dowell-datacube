@@ -22,8 +22,14 @@ CORS_ORIGIN_ALLOW_ALL = True
 ALLOW_STDOUT_EMAIL = os.getenv("ALLOW_STDOUT_EMAIL", "true").lower() in ("1", "true", "yes")
 
 # --- CORS ---
-# Allow all origins for easy frontend development
+# Allow all origins for easy frontend development.
+# Credentials are needed so the browser stores/sends the pg_session cookie.
 CORS_ORIGIN_ALLOW_ALL = True
+CORS_ALLOW_CREDENTIALS = True
+
+# --- Playground ---
+# Enabled by default in local development; gate behind PLAYGROUND_ENABLED in prod.
+PLAYGROUND_ENABLED = os.getenv("PLAYGROUND_ENABLED", "true").lower() in ("1", "true", "yes")
 
 # --- DRF ---
 # Enable the browsable API renderer for development

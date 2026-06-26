@@ -89,6 +89,13 @@ class APIKeyAPIView(APIView):
 
     def post(self, request, *args, **kwargs):
         """Creates a new API key."""
+        from core.application.playground_service import assert_playground_can_use_api_keys
+
+        try:
+            assert_playground_can_use_api_keys(request.user.id)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+
         key_name = request.data.get('name')
         if not key_name or not key_name.strip():
             return Response({"error": "A non-empty 'name' for the key is required."}, status=status.HTTP_400_BAD_REQUEST)

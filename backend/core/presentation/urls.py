@@ -29,6 +29,8 @@ from .views.auth_extended import (
     UserAvatarView,
 )
 
+from .views.playground_views import PlaygroundStartView
+
 
 app_name = "core"
 
@@ -60,4 +62,5 @@ urlpatterns = [
 
 urlpatterns += [
     re_path(r"^api/v2/demo/login/?$", DemoLoginView.as_view(), name="demo_login"),
+    re_path(r"^api/v2/playground/start/?$", PlaygroundStartView.as_view(), name="playground_start"),
 ]

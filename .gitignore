@@ -64,7 +64,11 @@ venv/
 backend.env*
 .venv
 
-node_modules/
+# Django collectstatic output (generated at Docker build)
+backend/staticfiles/
+
+# Legacy vendored static (removed; use collectstatic)
+backend/assets/
 
 
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
@@ -124,3 +128,4 @@ temp_interactive_push.bat
 dist/
 dist/*
 branch_structure.json
+IGNORE_DIR_DOCS/

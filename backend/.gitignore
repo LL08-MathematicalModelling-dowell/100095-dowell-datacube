@@ -1,5 +1,9 @@
 celery_setup.md
 
+# Django collectstatic output (regenerated at build)
+staticfiles/
+assets/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

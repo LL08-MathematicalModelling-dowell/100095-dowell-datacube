@@ -7,6 +7,7 @@ from rest_framework import exceptions
 from core.infrastructure.managers import user_manager
 from core.infrastructure.db import mongo_conn
 from core.infrastructure.roles import normalize_role
+from core.infrastructure.playground import is_playground_user, playground_is_live
 from core.infrastructure.user_access import effective_email_verified
 
 
@@ -21,6 +22,7 @@ class MongoUser:
         self.lastName = user_data.get("lastName")
         self.role = normalize_role(user_data.get("role"))
         self.is_email_verified = effective_email_verified(user_data)
+        self.is_playground = bool(user_data.get("is_playground"))
         self._is_authenticated = True
 
     @property
@@ -41,6 +43,8 @@ class CustomJWTAuthentication(JWTAuthentication):
             user_doc = user_manager.get_user_by_id(user_id)
             if not user_doc:
                 raise exceptions.AuthenticationFailed("User not found for the given token.")
+            if is_playground_user(user_doc) and not playground_is_live(user_doc):
+                raise exceptions.AuthenticationFailed("Playground session has expired.")
             if not effective_email_verified(user_doc):
                 raise exceptions.AuthenticationFailed("Email not verified.")
             return MongoUser(user_doc)
