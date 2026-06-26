@@ -126,7 +126,7 @@ jobs:
               echo "Missing config/backend.env. Copy deploy/config/backend.env.example and fill secrets."
               exit 1
             fi
-            echo "${{ secrets.GHCR_PULL_TOKEN }}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
+            # echo "${{ secrets.GHCR_PULL_TOKEN }}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
             export IMAGE_TAG="${IMAGE_TAG}"
             docker compose pull
             docker compose up -d --remove-orphans
