@@ -128,3 +128,4 @@ temp_interactive_push.bat
 dist/
 dist/*
 branch_structure.json
+IGNORE_DIR_DOCS/
