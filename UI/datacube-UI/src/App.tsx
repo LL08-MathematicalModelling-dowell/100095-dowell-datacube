@@ -8,6 +8,7 @@ import { ThemeSync } from "./components/theme/ThemeSync";
 
 const LandingPage = lazy(() => import("./pages/LandingPage"));
 const ApiDocs = lazy(() => import("./pages/ApiDocs"));
+const Try = lazy(() => import("./pages/Try"));
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
 const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
@@ -52,6 +53,7 @@ function App() {
           <Route path="/oauth/callback" element={<OAuthCallback />} />
 
           <Route element={<UnauthenticatedRoute />}>
+            <Route path="/try" element={<Try />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/verify-email" element={<VerifyEmail />} />
