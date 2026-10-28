@@ -74,18 +74,20 @@ That user then gets their own metadata DB entries, tenant DBs, and files — iso
 
 ---
 
-## Sample data seeding (optional but recommended)
+## Sample data seeding
 
-On session start, backend could auto-create:
+On **new** session start (not resume), backend seeds templates from
+`PLAYGROUND_SEEDS` in `core.application.playground_service`:
 
-| Item | Example |
-|------|---------|
-| 1 database | `demo_store` |
-| 2–3 collections | `products`, `orders` |
-| A few documents | Pre-filled rows so the dashboard isn’t empty |
-| Maybe 1 sample file | Small GridFS upload demo |
+| Database | Collections | Sample docs |
+|----------|-------------|-------------|
+| `demo_shop` | `products`, `orders` | catalog + order rows |
+| `demo_blog` | `posts`, `comments` | posts + comments |
+| `demo_crm` | `contacts` | a few leads/customers |
 
-This is a one-time clone from a **template** stored in code or a fixed seed user — not hand-built each time from scratch.
+File uploads stay disabled in playground mode. Seeding uses sync PyMongo only
+(see `seed_playground_database_sync`). Cleanup still drops all tenant DBs for
+the playground user when the session expires.
 
 ---
 
@@ -95,8 +97,8 @@ Playground users would have **stricter caps** than normal free users, e.g.:
 
 | Limit | Playground | Normal free user |
 |-------|------------|------------------|
-| Max databases | 1 | higher |
-| Max collections | 3 | higher |
+| Max databases | 3 (matches seed) | higher |
+| Max collections | 3 per DB | higher |
 | Max documents | ~100 | higher |
 | File uploads | off or 1 MB | normal |
 | API keys | disabled | allowed |

@@ -33,38 +33,128 @@ from core.infrastructure.playground import (
 
 logger = logging.getLogger(__name__)
 
-PLAYGROUND_SEED = {
-    "db_name": "demo_store",
-    "collections": [
-        {
-            "name": "products",
-            "fields": [
-                {"name": "name", "type": "string"},
-                {"name": "price", "type": "number"},
-                {"name": "in_stock", "type": "boolean"},
+# Seeded when a *new* playground session starts (skipped on resume).
+# Keep within PLAYGROUND_MAX_DATABASES / COLLECTIONS / DOCUMENTS.
+PLAYGROUND_SEEDS: list[dict[str, Any]] = [
+    {
+        "db_name": "demo_shop",
+        "collections": [
+            {
+                "name": "products",
+                "fields": [
+                    {"name": "name", "type": "string"},
+                    {"name": "sku", "type": "string"},
+                    {"name": "price", "type": "number"},
+                    {"name": "in_stock", "type": "boolean"},
+                ],
+            },
+            {
+                "name": "orders",
+                "fields": [
+                    {"name": "sku", "type": "string"},
+                    {"name": "quantity", "type": "number"},
+                    {"name": "total", "type": "number"},
+                    {"name": "status", "type": "string"},
+                ],
+            },
+        ],
+        "documents": {
+            "products": [
+                {"name": "Widget", "sku": "A1", "price": 9.99, "in_stock": True},
+                {"name": "Gadget", "sku": "B2", "price": 24.5, "in_stock": True},
+                {"name": "Legacy part", "sku": "C3", "price": 4.0, "in_stock": False},
+            ],
+            "orders": [
+                {"sku": "A1", "quantity": 2, "total": 19.98, "status": "shipped"},
+                {"sku": "B2", "quantity": 1, "total": 24.5, "status": "pending"},
+                {"sku": "A1", "quantity": 5, "total": 49.95, "status": "processing"},
             ],
         },
-        {
-            "name": "orders",
-            "fields": [
-                {"name": "product", "type": "string"},
-                {"name": "quantity", "type": "number"},
-                {"name": "status", "type": "string"},
-            ],
-        },
-    ],
-    "documents": {
-        "products": [
-            {"name": "Widget", "price": 9.99, "in_stock": True},
-            {"name": "Gadget", "price": 24.5, "in_stock": True},
-            {"name": "Legacy part", "price": 4.0, "in_stock": False},
-        ],
-        "orders": [
-            {"product": "Widget", "quantity": 2, "status": "shipped"},
-            {"product": "Gadget", "quantity": 1, "status": "pending"},
-        ],
     },
-}
+    {
+        "db_name": "demo_blog",
+        "collections": [
+            {
+                "name": "posts",
+                "fields": [
+                    {"name": "title", "type": "string"},
+                    {"name": "author", "type": "string"},
+                    {"name": "published", "type": "boolean"},
+                ],
+            },
+            {
+                "name": "comments",
+                "fields": [
+                    {"name": "post_title", "type": "string"},
+                    {"name": "body", "type": "string"},
+                ],
+            },
+        ],
+        "documents": {
+            "posts": [
+                {
+                    "title": "Welcome to Datacube",
+                    "author": "Playground",
+                    "published": True,
+                },
+                {
+                    "title": "Draft: API tips",
+                    "author": "Playground",
+                    "published": False,
+                },
+            ],
+            "comments": [
+                {
+                    "post_title": "Welcome to Datacube",
+                    "body": "Great starting point for exploring the API.",
+                },
+                {
+                    "post_title": "Welcome to Datacube",
+                    "body": "Try editing this document from the dashboard.",
+                },
+            ],
+        },
+    },
+    {
+        "db_name": "demo_crm",
+        "collections": [
+            {
+                "name": "contacts",
+                "fields": [
+                    {"name": "name", "type": "string"},
+                    {"name": "email", "type": "string"},
+                    {"name": "company", "type": "string"},
+                    {"name": "status", "type": "string"},
+                ],
+            },
+        ],
+        "documents": {
+            "contacts": [
+                {
+                    "name": "Ada Lovelace",
+                    "email": "ada@example.com",
+                    "company": "Analytical Engines",
+                    "status": "lead",
+                },
+                {
+                    "name": "Alan Turing",
+                    "email": "alan@example.com",
+                    "company": "Bletchley Labs",
+                    "status": "customer",
+                },
+                {
+                    "name": "Grace Hopper",
+                    "email": "grace@example.com",
+                    "company": "Compiler Co",
+                    "status": "prospect",
+                },
+            ],
+        },
+    },
+]
+
+# Backward-compatible alias (first seed DB) for older imports/docs.
+PLAYGROUND_SEED = PLAYGROUND_SEEDS[0]
 
 
 class PlaygroundCapacityError(Exception):
@@ -153,28 +243,23 @@ def start_or_resume_playground(
 
 # --- Seeding (sync — must not touch AsyncMongoClient) -----------------------
 
-def seed_playground_database_sync(user_id: str) -> None:
-    """Provision demo_store using SYNC_MONGODB_CLIENT only.
-
-    Playground start runs in an async adrf view, but seeding must stay on the
-    sync PyMongo client. Calling async Mongo from per-request event loops binds
-    the global AsyncMongoClient to the wrong loop and breaks analytics/dashboard.
-    """
+def _seed_one_database_sync(user_id: str, seed: dict[str, Any]) -> int:
+    """Create one logical DB + collections + docs. Returns document count inserted."""
     from api.domain.metadata_models import new_database_metadata
     from api.infrastructure.naming import generate_db_name
 
     client = settings.SYNC_MONGODB_CLIENT
     meta_coll = client[settings.MONGODB_DATABASE][settings.MONGODB_COLLECTION]
 
-    display_name = PLAYGROUND_SEED["db_name"]
+    display_name = seed["db_name"]
     internal_db_name = generate_db_name(display_name, user_id)
     physical_db = client[internal_db_name]
 
-    for coll_def in PLAYGROUND_SEED["collections"]:
+    for coll_def in seed["collections"]:
         physical_db.create_collection(coll_def["name"])
 
     total_docs = 0
-    for coll_name, docs in PLAYGROUND_SEED["documents"].items():
+    for coll_name, docs in (seed.get("documents") or {}).items():
         if docs:
             physical_db[coll_name].insert_many([dict(d) for d in docs])
             total_docs += len(docs)
@@ -183,9 +268,23 @@ def seed_playground_database_sync(user_id: str) -> None:
         user_id=ObjectId(user_id),
         display_name=display_name,
         internal_db_name=internal_db_name,
-        collections=PLAYGROUND_SEED["collections"],
+        collections=seed["collections"],
     )
     meta_coll.insert_one(meta)
+    return total_docs
+
+
+def seed_playground_database_sync(user_id: str) -> None:
+    """Provision sample databases using SYNC_MONGODB_CLIENT only.
+
+    Creates every entry in ``PLAYGROUND_SEEDS`` so the dashboard is not empty.
+    Playground start must stay on the sync PyMongo client — calling async Mongo
+    from per-request event loops binds the global AsyncMongoClient to the wrong
+    loop and breaks analytics/dashboard.
+    """
+    total_docs = 0
+    for seed in PLAYGROUND_SEEDS:
+        total_docs += _seed_one_database_sync(user_id, seed)
 
     if total_docs:
         user_manager.increment_playground_document_usage(user_id, total_docs)
