@@ -74,18 +74,31 @@ That user then gets their own metadata DB entries, tenant DBs, and files — iso
 
 ---
 
-## Sample data seeding (optional but recommended)
+## Sample data seeding
 
-On session start, backend could auto-create:
+On **new** session start (not resume), backend seeds:
 
-| Item | Example |
-|------|---------|
-| 1 database | `demo_store` |
-| 2–3 collections | `products`, `orders` |
-| A few documents | Pre-filled rows so the dashboard isn’t empty |
-| Maybe 1 sample file | Small GridFS upload demo |
+1. **Databases** from `PLAYGROUND_SEEDS` (`core.application.playground_service`):
 
-This is a one-time clone from a **template** stored in code or a fixed seed user — not hand-built each time from scratch.
+| Database | Collections | Sample docs |
+|----------|-------------|-------------|
+| `demo_shop` | `products`, `orders` | catalog + order rows |
+| `demo_blog` | `posts`, `comments` | posts + comments |
+| `demo_crm` | `contacts` | a few leads/customers |
+
+2. **Sample media** from `backend/playground_demo_files/` uploaded into GridFS
+   (plus `file_metadata`) so the Files section and signed stream/download work.
+   Playground *user* uploads remain disabled via API.
+
+3. **Analytics telemetry** (`core.application.playground_seed_analytics`) —
+   ~14 days of `http_requests`, `db_operations`, `errors`, `slow_queries`, and
+   `performance_metrics` scoped to the playground `user_id`, so Overview charts
+   (throughput, methods, endpoints, collections, errors, slow queries) render
+   immediately.
+
+Seeding uses sync PyMongo only (`seed_playground_database_sync`). Cleanup drops
+tenant DBs, file metadata, and analytics rows for that user when the session
+expires.
 
 ---
 
@@ -95,8 +108,8 @@ Playground users would have **stricter caps** than normal free users, e.g.:
 
 | Limit | Playground | Normal free user |
 |-------|------------|------------------|
-| Max databases | 1 | higher |
-| Max collections | 3 | higher |
+| Max databases | 3 (matches seed) | higher |
+| Max collections | 3 per DB | higher |
 | Max documents | ~100 | higher |
 | File uploads | off or 1 MB | normal |
 | API keys | disabled | allowed |
