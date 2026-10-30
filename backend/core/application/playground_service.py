@@ -22,6 +22,12 @@ from bson import ObjectId
 from django.conf import settings
 from django.core.cache import cache
 
+from core.application.playground_seed_analytics import (
+    purge_playground_analytics,
+    purge_playground_gridfs,
+    seed_playground_analytics_sync,
+    seed_playground_sample_files_sync,
+)
 from core.infrastructure.managers import user_manager
 from core.infrastructure.playground import (
     PLAYGROUND_EMAIL_DOMAIN,
@@ -68,6 +74,8 @@ PLAYGROUND_SEEDS: list[dict[str, Any]] = [
                 {"sku": "A1", "quantity": 2, "total": 19.98, "status": "shipped"},
                 {"sku": "B2", "quantity": 1, "total": 24.5, "status": "pending"},
                 {"sku": "A1", "quantity": 5, "total": 49.95, "status": "processing"},
+                {"sku": "C3", "quantity": 3, "total": 12.0, "status": "cancelled"},
+                {"sku": "B2", "quantity": 2, "total": 49.0, "status": "shipped"},
             ],
         },
     },
@@ -102,6 +110,11 @@ PLAYGROUND_SEEDS: list[dict[str, Any]] = [
                     "author": "Playground",
                     "published": False,
                 },
+                {
+                    "title": "Files & media in one API",
+                    "author": "Playground",
+                    "published": True,
+                },
             ],
             "comments": [
                 {
@@ -111,6 +124,10 @@ PLAYGROUND_SEEDS: list[dict[str, Any]] = [
                 {
                     "post_title": "Welcome to Datacube",
                     "body": "Try editing this document from the dashboard.",
+                },
+                {
+                    "post_title": "Files & media in one API",
+                    "body": "Charts look better with sample traffic — thanks!",
                 },
             ],
         },
@@ -147,6 +164,18 @@ PLAYGROUND_SEEDS: list[dict[str, Any]] = [
                     "email": "grace@example.com",
                     "company": "Compiler Co",
                     "status": "prospect",
+                },
+                {
+                    "name": "Katherine Johnson",
+                    "email": "katherine@example.com",
+                    "company": "Flight Dynamics",
+                    "status": "customer",
+                },
+                {
+                    "name": "Margaret Hamilton",
+                    "email": "margaret@example.com",
+                    "company": "Apollo Soft",
+                    "status": "lead",
                 },
             ],
         },
@@ -243,8 +272,11 @@ def start_or_resume_playground(
 
 # --- Seeding (sync — must not touch AsyncMongoClient) -----------------------
 
-def _seed_one_database_sync(user_id: str, seed: dict[str, Any]) -> int:
-    """Create one logical DB + collections + docs. Returns document count inserted."""
+def _seed_one_database_sync(user_id: str, seed: dict[str, Any]) -> dict[str, Any]:
+    """Create one logical DB + collections + docs.
+
+    Returns ``{id, collections, document_count}`` for analytics seeding.
+    """
     from api.domain.metadata_models import new_database_metadata
     from api.infrastructure.naming import generate_db_name
 
@@ -254,15 +286,32 @@ def _seed_one_database_sync(user_id: str, seed: dict[str, Any]) -> int:
     display_name = seed["db_name"]
     internal_db_name = generate_db_name(display_name, user_id)
     physical_db = client[internal_db_name]
+    now = datetime.now(timezone.utc)
+
+    collection_names: list[str] = []
+    total_docs = 0
+    storage_total = 0
+    collection_stats: list[dict[str, Any]] = []
 
     for coll_def in seed["collections"]:
-        physical_db.create_collection(coll_def["name"])
-
-    total_docs = 0
-    for coll_name, docs in (seed.get("documents") or {}).items():
+        name = coll_def["name"]
+        physical_db.create_collection(name)
+        collection_names.append(name)
+        docs = list((seed.get("documents") or {}).get(name) or [])
         if docs:
-            physical_db[coll_name].insert_many([dict(d) for d in docs])
+            physical_db[name].insert_many([dict(d) for d in docs])
             total_docs += len(docs)
+        # Rough size estimate so inventory storage cards aren't all zeros.
+        approx_bytes = max(len(docs) * 420, 1_024)
+        storage_total += approx_bytes
+        collection_stats.append(
+            {
+                "name": name,
+                "document_count_cached": len(docs),
+                "storage_bytes": approx_bytes,
+                "last_access_at": now,
+            }
+        )
 
     meta = new_database_metadata(
         user_id=ObjectId(user_id),
@@ -270,24 +319,54 @@ def _seed_one_database_sync(user_id: str, seed: dict[str, Any]) -> int:
         internal_db_name=internal_db_name,
         collections=seed["collections"],
     )
-    meta_coll.insert_one(meta)
-    return total_docs
+    # Overlay live-ish stats used by analytics inventory / storage totals.
+    for col_meta in meta.get("collections") or []:
+        for stats in collection_stats:
+            if stats["name"] == col_meta.get("name"):
+                col_meta["document_count_cached"] = stats["document_count_cached"]
+                col_meta["storage_bytes"] = stats["storage_bytes"]
+                col_meta["last_access_at"] = stats["last_access_at"]
+                break
+    meta["storage_bytes_total"] = storage_total
+    meta["stats_updated_at"] = now
+    meta["last_access_at"] = now
+
+    result = meta_coll.insert_one(meta)
+    return {
+        "id": str(result.inserted_id),
+        "collections": collection_names,
+        "document_count": total_docs,
+    }
 
 
 def seed_playground_database_sync(user_id: str) -> None:
-    """Provision sample databases using SYNC_MONGODB_CLIENT only.
+    """Provision sample databases, files metadata, and chart telemetry.
 
-    Creates every entry in ``PLAYGROUND_SEEDS`` so the dashboard is not empty.
-    Playground start must stay on the sync PyMongo client — calling async Mongo
-    from per-request event loops binds the global AsyncMongoClient to the wrong
-    loop and breaks analytics/dashboard.
+    Uses SYNC_MONGODB_CLIENT only — calling async Mongo from per-request event
+    loops binds the global AsyncMongoClient to the wrong loop and breaks
+    analytics/dashboard.
     """
     total_docs = 0
+    seeded_dbs: list[dict[str, Any]] = []
     for seed in PLAYGROUND_SEEDS:
-        total_docs += _seed_one_database_sync(user_id, seed)
+        info = _seed_one_database_sync(user_id, seed)
+        total_docs += int(info["document_count"])
+        seeded_dbs.append({"id": info["id"], "collections": info["collections"]})
 
     if total_docs:
         user_manager.increment_playground_document_usage(user_id, total_docs)
+
+    try:
+        files_n = seed_playground_sample_files_sync(user_id)
+        logger.info("Playground sample files seeded for %s: %s", user_id, files_n)
+    except Exception:
+        logger.exception("Playground sample file seed failed for %s", user_id)
+
+    try:
+        counts = seed_playground_analytics_sync(user_id, seeded_dbs)
+        logger.info("Playground analytics seeded for %s: %s", user_id, counts)
+    except Exception:
+        logger.exception("Playground analytics seed failed for %s", user_id)
 
 
 async def seed_playground_database(user_id: str) -> None:
@@ -368,7 +447,7 @@ def _sync_file_metadata_collection():
 
 
 def purge_playground_user_data(user_id: str) -> None:
-    """Drop all tenant DBs, metadata, and file records for a playground user."""
+    """Drop tenant DBs, metadata, files, and analytics for a playground user."""
     uid = ObjectId(user_id)
     meta_coll = _sync_metadata_collection()
     client = settings.SYNC_MONGODB_CLIENT
@@ -383,11 +462,21 @@ def purge_playground_user_data(user_id: str) -> None:
         meta_coll.delete_one({"_id": meta["_id"]})
 
     try:
+        purge_playground_gridfs(user_id)
+    except Exception:
+        logger.exception("Failed to delete GridFS files for user %s", user_id)
+
+    try:
         _sync_file_metadata_collection().delete_many(
             {"user_id": {"$in": [uid, str(uid)]}}
         )
     except Exception:
         logger.exception("Failed to delete file metadata for user %s", user_id)
+
+    try:
+        purge_playground_analytics(user_id)
+    except Exception:
+        logger.exception("Failed to delete analytics for user %s", user_id)
 
 
 def cleanup_expired_playground_sessions() -> int:

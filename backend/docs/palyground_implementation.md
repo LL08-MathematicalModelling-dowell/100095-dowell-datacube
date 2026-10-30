@@ -76,8 +76,9 @@ That user then gets their own metadata DB entries, tenant DBs, and files — iso
 
 ## Sample data seeding
 
-On **new** session start (not resume), backend seeds templates from
-`PLAYGROUND_SEEDS` in `core.application.playground_service`:
+On **new** session start (not resume), backend seeds:
+
+1. **Databases** from `PLAYGROUND_SEEDS` (`core.application.playground_service`):
 
 | Database | Collections | Sample docs |
 |----------|-------------|-------------|
@@ -85,9 +86,19 @@ On **new** session start (not resume), backend seeds templates from
 | `demo_blog` | `posts`, `comments` | posts + comments |
 | `demo_crm` | `contacts` | a few leads/customers |
 
-File uploads stay disabled in playground mode. Seeding uses sync PyMongo only
-(see `seed_playground_database_sync`). Cleanup still drops all tenant DBs for
-the playground user when the session expires.
+2. **Sample media** from `backend/playground_demo_files/` uploaded into GridFS
+   (plus `file_metadata`) so the Files section and signed stream/download work.
+   Playground *user* uploads remain disabled via API.
+
+3. **Analytics telemetry** (`core.application.playground_seed_analytics`) —
+   ~14 days of `http_requests`, `db_operations`, `errors`, `slow_queries`, and
+   `performance_metrics` scoped to the playground `user_id`, so Overview charts
+   (throughput, methods, endpoints, collections, errors, slow queries) render
+   immediately.
+
+Seeding uses sync PyMongo only (`seed_playground_database_sync`). Cleanup drops
+tenant DBs, file metadata, and analytics rows for that user when the session
+expires.
 
 ---
 

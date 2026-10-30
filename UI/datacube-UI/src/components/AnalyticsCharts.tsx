@@ -388,53 +388,117 @@ const AnalyticsCharts = () => {
             <h3 className="mb-1 text-base font-semibold text-[var(--text-primary)]">
               Traffic & latency trend
             </h3>
-            <p className="mb-4 text-sm text-[var(--text-muted)]">
-              Daily request volume vs average response time ({periodText})
+            <p className="mb-3 text-sm text-[var(--text-muted)]">
+              Daily request volume (left axis) vs average response time (right axis) · {periodText}
             </p>
+            <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-[var(--text-muted)]">
+              <span className="inline-flex items-center gap-2">
+                <span className="h-2.5 w-5 rounded-sm bg-[var(--info)]" aria-hidden />
+                Requests (count)
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <span
+                  className="inline-block h-0 w-5 border-t-2 border-dashed border-[var(--warning)]"
+                  aria-hidden
+                />
+                Avg latency (ms)
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <span
+                  className="inline-block h-0 w-5 border-t border-dashed border-[var(--danger)] opacity-80"
+                  aria-hidden
+                />
+                Slow threshold (500 ms)
+              </span>
+            </div>
             {dailyData.length > 0 ? (
               <ResponsiveContainer width="100%" height={320}>
-                <ComposedChart data={dailyData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                <ComposedChart data={dailyData} margin={{ top: 8, right: 28, left: 12, bottom: 0 }}>
                   <defs>
                     <linearGradient id="reqFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--chart-2)" stopOpacity={0.35} />
-                      <stop offset="100%" stopColor="var(--chart-2)" stopOpacity={0} />
+                      <stop offset="0%" stopColor="var(--info)" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="var(--info)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="label" {...axisProps} tickLine={false} axisLine={false} />
-                  <YAxis yAxisId="l" {...axisProps} tickLine={false} axisLine={false} />
+                  <YAxis
+                    yAxisId="l"
+                    {...axisProps}
+                    tickLine={false}
+                    axisLine={false}
+                    width={48}
+                    label={{
+                      value: "Requests",
+                      angle: -90,
+                      position: "insideLeft",
+                      style: { fill: "var(--info)", fontSize: 11 },
+                    }}
+                  />
                   <YAxis
                     yAxisId="r"
                     orientation="right"
                     {...axisProps}
                     tickLine={false}
                     axisLine={false}
+                    width={52}
+                    label={{
+                      value: "ms",
+                      angle: 90,
+                      position: "insideRight",
+                      style: { fill: "var(--warning)", fontSize: 11 },
+                    }}
                   />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend />
+                  <Tooltip
+                    content={({ active, payload, label }: any) => {
+                      if (!active || !payload?.length) return null;
+                      return (
+                        <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-3 py-2 text-xs shadow-[var(--shadow-md)]">
+                          <p className="mb-1 font-semibold text-[var(--text-primary)]">{label}</p>
+                          {payload.map((p: any) => {
+                            const isLatency = p.dataKey === "avgDuration";
+                            return (
+                              <p key={p.dataKey} className="text-[var(--text-muted)]">
+                                <span style={{ color: p.color || p.stroke }}>{p.name}:</span>{" "}
+                                <span className="font-mono text-[var(--text-primary)]">
+                                  {typeof p.value === "number" ? p.value.toLocaleString() : p.value}
+                                  {isLatency ? " ms" : " requests"}
+                                </span>
+                              </p>
+                            );
+                          })}
+                        </div>
+                      );
+                    }}
+                  />
                   <Area
                     yAxisId="l"
                     type="monotone"
                     dataKey="requests"
                     name="Requests"
-                    stroke="var(--chart-2)"
+                    stroke="var(--info)"
                     fill="url(#reqFill)"
-                    strokeWidth={2}
+                    strokeWidth={2.5}
+                    legendType="none"
                   />
                   <Line
                     yAxisId="r"
                     type="monotone"
                     dataKey="avgDuration"
-                    name="Avg ms"
-                    stroke="var(--chart-1)"
-                    strokeWidth={2}
-                    dot={false}
+                    name="Avg latency"
+                    stroke="var(--warning)"
+                    strokeWidth={2.5}
+                    strokeDasharray="6 4"
+                    dot={{ r: 3, fill: "var(--warning)", strokeWidth: 0 }}
+                    activeDot={{ r: 5 }}
+                    legendType="none"
                   />
                   <ReferenceLine
                     yAxisId="r"
                     y={500}
-                    stroke="var(--warning)"
-                    strokeDasharray="4 4"
+                    stroke="var(--danger)"
+                    strokeDasharray="3 3"
+                    strokeOpacity={0.7}
                   />
                 </ComposedChart>
               </ResponsiveContainer>
