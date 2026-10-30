@@ -106,15 +106,17 @@ jobs:
         uses: appleboy/ssh-action@v1.2.2
         env:
           IMAGE_TAG: ${{ github.sha }}
-          GHCR_USER: ${{ needs.build-and-push.outputs.ghcr_user }}
+          # Username for docker login must be the GitHub user that owns GHCR_PULL_TOKEN
+          # (not always the org). Override with repo variable GHCR_USERNAME if needed.
+          GHCR_USER: ${{ vars.GHCR_USERNAME || needs.build-and-push.outputs.ghcr_user }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.USER_NAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          script_stop: true
           command_timeout: 30m
-          envs: IMAGE_TAG,GHCR_USER
+          envs: IMAGE_TAG,GHCR_USER,GHCR_PULL_TOKEN
           script: |
             set -euo pipefail
             cd "${{ secrets.WORKING_DIR }}"
@@ -126,7 +128,11 @@ jobs:
               echo "Missing config/backend.env. Copy deploy/config/backend.env.example and fill secrets."
               exit 1
             fi
-            # echo "${{ secrets.GHCR_PULL_TOKEN }}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
+            if [ -z "${GHCR_PULL_TOKEN:-}" ]; then
+              echo "Missing secret GHCR_PULL_TOKEN (PAT with read:packages) — required to pull private GHCR images."
+              exit 1
+            fi
+            echo "${GHCR_PULL_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
             export IMAGE_TAG="${IMAGE_TAG}"
             docker compose pull
             docker compose up -d --remove-orphans
